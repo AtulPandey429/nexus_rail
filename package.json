@@ -1,0 +1,21 @@
+{
+  "name": "nexus-rail-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NexusRail — Flagship Multi-Rail Commerce & AI Agent Desk Monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "build:api": "npm run build --workspace=apps/api",
+    "build:web": "npm run build --workspace=apps/web",
+    "build": "npm run build:shared && npm run build:api && npm run build:web"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
