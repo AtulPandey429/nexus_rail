@@ -14,6 +14,7 @@ import { analyticsRouter } from './routes/analytics.js';
 import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import { SocketService } from './sockets/server.js';
 import { KeepAliveWorker } from './workers/keepAlive.js';
+import superPlatformRouter from './routes/superPlatform.js';
 import type { HealthResponse } from '@nexusrail/shared';
 
 const app = express();
@@ -33,6 +34,7 @@ app.use('/api/v1/crypto', cryptoRouter);
 app.use('/api/v1/agent', agentRouter);
 app.use('/api/v1/showdowns', showdownRouter);
 app.use('/api/v1/analytics', analyticsRouter);
+app.use('/api/v1/superplatform', superPlatformRouter);
 
 // Health Check Endpoint
 app.get('/api/v1/health', (_req: Request, res: Response) => {
