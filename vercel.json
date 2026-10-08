@@ -1,23 +1,5 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "apps/api/src/server.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "apps/web/package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/v1/(.*)",
-      "dest": "/apps/api/src/server.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/apps/web/$1"
-    }
-  ]
+  "buildCommand": "npm run build:shared && npm run build:web",
+  "outputDirectory": "apps/web/.next"
 }
