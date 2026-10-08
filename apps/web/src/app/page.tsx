@@ -1,93 +1,108 @@
-import Link from 'next/link';
-import { ArrowRight, ShieldCheck, Zap, Cpu, Wallet, Layers } from 'lucide-react';
+'use client';
+
+import React, { useState } from 'react';
+import { MultiRailCheckoutSelector } from '@/components/MultiRailCheckoutSelector';
+import { AgentDeskPanel } from '@/components/AgentDeskPanel';
+import { ProductShowdownCard } from '@/components/ProductShowdownCard';
+import { Zap, Bot, ShieldCheck, Layers, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export default function Home() {
+  const [isAgentOpen, setIsAgentOpen] = useState(false);
+
   return (
-    <main className="min-h-screen bg-nexus-dark text-white flex flex-col items-center justify-between p-6 md:p-24 relative overflow-hidden">
-      {/* Ambient background glow effects */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-rail-emerald/10 blur-[140px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-1/4 right-10 w-[400px] h-[400px] bg-cyber-purple/10 blur-[150px] rounded-full pointer-events-none" />
+    <main className="min-h-screen bg-nexus-dark text-white flex flex-col items-center justify-between p-4 md:p-12 relative overflow-x-hidden">
+      {/* Ambient Glow Background */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-rail-emerald/10 blur-[150px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-1/4 right-10 w-[500px] h-[500px] bg-cyber-purple/10 blur-[160px] rounded-full pointer-events-none" />
 
       {/* Header Bar */}
-      <header className="w-full max-w-6xl flex justify-between items-center z-10 py-4 border-b border-gray-800/60 mb-12">
+      <header className="w-full max-w-6xl flex justify-between items-center z-10 py-4 border-b border-gray-800/80 mb-8">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rail-emerald to-cyber-purple flex items-center justify-center font-bold text-lg text-white shadow-lg shadow-rail-emerald/20">
             NR
           </div>
-          <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-            NexusRail
-          </span>
+          <div>
+            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+              NexusRail
+            </span>
+            <span className="text-[10px] block text-gray-400 font-mono">Multi-Rail Commerce & AI Agent Desk</span>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-mono px-3 py-1 rounded-full bg-rail-emerald/10 text-rail-emerald border border-rail-emerald/30 flex items-center gap-1.5">
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsAgentOpen(true)}
+            className="px-4 py-2 rounded-xl bg-cyber-purple/20 border border-cyber-purple/50 text-cyber-purple hover:bg-cyber-purple/30 text-xs font-semibold flex items-center gap-2 transition-all shadow-lg shadow-cyber-purple/10"
+          >
+            <Bot className="w-4 h-4" />
+            <span>Launch AI Agent Desk</span>
+          </button>
+          <span className="text-xs font-mono px-3 py-1.5 rounded-full bg-rail-emerald/10 text-rail-emerald border border-rail-emerald/30 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-rail-emerald animate-pulse" />
-            Day 01 Integrated
+            All 35 Days Active
           </span>
         </div>
       </header>
 
       {/* Hero Section */}
-      <div className="w-full max-w-4xl text-center space-y-8 z-10 my-auto">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gray-900/80 border border-gray-800 text-xs font-medium text-gray-300 backdrop-blur-md">
+      <div className="w-full max-w-5xl text-center space-y-6 z-10 py-6">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gray-900/90 border border-gray-800 text-xs font-medium text-gray-300 backdrop-blur-md">
           <Zap className="w-3.5 h-3.5 text-rail-emerald" />
-          <span>Multi-Rail Commerce & Sub-300ms AI Agent Desk</span>
+          <span>Stripe Fiat + XRPL Testnet + Stellar Horizon + Gemini / Groq LLM Engine</span>
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-tight">
-          Unified Commerce Engine for{' '}
+          Enterprise Multi-Rail Commerce Engine for{' '}
           <span className="bg-gradient-to-r from-rail-emerald via-stellar-cyan to-cyber-purple bg-clip-text text-transparent">
-            Fiat, Web3 & AI Agents
+            Fiat, Web3 & Autonomous AI Agents
           </span>
         </h1>
 
-        <p className="text-gray-400 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
-          NexusRail integrates Stripe, XRPL, and Stellar Web3 payments with a transactional Groq / Gemini Flash LLM agent desk using Redis proposal locks.
+        <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
+          NexusRail combines multi-currency checkout, atomic double-entry wallet ledgers, IPFS order receipts, and sub-300ms AI agent tool execution using Redis proposal locks.
         </p>
 
-        {/* Feature Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-8 text-left">
-          <div className="p-5 rounded-2xl bg-nexus-card border border-gray-800/80 hover:border-rail-emerald/40 transition-colors">
-            <Wallet className="w-6 h-6 text-rail-emerald mb-3" />
-            <h3 className="font-semibold text-white mb-1">Multi-Rail Payments</h3>
-            <p className="text-xs text-gray-400">
-              Stripe Checkout (Fiat) + XRPL Testnet (XRP) + Stellar Horizon (XLM) with double-entry ledgers.
-            </p>
+        {/* Live Interactive Showcase Grid */}
+        <div className="pt-8 grid grid-cols-1 lg:grid-cols-2 gap-8 text-left max-w-5xl mx-auto">
+          {/* Multi-Rail Payment Widget */}
+          <div className="flex flex-col items-center">
+            <div className="w-full text-xs font-mono text-rail-emerald uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4" /> Live Interactive Multi-Rail Checkout Selector
+            </div>
+            <MultiRailCheckoutSelector
+              priceCents={49900}
+              productTitle="XRPL Starter Validator Node Hardware Kit"
+            />
           </div>
 
-          <div className="p-5 rounded-2xl bg-nexus-card border border-gray-800/80 hover:border-cyber-purple/40 transition-colors">
-            <Cpu className="w-6 h-6 text-cyber-purple mb-3" />
-            <h3 className="font-semibold text-white mb-1">AI Agent Desk</h3>
-            <p className="text-xs text-gray-400">
-              Sub-300ms function tool calling with Propose → Confirm → Act Redis proposal locks.
-            </p>
+          {/* Mento Product Showdown Widget */}
+          <div className="flex flex-col items-center">
+            <div className="w-full text-xs font-mono text-stellar-cyan uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Layers className="w-4 h-4" /> Live Mento Product Showdown & Community Voting
+            </div>
+            <ProductShowdownCard />
           </div>
-
-          <div className="p-5 rounded-2xl bg-nexus-card border border-gray-800/80 hover:border-stellar-cyan/40 transition-colors">
-            <Layers className="w-6 h-6 text-stellar-cyan mb-3" />
-            <h3 className="font-semibold text-white mb-1">Social Commerce</h3>
-            <p className="text-xs text-gray-400">
-              Mento-inspired product showdowns, verified buyer review badges, and IPFS receipt pinning.
-            </p>
-          </div>
-        </div>
-
-        {/* Action Button */}
-        <div className="pt-6 flex justify-center">
-          <a
-            href="http://localhost:4000/api/v1/health"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-rail-emerald text-nexus-dark font-bold hover:bg-rail-emerald/90 transition-all shadow-lg shadow-rail-emerald/25"
-          >
-            <span>Check API Health Endpoint (`:4000`)</span>
-            <ArrowRight className="w-4 h-4" />
-          </a>
         </div>
       </div>
 
+      {/* Floating AI Launcher Button */}
+      <button
+        onClick={() => setIsAgentOpen(true)}
+        className="fixed bottom-6 right-6 p-4 rounded-2xl bg-gradient-to-br from-rail-emerald to-cyber-purple text-nexus-dark font-bold text-xs shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform z-40"
+      >
+        <Sparkles className="w-5 h-5" />
+        <span>Ask AI Agent Desk</span>
+      </button>
+
+      {/* Slide-over Agent Chat Panel */}
+      <AgentDeskPanel isOpen={isAgentOpen} onClose={() => setIsAgentOpen(false)} />
+
       {/* Footer */}
-      <footer className="w-full max-w-6xl border-t border-gray-800/60 pt-6 text-center text-xs text-gray-500 z-10">
-        NexusRail Monorepo • Day 01 Integration Complete • $0.00 Free Tier Target Stack
+      <footer className="w-full max-w-6xl border-t border-gray-800/60 pt-6 mt-12 text-center text-xs text-gray-500 z-10 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>NexusRail Monorepo • Full 35-Day Flagship Architecture</div>
+        <div className="font-mono text-[11px] text-gray-400">
+          Deployed on Vercel & Render • 100% Free Tier Stack
+        </div>
       </footer>
     </main>
   );
