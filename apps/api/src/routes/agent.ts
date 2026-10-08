@@ -3,6 +3,7 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { AIRouterService } from '../services/ai/aiRouter.js';
 import { ProposalLockManager } from '../agent/proposalLock.js';
 import { walletService } from '../services/wallet.js';
+import { MongoAuditLogger } from '../services/mongo.js';
 import { z } from 'zod';
 
 export const agentRouter = Router();
@@ -46,6 +47,15 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
       { role: 'system', content: 'You are NexusRail AI Agent Desk assistant.' },
       { role: 'user', content: message },
     ]);
+
+    // Asynchronously log AI trace to MongoDB without blocking response
+    MongoAuditLogger.logAgentTrace({
+      userId,
+      sessionId: `sess_${userId}`,
+      prompt: message,
+      response: aiRes.reply,
+      latencyMs: aiRes.latencyMs,
+    }).catch(console.error);
 
     res.json({
       success: true,
