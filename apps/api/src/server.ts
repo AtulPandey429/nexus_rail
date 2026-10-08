@@ -13,6 +13,7 @@ import { leaderboardRouter } from './routes/leaderboard.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import { SocketService } from './sockets/server.js';
+import { KeepAliveWorker } from './workers/keepAlive.js';
 import type { HealthResponse } from '@nexusrail/shared';
 
 const app = express();
@@ -58,6 +59,7 @@ app.listen(env.PORT, () => {
   console.log(`🚀 [NexusRail API] Server listening on http://localhost:${env.PORT}`);
   LedgerWatcherWorker.startWatchers();
   SocketService.initializeSockets();
+  KeepAliveWorker.startKeepAlive();
 });
 
 export default app;
