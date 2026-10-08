@@ -4,19 +4,22 @@ import React, { useState } from 'react';
 import { MultiRailCheckoutSelector } from '@/components/MultiRailCheckoutSelector';
 import { AgentDeskPanel } from '@/components/AgentDeskPanel';
 import { ProductShowdownCard } from '@/components/ProductShowdownCard';
-import { Zap, Bot, ShieldCheck, Layers, Sparkles, CheckCircle2 } from 'lucide-react';
+import { AnalyticsLedgerDashboard } from '@/components/AnalyticsLedgerDashboard';
+import { PluginsShowcase } from '@/components/PluginsShowcase';
+import { Zap, Bot, ShieldCheck, Layers, Sparkles, Activity, Cpu, BarChart3, ShoppingBag } from 'lucide-react';
 
 export default function Home() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'checkout' | 'social' | 'analytics' | 'plugins'>('checkout');
 
   return (
-    <main className="min-h-screen bg-nexus-dark text-white flex flex-col items-center justify-between p-4 md:p-12 relative overflow-x-hidden">
+    <main className="min-h-screen bg-nexus-dark text-white flex flex-col items-center justify-between p-4 md:p-10 relative overflow-x-hidden">
       {/* Ambient Glow Background */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-rail-emerald/10 blur-[150px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-1/4 right-10 w-[500px] h-[500px] bg-cyber-purple/10 blur-[160px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-rail-emerald/10 blur-[160px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-1/4 right-10 w-[600px] h-[600px] bg-cyber-purple/10 blur-[180px] rounded-full pointer-events-none" />
 
       {/* Header Bar */}
-      <header className="w-full max-w-6xl flex justify-between items-center z-10 py-4 border-b border-gray-800/80 mb-8">
+      <header className="w-full max-w-6xl flex justify-between items-center z-10 py-4 border-b border-gray-800/80 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rail-emerald to-cyber-purple flex items-center justify-center font-bold text-lg text-white shadow-lg shadow-rail-emerald/20">
             NR
@@ -45,28 +48,80 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <div className="w-full max-w-5xl text-center space-y-6 z-10 py-6">
+      <div className="w-full max-w-5xl text-center space-y-5 z-10 py-4">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gray-900/90 border border-gray-800 text-xs font-medium text-gray-300 backdrop-blur-md">
           <Zap className="w-3.5 h-3.5 text-rail-emerald" />
-          <span>Stripe Fiat + XRPL Testnet + Stellar Horizon + Gemini / Groq LLM Engine</span>
+          <span>Stripe Fiat + XRPL Testnet + Stellar Horizon + Gemini / Groq LLM Engine + MongoDB Atlas</span>
         </div>
 
-        <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-tight">
+        <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
           Enterprise Multi-Rail Commerce Engine for{' '}
           <span className="bg-gradient-to-r from-rail-emerald via-stellar-cyan to-cyber-purple bg-clip-text text-transparent">
             Fiat, Web3 & Autonomous AI Agents
           </span>
         </h1>
 
-        <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
+        <p className="text-gray-400 text-sm max-w-2xl mx-auto leading-relaxed">
           NexusRail combines multi-currency checkout, atomic double-entry wallet ledgers, IPFS order receipts, and sub-300ms AI agent tool execution using Redis proposal locks.
         </p>
 
-        {/* Live Interactive Showcase Grid */}
-        <div className="pt-8 grid grid-cols-1 lg:grid-cols-2 gap-8 text-left max-w-5xl mx-auto">
-          {/* Multi-Rail Payment Widget */}
-          <div className="flex flex-col items-center">
-            <div className="w-full text-xs font-mono text-rail-emerald uppercase tracking-wider mb-2 flex items-center gap-1.5">
+        {/* Tab Navigation */}
+        <div className="flex flex-wrap justify-center gap-2 pt-4 z-20">
+          <button
+            onClick={() => setActiveTab('checkout')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
+              activeTab === 'checkout'
+                ? 'bg-rail-emerald/20 text-rail-emerald border-rail-emerald/60 shadow-lg shadow-rail-emerald/10'
+                : 'bg-gray-900/60 text-gray-400 border-gray-800 hover:text-white'
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>1. Multi-Rail Checkout</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('social')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
+              activeTab === 'social'
+                ? 'bg-stellar-cyan/20 text-stellar-cyan border-stellar-cyan/60 shadow-lg shadow-stellar-cyan/10'
+                : 'bg-gray-900/60 text-gray-400 border-gray-800 hover:text-white'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>2. Social Showdowns</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
+              activeTab === 'analytics'
+                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/60 shadow-lg shadow-cyber-purple/10'
+                : 'bg-gray-900/60 text-gray-400 border-gray-800 hover:text-white'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>3. Ledger & Analytics</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('plugins')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
+              activeTab === 'plugins'
+                ? 'bg-rail-emerald/20 text-rail-emerald border-rail-emerald/60 shadow-lg shadow-rail-emerald/10'
+                : 'bg-gray-900/60 text-gray-400 border-gray-800 hover:text-white'
+            }`}
+          >
+            <Cpu className="w-4 h-4" />
+            <span>4. Extension Plugins</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="w-full max-w-5xl z-10 py-6">
+        {activeTab === 'checkout' && (
+          <div className="flex flex-col items-center max-w-md mx-auto">
+            <div className="w-full text-xs font-mono text-rail-emerald uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4" /> Live Interactive Multi-Rail Checkout Selector
             </div>
             <MultiRailCheckoutSelector
@@ -74,15 +129,20 @@ export default function Home() {
               productTitle="XRPL Starter Validator Node Hardware Kit"
             />
           </div>
+        )}
 
-          {/* Mento Product Showdown Widget */}
-          <div className="flex flex-col items-center">
-            <div className="w-full text-xs font-mono text-stellar-cyan uppercase tracking-wider mb-2 flex items-center gap-1.5">
+        {activeTab === 'social' && (
+          <div className="flex flex-col items-center max-w-md mx-auto">
+            <div className="w-full text-xs font-mono text-stellar-cyan uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <Layers className="w-4 h-4" /> Live Mento Product Showdown & Community Voting
             </div>
             <ProductShowdownCard />
           </div>
-        </div>
+        )}
+
+        {activeTab === 'analytics' && <AnalyticsLedgerDashboard />}
+
+        {activeTab === 'plugins' && <PluginsShowcase />}
       </div>
 
       {/* Floating AI Launcher Button */}
