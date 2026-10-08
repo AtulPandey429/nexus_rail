@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { StripeService } from '../services/stripe.js';
+import { XRPLService } from '../services/xrpl.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { z } from 'zod';
 
@@ -8,6 +9,28 @@ export const checkoutRouter = Router();
 const StripeSessionSchema = z.object({
   sku: z.string(),
   quantity: z.number().int().positive().default(1),
+});
+
+const XRPLInvoiceSchema = z.object({
+  orderId: z.string(),
+  amountXrp: z.number().positive(),
+});
+
+// POST /api/v1/checkout/xrpl/create-invoice - Generate XRPL payment invoice with Destination Tag
+checkoutRouter.post('/xrpl/create-invoice', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const parseResult = XRPLInvoiceSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ success: false, error: 'Invalid XRPL invoice parameters' });
+    }
+
+    const { orderId, amountXrp } = parseResult.data;
+    const invoice = await XRPLService.createPaymentInvoice(orderId, amountXrp);
+
+    res.json({ success: true, invoice });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'XRPL invoice generation failed' });
+  }
 });
 
 // POST /api/v1/checkout/stripe/create-session - Create Stripe Test Checkout Session
