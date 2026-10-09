@@ -71,6 +71,20 @@ app.get('/', (_req: Request, res: Response) => {
   });
 });
 
+// Structured JSON 404 Handler
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ success: false, error: 'API Route Not Found' });
+});
+
+// Structured Global JSON Error Handler
+app.use((err: any, _req: Request, res: Response, _next: any) => {
+  console.error('❌ [NexusRail API Error]:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Internal Server Error',
+  });
+});
+
 app.listen(env.PORT, () => {
   console.log(`🚀 [NexusRail API] Server listening on http://localhost:${env.PORT}`);
   LedgerWatcherWorker.startWatchers();

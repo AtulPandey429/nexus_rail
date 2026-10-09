@@ -168,6 +168,9 @@ export default function Home() {
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
   };
 
+  // RWA Holdings State
+  const [nGoldBalanceGrams, setNGoldBalanceGrams] = useState(1.25);
+
   // RWA Buy Handler
   const handleRwaPurchase = () => {
     setIsRwaProcessing(true);
@@ -184,6 +187,9 @@ export default function Home() {
         txHash,
         explorerUrl: `https://stellar.expert/explorer/testnet/tx/${txHash}`,
       });
+      if (rwaAsset === 'nGOLD') {
+        setNGoldBalanceGrams((prev) => prev + parseFloat(grams));
+      }
       setIsRwaProcessing(false);
     }, 1200);
   };
@@ -225,6 +231,7 @@ export default function Home() {
         onOpenAuthModal={() => setIsAuthOpen(true)}
         user={authUser}
         onLogout={() => setAuthUser(null)}
+        nGoldBalance={nGoldBalanceGrams}
       />
 
       <AuthModal
@@ -480,26 +487,78 @@ export default function Home() {
         {/* VIEW 5: BUYER DASHBOARD */}
         {activeView === 'buyer' && (
           <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+            {/* Header Identity */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-800 pb-4">
               <div>
-                <h2 className="text-2xl font-bold">Buyer Account Overview</h2>
-                <p className="text-xs text-gray-400 font-mono">Logged in as buyer@example.com</p>
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <User className="w-6 h-6 text-stellar-cyan" />
+                  <span>Buyer Workspace & RWA Portfolio</span>
+                </h2>
+                <p className="text-xs text-gray-400 font-mono">
+                  Signed in as: <strong className="text-white">{authUser?.email || authUser?.walletAddress || 'buyer@nexusrail.io'}</strong> (Role: <span className="text-rail-emerald uppercase">{authUser?.role || 'user'}</span>)
+                </p>
+              </div>
+              <button
+                onClick={() => setIsAuthOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-gray-900 border border-gray-800 hover:border-stellar-cyan text-xs font-mono text-gray-300 flex items-center gap-1.5 transition-all"
+              >
+                <ShieldCheck className="w-4 h-4 text-stellar-cyan" />
+                <span>Manage Identity</span>
+              </button>
+            </div>
+
+            {/* RWA Commodity Vault Portfolio Card */}
+            <div className="p-6 rounded-3xl bg-gradient-to-br from-amber-500/10 via-gray-900/90 to-nexus-card border border-amber-400/40 space-y-4 shadow-xl">
+              <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-amber-400" />
+                  <h3 className="font-bold text-base text-white">Physical Gold Holding (nGOLD)</h3>
+                </div>
+                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                  Stellar Horizon Testnet Token
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+                <div className="p-3 rounded-2xl bg-gray-900/80 border border-gray-800">
+                  <span className="text-[10px] text-gray-400 block">nGOLD Balance</span>
+                  <span className="text-xl font-bold text-amber-400">{nGoldBalanceGrams.toFixed(4)} Grams</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-gray-900/80 border border-gray-800">
+                  <span className="text-[10px] text-gray-400 block">Estimated USD Value</span>
+                  <span className="text-xl font-bold text-white">${(nGoldBalanceGrams * 88.25).toFixed(2)} USD</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-gray-900/80 border border-gray-800">
+                  <span className="text-[10px] text-gray-400 block">Estimated INR Value</span>
+                  <span className="text-xl font-bold text-rail-emerald">₹{(nGoldBalanceGrams * 7420.0).toLocaleString()} INR</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-xs font-mono text-gray-400">Backed 1:1 by 24K 99.9% Physical Vaulted Gold</span>
+                <button
+                  onClick={() => setActiveView('rwa_buy')}
+                  className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-400/60 text-amber-300 hover:bg-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Acquire More nGOLD</span>
+                </button>
               </div>
             </div>
+
+            {/* Quick Action Navigation Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <button onClick={() => setActiveView('cart')} className="p-6 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-rail-emerald text-left space-y-2">
-                <ShoppingBag className="w-6 h-6 text-rail-emerald" />
-                <h3 className="font-bold text-base">Shopping Cart</h3>
+              <button onClick={() => setActiveView('cart')} className="p-6 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-rail-emerald text-left space-y-2 transition-all group">
+                <ShoppingBag className="w-6 h-6 text-rail-emerald group-hover:scale-110 transition-transform" />
+                <h3 className="font-bold text-base text-white">Shopping Cart</h3>
                 <p className="text-xs text-gray-400">View items ({cartItems.reduce((a, b) => a + b.qty, 0)}) and proceed to Stripe test checkout.</p>
               </button>
-              <button onClick={() => setActiveView('orders')} className="p-6 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-stellar-cyan text-left space-y-2">
-                <PackageCheck className="w-6 h-6 text-stellar-cyan" />
-                <h3 className="font-bold text-base">Order History</h3>
+              <button onClick={() => setActiveView('orders')} className="p-6 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-stellar-cyan text-left space-y-2 transition-all group">
+                <PackageCheck className="w-6 h-6 text-stellar-cyan group-hover:scale-110 transition-transform" />
+                <h3 className="font-bold text-base text-white">Order History</h3>
                 <p className="text-xs text-gray-400">Track order timeline (PENDING → PAID → FULFILLED).</p>
               </button>
-              <button onClick={() => setActiveView('guide')} className="p-6 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-cyber-purple text-left space-y-2">
-                <Bot className="w-6 h-6 text-cyber-purple" />
-                <h3 className="font-bold text-base">Catalog Guide</h3>
+              <button onClick={() => setActiveView('guide')} className="p-6 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-cyber-purple text-left space-y-2 transition-all group">
+                <Bot className="w-6 h-6 text-cyber-purple group-hover:scale-110 transition-transform" />
+                <h3 className="font-bold text-base text-white">Catalog Guide</h3>
                 <p className="text-xs text-gray-400">Chat with AI to discover recommended desk kits.</p>
               </button>
             </div>
@@ -627,27 +686,34 @@ export default function Home() {
         {/* VIEW 9: ADMIN */}
         {activeView === 'admin' && (
           <div className="max-w-5xl mx-auto space-y-6">
-            <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-800 pb-4">
               <div>
-                <h2 className="text-2xl font-bold">Operator Admin Dashboard</h2>
-                <p className="text-xs text-gray-400 font-mono">Restricted Operator Controls</p>
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <ShieldCheck className="w-6 h-6 text-amber-400" />
+                  <span>Operator Admin Control Desk</span>
+                </h2>
+                <p className="text-xs text-gray-400 font-mono">Restricted Operator Metrics & Inventory Controls</p>
               </div>
-              <button onClick={() => setActiveView('admin_orders')} className="px-3.5 py-2 rounded-xl bg-rail-emerald/20 text-rail-emerald border border-rail-emerald/50 text-xs font-bold">
-                Order Fulfillment Manager
+              <button onClick={() => setActiveView('admin_orders')} className="px-3.5 py-2 rounded-xl bg-rail-emerald/20 text-rail-emerald border border-rail-emerald/50 text-xs font-bold transition-all hover:bg-rail-emerald/30">
+                Order Fulfillment Manager ({orders.filter(o => o.status !== 'FULFILLED').length} Pending)
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 font-mono text-xs">
               <div className="p-4 rounded-2xl bg-gray-900/80 border border-gray-800">
-                <span className="text-gray-400">Total Volume USD</span>
-                <div className="text-2xl font-bold text-rail-emerald mt-1">$66.00</div>
+                <span className="text-gray-400 block text-[10px]">Total Order Volume</span>
+                <div className="text-2xl font-bold text-rail-emerald mt-1">$66.00 USD</div>
               </div>
               <div className="p-4 rounded-2xl bg-gray-900/80 border border-gray-800">
-                <span className="text-gray-400">Total Orders</span>
+                <span className="text-gray-400 block text-[10px]">Total Platform Orders</span>
                 <div className="text-2xl font-bold text-white mt-1">{orders.length} Orders</div>
               </div>
               <div className="p-4 rounded-2xl bg-gray-900/80 border border-gray-800">
-                <span className="text-gray-400">Active SKUs</span>
-                <div className="text-2xl font-bold text-stellar-cyan mt-1">3 SKUs</div>
+                <span className="text-gray-400 block text-[10px]">Vault nGOLD Reserve</span>
+                <div className="text-2xl font-bold text-amber-400 mt-1">100.00 Grams</div>
+              </div>
+              <div className="p-4 rounded-2xl bg-gray-900/80 border border-gray-800">
+                <span className="text-gray-400 block text-[10px]">Active Product SKUs</span>
+                <div className="text-2xl font-bold text-stellar-cyan mt-1">3 Active SKUs</div>
               </div>
             </div>
           </div>
@@ -656,29 +722,42 @@ export default function Home() {
         {/* VIEW 10: ADMIN ORDERS */}
         {activeView === 'admin_orders' && (
           <div className="max-w-5xl mx-auto space-y-6">
-            <div className="border-b border-gray-800 pb-4">
+            <div className="flex justify-between items-center border-b border-gray-800 pb-4">
               <h2 className="text-2xl font-bold">Admin Order Fulfillment Manager</h2>
+              <button onClick={() => setActiveView('admin')} className="px-3.5 py-2 rounded-xl bg-gray-900 text-gray-300 border border-gray-800 text-xs font-mono">
+                ← Back to Dashboard
+              </button>
             </div>
             <div className="space-y-3">
               {orders.map((ord) => (
-                <div key={ord.id} className="p-4 rounded-2xl bg-gray-900/80 border border-gray-800 flex justify-between items-center text-xs">
+                <div key={ord.id} className="p-4 rounded-2xl bg-gray-900/80 border border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
                   <div>
-                    <span className="font-bold text-white text-sm">{ord.orderNumber}</span>
-                    <span className="text-gray-400 font-mono ml-3">{ord.buyerEmail}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">{ord.orderNumber}</span>
+                      <span className="text-gray-400 font-mono text-[11px]">{ord.buyerEmail}</span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 font-mono mt-1">
+                      Items: {ord.items.map(i => `${i.title} (x${i.qty})`).join(', ')}
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="px-2.5 py-1 rounded-full bg-stellar-cyan/10 text-stellar-cyan border border-stellar-cyan/30 font-bold">
+                    <span className="px-2.5 py-1 rounded-full bg-stellar-cyan/10 text-stellar-cyan border border-stellar-cyan/30 font-bold font-mono">
                       {ord.status}
                     </span>
                     {ord.status === 'PAID' && (
-                      <button onClick={() => handleAdminStatusTransition(ord.id, 'FULFILLING')} className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 font-bold border border-purple-500/40">
+                      <button onClick={() => handleAdminStatusTransition(ord.id, 'FULFILLING')} className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 font-bold border border-purple-500/40 hover:bg-purple-500/30 text-xs transition-all">
                         Start Fulfilling
                       </button>
                     )}
                     {ord.status === 'FULFILLING' && (
-                      <button onClick={() => handleAdminStatusTransition(ord.id, 'FULFILLED')} className="px-3 py-1.5 rounded-lg bg-rail-emerald/20 text-rail-emerald font-bold border border-rail-emerald/40">
+                      <button onClick={() => handleAdminStatusTransition(ord.id, 'FULFILLED')} className="px-3 py-1.5 rounded-lg bg-rail-emerald/20 text-rail-emerald font-bold border border-rail-emerald/40 hover:bg-rail-emerald/30 text-xs transition-all">
                         Mark Fulfilled
                       </button>
+                    )}
+                    {ord.status === 'FULFILLED' && (
+                      <span className="text-rail-emerald font-bold text-xs flex items-center gap-1">
+                        <Check className="w-4 h-4" /> Fulfilled
+                      </span>
                     )}
                   </div>
                 </div>

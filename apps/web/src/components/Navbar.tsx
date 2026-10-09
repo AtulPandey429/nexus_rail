@@ -45,6 +45,8 @@ interface NavbarProps {
   onOpenAuthModal: () => void;
   user: AuthUser | null;
   onLogout: () => void;
+  nGoldBalance?: number;
+  usdBalanceCents?: number;
 }
 
 export function Navbar({
@@ -55,6 +57,8 @@ export function Navbar({
   onOpenAuthModal,
   user,
   onLogout,
+  nGoldBalance = 1.25,
+  usdBalanceCents = 15000,
 }: NavbarProps) {
   const isRwaActive = activeView === 'rwa' || activeView === 'rwa_buy' || activeView === 'rwa_perps';
   const isCommerceActive = activeView === 'storefront';
@@ -99,6 +103,16 @@ export function Navbar({
           >
             <Bot className="w-4 h-4" />
             <span className="hidden sm:inline">Launch AI Agent</span>
+          </button>
+
+          {/* Live RWA nGOLD Balance Pill */}
+          <button
+            onClick={() => setActiveView('rwa')}
+            className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-400 hover:bg-amber-500/20 text-xs font-mono font-bold flex items-center gap-1.5 transition-all"
+            title="Your physical gold token holdings"
+          >
+            <Coins className="w-3.5 h-3.5" />
+            <span>{nGoldBalance.toFixed(4)}g nGOLD</span>
           </button>
 
           {/* Cart Counter */}
