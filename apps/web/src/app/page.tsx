@@ -6,11 +6,12 @@ import { AgentDeskPanel } from '@/components/AgentDeskPanel';
 import { ProductShowdownCard } from '@/components/ProductShowdownCard';
 import { AnalyticsLedgerDashboard } from '@/components/AnalyticsLedgerDashboard';
 import { PluginsShowcase } from '@/components/PluginsShowcase';
-import { Zap, Bot, ShieldCheck, Layers, Sparkles, Activity, Cpu, BarChart3, ShoppingBag } from 'lucide-react';
+import { RwaGoldVaultCard } from '@/components/RwaGoldVaultCard';
+import { Zap, Bot, ShieldCheck, Layers, Sparkles, Activity, Cpu, BarChart3, ShoppingBag, Coins } from 'lucide-react';
 
 export default function Home() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'checkout' | 'social' | 'analytics' | 'plugins'>('checkout');
+  const [activeTab, setActiveTab] = useState<'checkout' | 'social' | 'analytics' | 'plugins' | 'rwa'>('rwa');
 
   return (
     <main className="min-h-screen bg-nexus-dark text-white flex flex-col items-center justify-between p-4 md:p-10 relative overflow-x-hidden">
@@ -51,7 +52,7 @@ export default function Home() {
       <div className="w-full max-w-5xl text-center space-y-5 z-10 py-4">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gray-900/90 border border-gray-800 text-xs font-medium text-gray-300 backdrop-blur-md">
           <Zap className="w-3.5 h-3.5 text-rail-emerald" />
-          <span>Stripe Fiat + XRPL Testnet + Stellar Horizon + Gemini / Groq LLM Engine + MongoDB Atlas</span>
+          <span>RWA Gold & Silver Oracles + Stripe Fiat + XRPL + Stellar + Groq AI Engine</span>
         </div>
 
         <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
@@ -62,11 +63,23 @@ export default function Home() {
         </h1>
 
         <p className="text-gray-400 text-sm max-w-2xl mx-auto leading-relaxed">
-          NexusRail combines multi-currency checkout, atomic double-entry wallet ledgers, IPFS order receipts, and sub-300ms AI agent tool execution using Redis proposal locks.
+          NexusRail combines RWA Gold & Silver tokenization, multi-currency checkout, atomic double-entry wallet ledgers, IPFS order receipts, and sub-300ms AI agent tool execution using Redis proposal locks.
         </p>
 
         {/* Tab Navigation */}
         <div className="flex flex-wrap justify-center gap-2 pt-4 z-20">
+          <button
+            onClick={() => setActiveTab('rwa')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
+              activeTab === 'rwa'
+                ? 'bg-amber-500/20 text-amber-400 border-amber-400/60 shadow-lg shadow-amber-500/10'
+                : 'bg-gray-900/60 text-gray-400 border-gray-800 hover:text-white'
+            }`}
+          >
+            <Coins className="w-4 h-4 text-amber-400" />
+            <span>1. RWA Gold & Silver Vault</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('checkout')}
             className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
@@ -76,7 +89,7 @@ export default function Home() {
             }`}
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>1. Multi-Rail Checkout</span>
+            <span>2. Multi-Rail Checkout</span>
           </button>
 
           <button
@@ -88,7 +101,7 @@ export default function Home() {
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>2. Social Showdowns</span>
+            <span>3. Social Showdowns</span>
           </button>
 
           <button
@@ -100,7 +113,7 @@ export default function Home() {
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>3. Ledger & Analytics</span>
+            <span>4. Ledger & Analytics</span>
           </button>
 
           <button
@@ -112,13 +125,15 @@ export default function Home() {
             }`}
           >
             <Cpu className="w-4 h-4" />
-            <span>4. Extension Plugins</span>
+            <span>5. Extension Plugins</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="w-full max-w-5xl z-10 py-6">
+        {activeTab === 'rwa' && <RwaGoldVaultCard />}
+
         {activeTab === 'checkout' && (
           <div className="flex flex-col items-center max-w-md mx-auto">
             <div className="w-full text-xs font-mono text-rail-emerald uppercase tracking-wider mb-3 flex items-center gap-1.5">
