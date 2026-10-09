@@ -7,6 +7,8 @@ import { ProductShowdownCard } from '@/components/ProductShowdownCard';
 import { AnalyticsLedgerDashboard } from '@/components/AnalyticsLedgerDashboard';
 import { PluginsShowcase } from '@/components/PluginsShowcase';
 import { RwaGoldVaultCard } from '@/components/RwaGoldVaultCard';
+import { Navbar, ViewType } from '@/components/Navbar';
+import { AuthModal } from '@/components/AuthModal';
 import {
   Zap,
   Bot,
@@ -39,9 +41,19 @@ import {
 
 export default function Home() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
-  const [activeView, setActiveView] = useState<
-    'storefront' | 'rwa' | 'rwa_buy' | 'rwa_perps' | 'buyer' | 'cart' | 'orders' | 'guide' | 'admin' | 'admin_orders' | 'analytics' | 'plugins'
-  >('rwa');
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<{
+    id: string;
+    email?: string;
+    walletAddress?: string;
+    role: 'user' | 'admin';
+  } | null>({
+    id: 'usr_buyer_101',
+    email: 'buyer@nexusrail.io',
+    role: 'user',
+  });
+  const [authToken, setAuthToken] = useState<string | null>('demo_jwt_token_123');
+  const [activeView, setActiveView] = useState<ViewType>('rwa');
 
   // Shared Global State Engine
   const [cartItems, setCartItems] = useState([
@@ -204,178 +216,25 @@ export default function Home() {
       <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[900px] h-[450px] bg-rail-emerald/10 blur-[180px] rounded-full pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-[600px] h-[600px] bg-cyber-purple/10 blur-[180px] rounded-full pointer-events-none" />
 
-      {/* Header Bar */}
-      <header className="w-full max-w-6xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 z-10 py-4 border-b border-gray-800/80 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rail-emerald via-stellar-cyan to-cyber-purple flex items-center justify-center font-bold text-lg text-white shadow-lg shadow-rail-emerald/20">
-            NR
-          </div>
-          <div>
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-              NexusRail Super-Platform
-            </span>
-            <span className="text-[10px] block text-gray-400 font-mono">Multi-Rail Commerce • RWA Gold Vault • AI Agent Desk</span>
-          </div>
-        </div>
+      {/* Top Navbar & Auth Modal */}
+      <Navbar
+        activeView={activeView}
+        setActiveView={setActiveView}
+        cartCount={cartItems.reduce((acc, i) => acc + i.qty, 0)}
+        onOpenAgentDesk={() => setIsAgentOpen(true)}
+        onOpenAuthModal={() => setIsAuthOpen(true)}
+        user={authUser}
+        onLogout={() => setAuthUser(null)}
+      />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setIsAgentOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-cyber-purple/20 border border-cyber-purple/50 text-cyber-purple hover:bg-cyber-purple/30 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-lg shadow-cyber-purple/10"
-          >
-            <Bot className="w-4 h-4" />
-            <span>Launch AI Agent Desk</span>
-          </button>
-          <span className="text-xs font-mono px-3 py-1.5 rounded-full bg-rail-emerald/10 text-rail-emerald border border-rail-emerald/30 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rail-emerald animate-pulse" />
-            Zero-404 Unified Shell
-          </span>
-        </div>
-      </header>
-
-      {/* Unified Master View Navigation Header */}
-      <div className="w-full max-w-6xl z-20 pb-4">
-        <div className="flex flex-wrap items-center justify-center gap-1.5 p-2 rounded-2xl bg-gray-900/90 border border-gray-800/90 backdrop-blur-xl shadow-2xl">
-          {/* RWA Vault Section */}
-          <button
-            onClick={() => setActiveView('rwa')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'rwa'
-                ? 'bg-amber-500/20 text-amber-400 border-amber-400/60 shadow-lg shadow-amber-500/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <Coins className="w-3.5 h-3.5 text-amber-400" />
-            <span>1. RWA Vault</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('rwa_buy')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'rwa_buy'
-                ? 'bg-amber-500/20 text-amber-400 border-amber-400/60 shadow-lg shadow-amber-500/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-400" />
-            <span>Buy Gold/Silver</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('rwa_perps')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'rwa_perps'
-                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/60 shadow-lg shadow-cyber-purple/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5 text-cyber-purple" />
-            <span>Ostium Perps</span>
-          </button>
-
-          <div className="h-4 w-[1px] bg-gray-800 mx-1 hidden sm:block" />
-
-          {/* Commerce Section */}
-          <button
-            onClick={() => setActiveView('storefront')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'storefront'
-                ? 'bg-rail-emerald/20 text-rail-emerald border-rail-emerald/60 shadow-lg shadow-rail-emerald/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <ShoppingBag className="w-3.5 h-3.5 text-rail-emerald" />
-            <span>2. Storefront</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('buyer')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'buyer'
-                ? 'bg-stellar-cyan/20 text-stellar-cyan border-stellar-cyan/60 shadow-lg shadow-stellar-cyan/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <User className="w-3.5 h-3.5 text-stellar-cyan" />
-            <span>3. Buyer App</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('cart')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'cart'
-                ? 'bg-rail-emerald/20 text-rail-emerald border-rail-emerald/60 shadow-lg shadow-rail-emerald/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Cart ({cartItems.reduce((acc, i) => acc + i.qty, 0)})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('orders')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'orders'
-                ? 'bg-stellar-cyan/20 text-stellar-cyan border-stellar-cyan/60 shadow-lg shadow-stellar-cyan/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <PackageCheck className="w-3.5 h-3.5" />
-            <span>Orders</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('guide')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'guide'
-                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/60 shadow-lg shadow-cyber-purple/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <Bot className="w-3.5 h-3.5" />
-            <span>AI Guide</span>
-          </button>
-
-          <div className="h-4 w-[1px] bg-gray-800 mx-1 hidden sm:block" />
-
-          {/* Admin & Analytics Section */}
-          <button
-            onClick={() => setActiveView('admin')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'admin' || activeView === 'admin_orders'
-                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/60 shadow-lg shadow-cyber-purple/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <LayoutDashboard className="w-3.5 h-3.5 text-cyber-purple" />
-            <span>4. Operator Admin</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('analytics')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'analytics'
-                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/60 shadow-lg shadow-cyber-purple/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Analytics</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('plugins')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              activeView === 'plugins'
-                ? 'bg-rail-emerald/20 text-rail-emerald border-rail-emerald/60 shadow-lg shadow-rail-emerald/10'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5" />
-            <span>Plugins</span>
-          </button>
-        </div>
-      </div>
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onLoginSuccess={(user, token) => {
+          setAuthUser(user);
+          setAuthToken(token);
+        }}
+      />
 
       {/* Main Container View Switcher (Zero 404 Page Reloads) */}
       <div className="w-full max-w-6xl z-10 py-4 flex-1">
