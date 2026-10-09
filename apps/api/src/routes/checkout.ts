@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { StripeService } from '../services/stripe.js';
 import { XRPLService } from '../services/xrpl.js';
+import { StellarService } from '../services/stellar.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { z } from 'zod';
 
@@ -14,6 +15,28 @@ const StripeSessionSchema = z.object({
 const XRPLInvoiceSchema = z.object({
   orderId: z.string(),
   amountXrp: z.number().positive(),
+});
+
+const StellarInvoiceSchema = z.object({
+  orderId: z.string(),
+  amountXlm: z.number().positive(),
+});
+
+// POST /api/v1/checkout/stellar/create-invoice - Generate Stellar Horizon payment invoice with Memo text
+checkoutRouter.post('/stellar/create-invoice', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const parseResult = StellarInvoiceSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ success: false, error: 'Invalid Stellar invoice parameters' });
+    }
+
+    const { orderId, amountXlm } = parseResult.data;
+    const invoice = await StellarService.createPaymentInvoice(orderId, amountXlm);
+
+    res.json({ success: true, invoice });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Stellar invoice generation failed' });
+  }
 });
 
 // POST /api/v1/checkout/xrpl/create-invoice - Generate XRPL payment invoice with Destination Tag
