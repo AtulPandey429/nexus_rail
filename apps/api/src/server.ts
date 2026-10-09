@@ -21,6 +21,7 @@ import { guideRouter } from './routes/guide.js';
 import { adminRouter } from './routes/admin.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { rwaGoldRouter } from './routes/rwaGold.js';
+import { rwaModularRouter } from './routes/rwa/rwaModularRouter.js';
 import type { HealthResponse } from '@nexusrail/shared';
 
 const app = express();
@@ -47,6 +48,7 @@ app.use('/api/v1/guide', guideRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/webhooks', webhooksRouter);
 app.use('/api/v1/rwa', rwaGoldRouter);
+app.use('/api/v1/rwa-modular', rwaModularRouter);
 
 // Health Check Endpoint
 app.get('/api/v1/health', (_req: Request, res: Response) => {
