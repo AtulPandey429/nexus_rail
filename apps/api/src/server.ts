@@ -27,7 +27,7 @@ import type { HealthResponse } from '@nexusrail/shared';
 const app = express();
 const startTime = Date.now();
 
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 // Routes

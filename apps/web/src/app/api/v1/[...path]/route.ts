@@ -17,7 +17,7 @@ const adminUsersStore = [
   { id: 'usr_2', email: 'admin@nexusrail.dev', role: 'admin', createdAt: '2026-10-01T10:00:00.000Z' },
 ];
 
-const RENDER_API_URL = process.env.API_SERVER_URL || process.env.NEXT_PUBLIC_API_URL || 'https://nexusrail-api.onrender.com';
+const RENDER_API_URL = process.env.API_SERVER_URL || process.env.NEXT_PUBLIC_API_URL || 'https://nexus-rail.onrender.com';
 
 async function handleApiRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
