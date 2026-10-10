@@ -29,7 +29,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
 
   if (!isOpen) return null;
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const query = textToSend || input;
     if (!query.trim()) return;
 
@@ -38,7 +38,46 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
     setInput('');
     setLoading(true);
 
-    setTimeout(() => {
+    const token = localStorage.getItem('nexus_token') || 'demo_jwt_token_123';
+
+    try {
+      const res = await fetch('/api/v1/agent/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message: query }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a_${Date.now()}`,
+            sender: 'agent',
+            text: data.reply,
+            proposal: data.proposal
+              ? {
+                  proposalId: data.proposal.proposalId,
+                  title: data.proposal.payload.title || 'XRPL Starter Validator Node Hardware',
+                  priceCents: data.proposal.payload.priceCents || 49900,
+                }
+              : undefined,
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a_${Date.now()}`,
+            sender: 'agent',
+            text: data.error || 'Agent execution encountered an error',
+          },
+        ]);
+      }
+    } catch (err) {
       if (query.toLowerCase().includes('buy') || query.toLowerCase().includes('order')) {
         setMessages((prev) => [
           ...prev,
@@ -63,8 +102,9 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
           },
         ]);
       }
+    } finally {
       setLoading(false);
-    }, 400);
+    }
   };
 
   return (
@@ -126,9 +166,13 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                     onClick={async () => {
                       setLoading(true);
                       try {
-                        const res = await fetch('/api/v1/agent/act', {
+                        const token = localStorage.getItem('nexus_token') || 'demo_jwt_token_123';
+                        const res = await fetch('/api/v1/agent/confirm', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                          },
                           body: JSON.stringify({ proposalId: m.proposal?.proposalId }),
                         });
                         const data = await res.json();

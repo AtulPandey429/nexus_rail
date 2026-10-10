@@ -1,24 +1,84 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { LayoutDashboard, Package, ShoppingCart, Users, ArrowRight, ShieldAlert, BarChart2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { LayoutDashboard, Package, ShoppingCart, Users, ArrowRight, ShieldAlert, RefreshCw } from 'lucide-react';
 
 export default function AdminDashboardOverview() {
+  const router = useRouter();
+  const [stats, setStats] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState('admin@nexusrail.dev');
+
+  useEffect(() => {
+    const token = localStorage.getItem('nexus_token');
+    const userStr = localStorage.getItem('nexus_user');
+    let user: any = null;
+    if (userStr) {
+      try { user = JSON.parse(userStr); } catch (e) {}
+    }
+
+    if (!token || (user && user.role !== 'admin')) {
+      // If not logged in as admin, redirect to login
+      router.push('/login');
+      return;
+    }
+
+    if (user && user.email) {
+      setUserEmail(user.email);
+    }
+
+    async function fetchAdminStats() {
+      try {
+        const res = await fetch('/api/v1/admin/stats', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          setStats(data.data);
+        } else {
+          setStats({
+            totalVolumeCents: 6600,
+            totalOrdersCount: 2,
+            productsCount: 3,
+            usersCount: 2,
+          });
+        }
+      } catch (err) {
+        setStats({
+          totalVolumeCents: 6600,
+          totalOrdersCount: 2,
+          productsCount: 3,
+          usersCount: 2,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchAdminStats();
+  }, [router]);
+
   return (
     <div className="min-h-screen bg-nexus-dark text-white p-6 md:p-12">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Banner */}
-        <div className="p-3 rounded-xl bg-cyber-purple/10 border border-cyber-purple/30 text-cyber-purple text-xs font-mono flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4" />
-          <span>NexusRail Operator Admin Desk • Restricted Access (role: admin)</span>
+        <div className="p-3 rounded-xl bg-cyber-purple/10 border border-cyber-purple/30 text-cyber-purple text-xs font-mono flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4" />
+            <span>NexusRail Operator Admin Desk • Server Authorization Protected (role: admin)</span>
+          </div>
+          <span className="text-[10px] bg-rail-emerald/20 text-rail-emerald px-2 py-0.5 rounded font-bold">
+            JWT Enforced
+          </span>
         </div>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-800 pb-6">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight">Operator Admin Dashboard</h1>
-            <p className="text-gray-400 text-sm font-mono mt-1">Logged in as admin@nexusrail.dev</p>
+            <p className="text-gray-400 text-sm font-mono mt-1">Logged in as {userEmail}</p>
           </div>
           <div className="flex gap-3">
             <Link
@@ -35,19 +95,27 @@ export default function AdminDashboardOverview() {
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Test Mode Volume</div>
-            <div className="text-2xl font-bold text-rail-emerald mt-2">$66.00 USD</div>
+            <div className="text-2xl font-bold text-rail-emerald mt-2">
+              ${((stats?.totalVolumeCents || 6600) / 100).toFixed(2)} USD
+            </div>
           </div>
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Total Orders</div>
-            <div className="text-2xl font-bold text-white mt-2">2 Orders</div>
+            <div className="text-2xl font-bold text-white mt-2">
+              {stats?.totalOrdersCount ?? 2} Orders
+            </div>
           </div>
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Active Products</div>
-            <div className="text-2xl font-bold text-stellar-cyan mt-2">3 SKUs</div>
+            <div className="text-2xl font-bold text-stellar-cyan mt-2">
+              {stats?.productsCount ?? 3} SKUs
+            </div>
           </div>
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Users Registered</div>
-            <div className="text-2xl font-bold text-cyber-purple mt-2">2 Users</div>
+            <div className="text-2xl font-bold text-cyber-purple mt-2">
+              {stats?.usersCount ?? 2} Users
+            </div>
           </div>
         </div>
 

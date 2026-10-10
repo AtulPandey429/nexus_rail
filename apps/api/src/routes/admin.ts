@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { masterOrdersStore, OrderRecord } from './orders.js';
+import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth.js';
 
 export const adminRouter = Router();
 
@@ -16,16 +17,8 @@ const productsStore = [
   { id: 'prod_3', sku: 'NL-LAMP', title: 'Nexus Minimalist LED Desk Lamp', description: 'Touch dimmable USB-C architectural lamp', priceCents: 4200, category: 'Lighting', stockQuantity: 30, active: true },
 ];
 
-// Middleware helper to check admin role
-const checkAdmin = (req: Request, res: Response, next: Function) => {
-  const role = (req.headers['x-user-role'] as string) || 'admin';
-  if (role !== 'admin') {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin role required' } });
-  }
-  next();
-};
-
-adminRouter.use(checkAdmin);
+// Secure all admin routes with authentication and role verification
+adminRouter.use(requireAuth, requireAdmin);
 
 // GET /api/v1/admin/stats
 adminRouter.get('/stats', (_req: Request, res: Response) => {

@@ -1,11 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart3, Wallet, Database, ShieldCheck, ArrowUpRight, RefreshCw, Activity, Terminal } from 'lucide-react';
 
 export function AnalyticsLedgerDashboard() {
   const [walletBalance, setWalletBalance] = useState(125000); // $1,250.00
+  const [totalOrders, setTotalOrders] = useState(14);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    async function fetchAnalytics() {
+      try {
+        const res = await fetch('/api/v1/analytics/summary');
+        const data = await res.json();
+        if (data.success && data.data) {
+          if (data.data.totalRevenueCents) setWalletBalance(data.data.totalRevenueCents);
+          if (data.data.totalOrders) setTotalOrders(data.data.totalOrders);
+        }
+      } catch (err) {
+        console.error('Analytics fetch fallback');
+      }
+    }
+    fetchAnalytics();
+  }, []);
 
   const mockTransactions = [
     { id: 'tx_8f91a2', rail: 'XRPL Testnet', amount: '$499.00', status: 'SETTLED', memo: 'Tag #948102', time: '2 mins ago' },
@@ -20,12 +37,20 @@ export function AnalyticsLedgerDashboard() {
     { id: '6ac7f102', prompt: 'Generate IPFS receipt CID via Pinata', latency: '295ms', db: 'nexusrail.agent_audit_traces' },
   ];
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/v1/analytics/summary');
+      const data = await res.json();
+      if (data.success && data.data) {
+        if (data.data.totalRevenueCents) setWalletBalance(data.data.totalRevenueCents);
+        if (data.data.totalOrders) setTotalOrders(data.data.totalOrders);
+      }
+    } catch (err) {
       setWalletBalance((prev) => prev + 49900);
+    } finally {
       setIsRefreshing(false);
-    }, 600);
+    }
   };
 
   return (

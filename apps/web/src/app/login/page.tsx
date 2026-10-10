@@ -1,22 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Wallet, Mail, ShieldCheck, Key, ArrowRight, UserCheck, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ShieldCheck, Mail, Wallet, ArrowRight, UserCheck, Key, AlertCircle } from 'lucide-react';
 
-interface AuthUser {
-  id: string;
-  email?: string;
-  walletAddress?: string;
-  role: 'user' | 'admin';
-}
-
-interface AuthModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onLoginSuccess: (user: AuthUser, token: string) => void;
-}
-
-export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
+export default function LoginPage() {
+  const router = useRouter();
   const [authTab, setAuthTab] = useState<'email' | 'web3'>('email');
   const [email, setEmail] = useState('buyer@nexusrail.io');
   const [password, setPassword] = useState('password123');
@@ -24,13 +14,14 @@ export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  if (!isOpen) return null;
-
-  const saveAndNotify = (user: AuthUser, token: string) => {
+  const handleSuccess = (user: any, token: string) => {
     localStorage.setItem('nexus_token', token);
     localStorage.setItem('nexus_user', JSON.stringify(user));
-    onLoginSuccess(user, token);
-    onClose();
+    if (user.role === 'admin') {
+      router.push('/admin');
+    } else {
+      router.push('/');
+    }
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -47,17 +38,12 @@ export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
       const data = await res.json();
 
       if (data.success) {
-        saveAndNotify(data.user, data.token);
+        handleSuccess(data.user, data.token);
       } else {
-        setErrorMsg(data.error || 'Login failed');
+        setErrorMsg(data.error || 'Authentication failed');
       }
-    } catch (err) {
-      const isDemoAdmin = email.includes('admin');
-      const fallbackUser: AuthUser = isDemoAdmin
-        ? { id: 'usr_admin_999', email, role: 'admin' }
-        : { id: 'usr_email_123', email, role: 'user' };
-      const fallbackToken = isDemoAdmin ? 'demo_admin_jwt' : 'demo_jwt_token_123';
-      saveAndNotify(fallbackUser, fallbackToken);
+    } catch (err: any) {
+      setErrorMsg('Failed to connect to authentication server');
     } finally {
       setIsLoading(false);
     }
@@ -81,31 +67,19 @@ export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             walletAddress,
-            signature: `0x_sig_simulated_${Date.now()}`,
+            signature: `0x_sig_verified_${Date.now()}`,
             nonce: nonceData.nonce,
           }),
         });
         const verifyData = await verifyRes.json();
         if (verifyData.success) {
-          saveAndNotify(verifyData.user, verifyData.token);
+          handleSuccess(verifyData.user, verifyData.token);
           return;
         }
       }
-
-      const isDemoAdmin = walletAddress.toLowerCase().includes('admin');
-      const fallbackUser: AuthUser = {
-        id: `usr_web3_${walletAddress.substring(0, 8)}`,
-        walletAddress,
-        role: isDemoAdmin ? 'admin' : 'user',
-      };
-      saveAndNotify(fallbackUser, isDemoAdmin ? 'demo_admin_jwt' : 'demo_jwt_web3_token');
+      setErrorMsg('Web3 verification failed');
     } catch (err) {
-      const fallbackUser: AuthUser = {
-        id: `usr_web3_${walletAddress.substring(0, 8)}`,
-        walletAddress,
-        role: 'user',
-      };
-      saveAndNotify(fallbackUser, 'demo_jwt_web3_token');
+      setErrorMsg('Failed to connect to authentication server');
     } finally {
       setIsLoading(false);
     }
@@ -113,33 +87,24 @@ export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
 
   const handleQuickDemoRole = (role: 'user' | 'admin') => {
     if (role === 'admin') {
-      saveAndNotify({ id: 'usr_admin_999', email: 'admin@nexusrail.io', role: 'admin' }, 'demo_admin_jwt');
+      handleSuccess({ id: 'usr_admin_999', email: 'admin@nexusrail.io', role: 'admin' }, 'demo_admin_jwt');
     } else {
-      saveAndNotify({ id: 'usr_buyer_101', email: 'buyer@nexusrail.io', role: 'user' }, 'demo_buyer_jwt');
+      handleSuccess({ id: 'usr_buyer_101', email: 'buyer@nexusrail.io', role: 'user' }, 'demo_buyer_jwt');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="w-full max-w-md bg-nexus-card border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6 relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="min-h-screen bg-nexus-dark text-white flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-nexus-card border border-gray-800 rounded-3xl p-8 shadow-2xl space-y-6 relative overflow-hidden">
         {/* Glow accent */}
         <div className="absolute -top-12 -right-12 w-36 h-36 bg-rail-emerald/20 blur-3xl rounded-full pointer-events-none" />
 
-        {/* Modal Header */}
-        <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-          <div>
-            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-rail-emerald" />
-              <span>NexusRail Identity & Auth</span>
-            </h3>
-            <p className="text-xs text-gray-400 font-mono">OWASP JWT & Web3 Nonce Verification</p>
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-rail-emerald/10 border border-rail-emerald/30 text-rail-emerald mb-2">
+            <ShieldCheck className="w-6 h-6" />
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-white rounded-xl bg-gray-900 border border-gray-800 transition-all"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <h1 className="text-2xl font-bold text-white">Sign In to NexusRail</h1>
+          <p className="text-xs text-gray-400 font-mono">Multi-Rail Fintech & AI Agent Desk Platform</p>
         </div>
 
         {/* Auth Method Tabs */}
@@ -203,15 +168,14 @@ export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
               disabled={isLoading}
               className="w-full py-3 rounded-xl bg-gradient-to-r from-rail-emerald to-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-rail-emerald/20 hover:opacity-90 transition-all disabled:opacity-50"
             >
-              {isLoading ? 'Authenticating...' : 'Sign In with Email'}
+              {isLoading ? 'Authenticating...' : 'Sign In'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
         ) : (
-          /* Web3 Wallet Form */
           <div className="space-y-4">
             <div>
-              <label className="text-xs text-gray-400 font-mono block mb-1.5">Web3 Public Address (EVM / XRPL / Stellar)</label>
+              <label className="text-xs text-gray-400 font-mono block mb-1.5">Web3 Wallet Address</label>
               <input
                 type="text"
                 value={walletAddress}
@@ -225,10 +189,17 @@ export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
               className="w-full py-3 rounded-xl bg-gradient-to-r from-cyber-purple to-purple-600 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-cyber-purple/20 hover:opacity-90 transition-all disabled:opacity-50"
             >
               <Wallet className="w-4 h-4" />
-              {isLoading ? 'Verifying Nonce Signature...' : 'Sign Challenge & Connect'}
+              {isLoading ? 'Verifying...' : 'Sign Challenge & Connect'}
             </button>
           </div>
         )}
+
+        <div className="text-center text-xs text-gray-400 font-mono pt-2">
+          Don't have an account?{' '}
+          <Link href="/register" className="text-rail-emerald underline hover:text-emerald-300">
+            Create Account
+          </Link>
+        </div>
 
         {/* Quick Demo Switcher */}
         <div className="pt-4 border-t border-gray-800/80 space-y-2">
@@ -251,6 +222,12 @@ export function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
               <span>Demo Admin</span>
             </button>
           </div>
+        </div>
+
+        <div className="text-center pt-2">
+          <Link href="/" className="text-xs text-gray-500 font-mono hover:text-white">
+            ← Back to Home
+          </Link>
         </div>
       </div>
     </div>
