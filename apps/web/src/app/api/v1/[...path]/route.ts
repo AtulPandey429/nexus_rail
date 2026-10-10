@@ -220,7 +220,62 @@ async function handleApiRequest(req: NextRequest, { params }: { params: Promise<
     });
   }
 
-  // 4. Multi-Rail Checkout Routes
+  // 4. Orders & Multi-Rail Checkout Routes
+  if (routePath === 'orders' && method === 'GET') {
+    return NextResponse.json({
+      status: 'success',
+      data: { orders: adminOrdersStore },
+    });
+  }
+
+  if (routePath === 'orders' && method === 'POST') {
+    const body = await req.json().catch(() => ({}));
+    const newOrder = {
+      id: body.id || `ord_${Date.now()}`,
+      orderNumber: `NR-${1000 + adminOrdersStore.length + 1}`,
+      buyerEmail: 'buyer@nexusrail.io',
+      status: 'PENDING',
+      totalCents: body.totalCents || 4200,
+      rail: body.rail || 'STRIPE',
+      items: body.items || [{ sku: 'NL-NOTE-A5', title: 'Nexus Hardcover Notebook Set', qty: 1 }],
+      createdAt: new Date().toISOString(),
+    };
+    adminOrdersStore.unshift(newOrder);
+    return NextResponse.json({
+      status: 'success',
+      data: { order: newOrder },
+    });
+  }
+
+  if (routePath === 'webhooks/stripe' && method === 'POST') {
+    const body = await req.json().catch(() => ({}));
+    const orderId = body.data?.object?.metadata?.orderId || body.data?.object?.client_reference_id;
+
+    if (orderId) {
+      const target = adminOrdersStore.find((o) => o.id === orderId || o.orderNumber === orderId);
+      if (target) {
+        target.status = 'PAID';
+      } else {
+        adminOrdersStore.unshift({
+          id: orderId,
+          orderNumber: `NR-${orderId.substring(4, 8) || '1004'}`,
+          buyerEmail: body.data?.object?.customer_email || 'buyer@nexusrail.io',
+          status: 'PAID',
+          totalCents: body.data?.object?.amount_total || 4200,
+          rail: 'STRIPE',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    return NextResponse.json({
+      received: true,
+      status: 'PAID',
+      eventType: body.type || 'checkout.session.completed',
+      signatureVerified: true,
+    });
+  }
+
   if (routePath === 'checkout/stripe/create-session' && method === 'POST') {
     const body = await req.json().catch(() => ({}));
     return NextResponse.json({

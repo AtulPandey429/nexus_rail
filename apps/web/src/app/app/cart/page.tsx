@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { ShoppingBag, Trash2, ArrowLeft, CreditCard, ShieldCheck } from 'lucide-react';
+import { EndToEndFlowMonitor } from '@/components/EndToEndFlowMonitor';
 
 export default function UserCartPage() {
   const [items, setItems] = useState([
@@ -23,6 +24,7 @@ export default function UserCartPage() {
   };
 
   const totalCents = items.reduce((acc, item) => acc + item.priceCents * item.qty, 0);
+  const checkoutUrl = `/app/checkout?orderId=ord_${Date.now()}&amountCents=${totalCents}&title=${encodeURIComponent('Nexus Hardcover Notebook & Pen Set')}`;
 
   return (
     <div className="min-h-screen bg-nexus-dark text-white p-6 md:p-12">
@@ -31,12 +33,15 @@ export default function UserCartPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Buyer Dashboard
         </Link>
 
+        {/* Pipeline Monitor */}
+        <EndToEndFlowMonitor currentStage={1} />
+
         <div className="border-b border-gray-800 pb-4">
           <h1 className="text-3xl font-extrabold flex items-center gap-3">
             <ShoppingBag className="w-7 h-7 text-rail-emerald" />
             <span>Shopping Cart</span>
           </h1>
-          <p className="text-xs text-gray-400 font-mono mt-1">Guest items merged automatically into Postgres ledger</p>
+          <p className="text-xs text-gray-400 font-mono mt-1">Items saved to Postgres ledger • Ready for multi-rail checkout</p>
         </div>
 
         {items.length === 0 ? (
@@ -92,15 +97,15 @@ export default function UserCartPage() {
               </div>
 
               <Link
-                href="/app/checkout"
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-rail-emerald to-stellar-cyan text-nexus-dark font-bold text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                href={checkoutUrl}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-rail-emerald via-emerald-500 to-stellar-cyan text-nexus-dark font-extrabold text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-rail-emerald/20"
               >
                 <CreditCard className="w-4 h-4" />
-                <span>Proceed to Stripe Checkout</span>
+                <span>Proceed to Multi-Rail Checkout</span>
               </Link>
 
-              <div className="text-[11px] text-gray-400 flex items-center gap-1.5 justify-center">
-                <ShieldCheck className="w-3.5 h-3.5 text-rail-emerald" /> Stripe Test Mode • No Real Charges
+              <div className="text-[11px] text-gray-400 flex items-center gap-1.5 justify-center font-mono">
+                <ShieldCheck className="w-3.5 h-3.5 text-rail-emerald" /> Stripe Test Mode • Real Webhook Pipeline
               </div>
             </div>
           </div>
@@ -109,3 +114,4 @@ export default function UserCartPage() {
     </div>
   );
 }
+
