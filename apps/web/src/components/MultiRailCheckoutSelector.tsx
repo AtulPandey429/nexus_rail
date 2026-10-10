@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { CreditCard, Wallet, Zap, Rocket, CheckCircle, RefreshCw, ExternalLink } from 'lucide-react';
+import { StripeCheckoutModal } from './StripeCheckoutModal';
 
 export type PaymentRailChoice = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR';
 
@@ -21,6 +22,7 @@ export function MultiRailCheckoutSelector({
   const [selectedRail, setSelectedRail] = useState<PaymentRailChoice>('STRIPE');
   const [isLoading, setIsLoading] = useState(false);
   const [invoiceData, setInvoiceData] = useState<any | null>(null);
+  const [isStripeModalOpen, setIsStripeModalOpen] = useState(false);
 
   const usdPrice = (priceCents / 100).toFixed(2);
   const xrpEstimate = ((priceCents / 100) * 2.15).toFixed(2);
@@ -69,6 +71,7 @@ export function MultiRailCheckoutSelector({
         });
         const data = await res.json();
         setInvoiceData(data.data || { url: 'https://checkout.stripe.com/pay/demo_session' });
+        setIsStripeModalOpen(true);
       } else {
         setInvoiceData({ orderId, status: 'PAID', message: 'Internal USD Wallet debited successfully' });
       }
@@ -79,8 +82,40 @@ export function MultiRailCheckoutSelector({
     }
   };
 
+  const handleStripeSuccess = async (session: any) => {
+    setIsLoading(true);
+    try {
+      const orderId = invoiceData?.orderId || `ord_${Date.now()}`;
+      const res = await fetch(`/api/v1/checkout/orders/${orderId}/ipfs-receipt`);
+      const receiptData = await res.json();
+      setInvoiceData({
+        ...invoiceData,
+        status: 'PAID',
+        receipt: receiptData.receipt,
+        sessionId: session.sessionId,
+      });
+      onPaymentSuccess?.(receiptData.receipt);
+    } catch (err) {
+      setInvoiceData({
+        ...invoiceData,
+        status: 'PAID',
+        sessionId: session.sessionId,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-lg p-6 rounded-2xl bg-nexus-card border border-gray-800 space-y-6 shadow-2xl">
+      <StripeCheckoutModal
+        isOpen={isStripeModalOpen}
+        onClose={() => setIsStripeModalOpen(false)}
+        productTitle={productTitle}
+        priceCents={priceCents}
+        onSuccess={handleStripeSuccess}
+      />
+
       <div className="border-b border-gray-800 pb-4">
         <span className="text-xs font-mono uppercase tracking-wider text-rail-emerald">Multi-Rail Payment Engine</span>
         <h2 className="text-xl font-bold text-white mt-1">{productTitle}</h2>
@@ -189,12 +224,11 @@ export function MultiRailCheckoutSelector({
             <div className="space-y-3">
               <div className="p-3 rounded-lg bg-gray-800/90 border border-gray-700 text-xs text-gray-300 space-y-1">
                 <div className="flex justify-between">
-                  <span>Stripe Test Card:</span>
-                  <span className="font-mono text-rail-emerald font-bold">4242 •••• •••• 4242</span>
+                  <span>Stripe Hosted Checkout:</span>
+                  <span className="font-mono text-rail-emerald font-bold">Test Mode</span>
                 </div>
-                <div className="flex justify-between text-[11px] text-gray-400">
-                  <span>CVC: 123</span>
-                  <span>Exp: 12/28</span>
+                <div className="text-[11px] text-gray-400">
+                  Click below to launch interactive Stripe payment portal with card input.
                 </div>
               </div>
               {invoiceData.status === 'PAID' ? (
@@ -204,27 +238,11 @@ export function MultiRailCheckoutSelector({
               ) : (
                 <button
                   type="button"
-                  onClick={async () => {
-                    setIsLoading(true);
-                    try {
-                      const res = await fetch(`/api/v1/checkout/orders/${invoiceData.orderId || 'ord_1001'}/ipfs-receipt`);
-                      const receiptData = await res.json();
-                      setInvoiceData({
-                        ...invoiceData,
-                        status: 'PAID',
-                        receipt: receiptData.receipt,
-                      });
-                      onPaymentSuccess?.(receiptData.receipt);
-                    } catch (err) {
-                      setInvoiceData({ ...invoiceData, status: 'PAID' });
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  className="w-full py-2.5 rounded-lg bg-gradient-to-r from-rail-emerald to-emerald-600 text-nexus-dark font-extrabold text-xs shadow-md shadow-rail-emerald/20 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                  onClick={() => setIsStripeModalOpen(true)}
+                  className="w-full py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-rail-emerald text-white font-extrabold text-xs shadow-md shadow-indigo-600/20 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span>Authorize Stripe Test Payment (${usdPrice})</span>
+                  <span>Open Stripe Checkout Modal (${usdPrice})</span>
                 </button>
               )}
             </div>
@@ -237,3 +255,4 @@ export function MultiRailCheckoutSelector({
     </div>
   );
 }
+
