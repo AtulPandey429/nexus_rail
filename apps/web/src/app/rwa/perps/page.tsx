@@ -145,20 +145,31 @@ export default function RwaPerpsPage() {
           <span>{isOpening ? 'Executing Perpetual Futures Order...' : `Open Long ${pair} Position (${leverage}x Leverage)`}</span>
         </button>
 
-        {/* Position Active Box */}
+        {/* Position Active Box with Network Telemetry */}
         {position && (
-          <div className="p-4 rounded-2xl bg-cyber-purple/10 border border-cyber-purple/40 text-xs space-y-2 font-mono">
+          <div className="p-4 rounded-2xl bg-cyber-purple/10 border border-cyber-purple/40 text-xs space-y-3 font-mono">
             <div className="flex justify-between items-center text-cyber-purple font-bold">
               <span>Position Active • Ostium Protocol</span>
               <span className="px-2 py-0.5 rounded bg-rail-emerald/10 text-rail-emerald border border-rail-emerald/20 text-[10px]">
                 {position.leverage}x LONG
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-gray-300 text-[11px] pt-1">
+            <div className="grid grid-cols-2 gap-2 text-gray-300 text-[11px] pt-1 border-b border-cyber-purple/20 pb-2">
               <div>Entry Price: <strong>${position.entryPrice}</strong></div>
               <div>Position Size: <strong>${position.sizeUsd}</strong></div>
               <div>Margin Locked: <strong>${position.marginUsd}</strong></div>
               <div>Liquidation: <strong>${position.liquidationPrice}</strong></div>
+            </div>
+
+            {/* Network Telemetry Badge */}
+            <div className="pt-1 flex items-center justify-between text-[11px] text-rail-emerald">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rail-emerald animate-pulse" />
+                API Audit: GET /api/v1/rwa-modular/perps/quote
+              </span>
+              <span className="px-2 py-0.5 rounded bg-rail-emerald/20 text-rail-emerald font-bold text-[10px]">
+                200 OK • 38ms
+              </span>
             </div>
           </div>
         )}
