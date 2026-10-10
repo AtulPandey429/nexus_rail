@@ -17,11 +17,43 @@ const adminUsersStore = [
   { id: 'usr_2', email: 'admin@nexusrail.dev', role: 'admin', createdAt: '2026-10-01T10:00:00.000Z' },
 ];
 
+const RENDER_API_URL = process.env.API_SERVER_URL || process.env.NEXT_PUBLIC_API_URL || 'https://nexusrail-api.onrender.com';
+
 async function handleApiRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
   const path = resolvedParams.path || [];
   const routePath = path.join('/');
   const method = req.method;
+
+  // Try proxying to live Render API server first
+  try {
+    const targetUrl = `${RENDER_API_URL}/api/v1/${routePath}${req.nextUrl.search}`;
+    const headers = new Headers();
+    req.headers.forEach((val, key) => {
+      if (!['host', 'connection'].includes(key.toLowerCase())) {
+        headers.set(key, val);
+      }
+    });
+
+    let bodyData: any = undefined;
+    if (['POST', 'PUT', 'PATCH'].includes(method)) {
+      bodyData = await req.text();
+    }
+
+    const renderRes = await fetch(targetUrl, {
+      method,
+      headers,
+      body: bodyData,
+      cache: 'no-store',
+    });
+
+    if (renderRes.ok) {
+      const json = await renderRes.json();
+      return NextResponse.json(json, { status: renderRes.status });
+    }
+  } catch (renderError) {
+    // If Render is sleeping or cold-starting, fall back to native Vercel serverless handling below
+  }
 
   // 1. Health Check Endpoint
   if (routePath === 'health') {
