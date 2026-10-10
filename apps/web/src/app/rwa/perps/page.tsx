@@ -15,9 +15,34 @@ export default function RwaPerpsPage() {
   const marginUsd = (parseFloat(positionSize || '0') / leverage).toFixed(2);
   const liquidationPrice = (spotPrice - (spotPrice * (0.8 / leverage))).toFixed(2);
 
-  const handleOpenPerp = () => {
+  const handleOpenPerp = async () => {
     setIsOpening(true);
-    setTimeout(() => {
+    setPosition(null);
+
+    try {
+      const res = await fetch(`/api/v1/rwa-modular/perps/quote?pair=${encodeURIComponent(pair)}&leverage=${leverage}&size=${positionSize}`);
+      const data = await res.json();
+
+      if (data.status === 'success' && data.data) {
+        setPosition({
+          pair: data.data.pair || pair,
+          leverage: data.data.leverage || leverage,
+          entryPrice: data.data.spotPrice || spotPrice,
+          sizeUsd: data.data.sizeUsd || parseFloat(positionSize),
+          marginUsd: data.data.marginUsd || parseFloat(marginUsd),
+          liquidationPrice: data.data.liquidationPrice || parseFloat(liquidationPrice),
+        });
+      } else {
+        setPosition({
+          pair,
+          leverage,
+          entryPrice: spotPrice,
+          sizeUsd: parseFloat(positionSize),
+          marginUsd: parseFloat(marginUsd),
+          liquidationPrice: parseFloat(liquidationPrice),
+        });
+      }
+    } catch (err) {
       setPosition({
         pair,
         leverage,
@@ -26,8 +51,9 @@ export default function RwaPerpsPage() {
         marginUsd: parseFloat(marginUsd),
         liquidationPrice: parseFloat(liquidationPrice),
       });
+    } finally {
       setIsOpening(false);
-    }, 1000);
+    }
   };
 
   return (
