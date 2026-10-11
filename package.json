@@ -2,6 +2,7 @@
   "name": "nexus-rail-monorepo",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "NexusRail — Flagship Multi-Rail Commerce & AI Agent Desk Monorepo",
   "workspaces": [
     "apps/*",
