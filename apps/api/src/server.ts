@@ -6,6 +6,7 @@ import { authRouter } from './routes/auth.js';
 import { walletRouter } from './routes/wallet.js';
 import { checkoutRouter } from './routes/checkout.js';
 import { cryptoRouter } from './routes/crypto.js';
+import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import type { HealthResponse } from '@nexusrail/shared';
 
 const app = express();
@@ -44,6 +45,7 @@ app.get('/', (_req: Request, res: Response) => {
 
 app.listen(env.PORT, () => {
   console.log(`🚀 [NexusRail API] Server listening on http://localhost:${env.PORT}`);
+  LedgerWatcherWorker.startWatchers();
 });
 
 export default app;
