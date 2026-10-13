@@ -2,10 +2,22 @@ import { Router, Request, Response } from 'express';
 import { StripeService } from '../services/stripe.js';
 import { XRPLService } from '../services/xrpl.js';
 import { StellarService } from '../services/stellar.js';
+import { IpfsService } from '../services/ipfs.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { z } from 'zod';
 
 export const checkoutRouter = Router();
+
+// GET /api/v1/checkout/orders/:orderId/ipfs-receipt - Fetch pinned IPFS receipt details
+checkoutRouter.get('/orders/:orderId/ipfs-receipt', async (req: Request, res: Response) => {
+  try {
+    const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+    const receipt = await IpfsService.pinOrderReceipt(orderId, { orderId, status: 'PAID', timestamp: new Date().toISOString() });
+    res.json({ success: true, receipt });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to generate IPFS receipt' });
+  }
+});
 
 const StripeSessionSchema = z.object({
   sku: z.string(),
