@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ProductService } from '../services/products.js';
+import { RedisCacheService } from '../services/redis.js';
 
 export const leaderboardRouter = Router();
 
@@ -18,16 +19,11 @@ leaderboardRouter.get('/leaderboard', async (_req: Request, res: Response) => {
 leaderboardRouter.post('/:id/upvote', async (req: Request, res: Response) => {
   try {
     const productId = req.params.id as string;
-    const products = await ProductService.getActiveProducts();
-    const product = products.find((p) => p.id === productId || p.sku === productId);
-
-    if (!product) {
-      return res.status(404).json({ success: false, error: 'Product not found' });
-    }
-
-    product.upvotes_count++;
-    res.json({ success: true, upvotes_count: product.upvotes_count });
+    const upvotes = await ProductService.incrementUpvotes(productId);
+    await RedisCacheService.invalidateCache('products:active');
+    res.json({ success: true, upvotes_count: upvotes });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Upvote failed' });
+    const message = error instanceof Error ? error.message : 'Upvote failed';
+    res.status(message === 'Product not found' ? 404 : 500).json({ success: false, error: message });
   }
 });

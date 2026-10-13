@@ -1,27 +1,73 @@
 import { Router, Request, Response } from 'express';
+import { MongoService } from '../services/mongo.js';
 
 export const showdownRouter = Router();
 
-const mockShowdowns = [
-  {
-    id: 'showdown_1',
-    title: 'XRPL Validator Node vs Stellar Soroban Contract',
-    itemA: { id: 'PROD-XRP-KIT', title: 'XRPL Hardware Kit', votes: 142 },
-    itemB: { id: 'PROD-XLM-PASS', title: 'Stellar Soroban Pass', votes: 98 },
-  },
-];
+export interface MongoShowdownDoc {
+  id: string;
+  title: string;
+  item_a_sku: string;
+  item_b_sku: string;
+  votes_a: number;
+  votes_b: number;
+}
 
-// GET /api/v1/showdowns - Fetch product showdown comparisons (Mento DNA)
-showdownRouter.get('/', (_req: Request, res: Response) => {
-  res.json({ success: true, data: mockShowdowns });
+const DEFAULT_SHOWDOWN: MongoShowdownDoc = {
+  id: 'showdown_xrp_vs_xlm',
+  title: 'Hardware Validator Node vs Smart Contract License',
+  item_a_sku: 'PROD-XRP-KIT',
+  item_b_sku: 'PROD-XLM-PASS',
+  votes_a: 42,
+  votes_b: 38,
+};
+
+async function ensureShowdownSeed() {
+  try {
+    const col = await MongoService.getCollection<MongoShowdownDoc>('showdowns');
+    const count = await col.countDocuments();
+    if (count === 0) {
+      await col.insertOne({ ...DEFAULT_SHOWDOWN } as any);
+    }
+  } catch (err: any) {
+    console.warn('⚠️ [MongoDB Showdown Seed Warning]:', err.message);
+  }
+}
+
+showdownRouter.get('/', async (_req: Request, res: Response) => {
+  try {
+    await ensureShowdownSeed();
+    const col = await MongoService.getCollection<MongoShowdownDoc>('showdowns');
+    const data = await col.find().toArray();
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
-// POST /api/v1/showdowns/:id/vote - Cast community vote
-showdownRouter.post('/:id/vote', (req: Request, res: Response) => {
-  const { choice } = req.body;
-  const showdown = mockShowdowns[0];
-  if (choice === 'A') showdown.itemA.votes++;
-  if (choice === 'B') showdown.itemB.votes++;
+showdownRouter.post('/:id/vote', async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const choice = req.body?.choice;
+  if (choice !== 'A' && choice !== 'B') {
+    return res.status(400).json({ success: false, error: 'choice must be A or B' });
+  }
 
-  res.json({ success: true, data: showdown });
+  try {
+    await ensureShowdownSeed();
+    const col = await MongoService.getCollection<MongoShowdownDoc>('showdowns');
+    const incField = choice === 'A' ? { votes_a: 1 } : { votes_b: 1 };
+    
+    const updated = await col.findOneAndUpdate(
+      { id },
+      { $inc: incField },
+      { returnDocument: 'after' }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Showdown not found' });
+    }
+
+    res.json({ success: true, data: updated });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });

@@ -29,7 +29,7 @@ productRouter.get('/', async (_req: Request, res: Response) => {
       data: products,
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to fetch products' });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Failed to fetch products' });
   }
 });
 
@@ -43,6 +43,6 @@ productRouter.get('/:sku', async (req: Request, res: Response) => {
     }
     res.json({ success: true, data: product });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to fetch product details' });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Failed to fetch product details' });
   }
 });
