@@ -1,89 +1,122 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
+import crypto from 'crypto';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { MongoService, MongoOrderDoc, OrderItem, MongoCartItemDoc } from '../services/mongo.js';
+import { ProductService } from '../services/products.js';
 
 export const ordersRouter = Router();
+ordersRouter.use(requireAuth);
 
-export interface OrderRecord {
-  id: string;
-  orderNumber: string;
-  userId: string;
-  status: 'PENDING' | 'PAID' | 'FULFILLING' | 'FULFILLED' | 'FAILED';
-  totalCents: number;
-  rail: string;
-  items: { sku: string; qty: number; unitPriceCents: number }[];
-  createdAt: string;
-  idempotencyKey?: string;
+function formatOrder(order: MongoOrderDoc) {
+  return {
+    id: order.id,
+    orderNumber: order.order_number,
+    status: order.status,
+    totalCents: order.total_cents,
+    rail: order.payment_rail,
+    txHash: order.tx_hash,
+    paymentAddress: order.payment_address,
+    paymentMemo: order.payment_memo,
+    ipfsHash: order.ipfs_cid,
+    createdAt: order.created_at,
+    items: order.items || [],
+  };
 }
 
-// In-memory orders store
-export const masterOrdersStore: OrderRecord[] = [
-  {
-    id: 'ord_1001',
-    orderNumber: 'NR-1001',
-    userId: 'demo-user-1',
-    status: 'PAID',
-    totalCents: 2400,
-    rail: 'STRIPE',
-    items: [{ sku: 'NL-NOTE-A5', qty: 1, unitPriceCents: 2400 }],
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: 'ord_1002',
-    orderNumber: 'NR-1002',
-    userId: 'demo-user-1',
-    status: 'FULFILLED',
-    totalCents: 4200,
-    rail: 'STRIPE',
-    items: [{ sku: 'NL-LAMP', qty: 1, unitPriceCents: 4200 }],
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
+// GET /api/v1/orders - Get user's order history
+ordersRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const orders = await ordersCol
+      .find({ user_id: req.user!.id })
+      .sort({ created_at: -1 })
+      .toArray();
 
-// POST /api/v1/orders
-ordersRouter.post('/', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  const idempotencyKey = req.headers['idempotency-key'] as string;
-  const { rail = 'STRIPE', items = [] } = req.body;
+    res.json({ success: true, data: { orders: orders.map(formatOrder) } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Could not load orders' });
+  }
+});
 
-  if (idempotencyKey) {
-    const existing = masterOrdersStore.find((o) => o.idempotencyKey === idempotencyKey);
-    if (existing) {
-      return res.json({ status: 'success', data: { order: existing } });
+// GET /api/v1/orders/:id - Get specific order details
+ordersRouter.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const order = await ordersCol.findOne({
+      $or: [{ id }, { order_number: id }],
+      user_id: req.user!.id,
+    });
+
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+    res.json({ success: true, data: { order: formatOrder(order) } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Could not load order' });
+  }
+});
+
+// POST /api/v1/orders - Create an order with tamper-proof pricing
+ordersRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (items.length === 0) {
+    return res.status(400).json({ success: false, error: 'Order items are required' });
+  }
+
+  try {
+    const pricedItems: OrderItem[] = [];
+
+    // Server-side price validation directly from verified MongoDB catalog
+    for (const item of items) {
+      if (!item.sku || typeof item.sku !== 'string') {
+        return res.status(400).json({ success: false, error: 'Invalid SKU in order items' });
+      }
+
+      const product = await ProductService.getProductBySku(item.sku);
+      if (!product || !product.active) {
+        return res.status(400).json({ success: false, error: `SKU ${item.sku} is not available for purchase` });
+      }
+
+      const qty = Number(item.qty);
+      if (!Number.isInteger(qty) || qty < 1) {
+        return res.status(400).json({ success: false, error: 'Quantity must be a positive integer' });
+      }
+
+      pricedItems.push({
+        sku: product.sku,
+        title: product.title,
+        qty,
+        unit_price_cents: product.price_cents,
+      });
     }
+
+    const totalCents = pricedItems.reduce((sum, item) => sum + item.unit_price_cents * item.qty, 0);
+    const orderId = crypto.randomUUID();
+    const orderNumber = `NR-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const now = new Date().toISOString();
+
+    const orderDoc: MongoOrderDoc = {
+      id: orderId,
+      user_id: req.user!.id,
+      order_number: orderNumber,
+      total_cents: totalCents,
+      items: pricedItems,
+      payment_rail: req.body?.rail || 'PENDING',
+      status: 'PENDING',
+      created_at: now,
+      updated_at: now,
+    };
+
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    await ordersCol.insertOne(orderDoc as any);
+
+    // If order was created from cart, clear user's cart
+    if (req.body?.fromCart) {
+      const cartCol = await MongoService.getCollection<MongoCartItemDoc>('cart_items');
+      await cartCol.deleteMany({ user_id: req.user!.id });
+    }
+
+    res.json({ success: true, data: { order: formatOrder(orderDoc) } });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message || 'Could not create the order' });
   }
-
-  const orderItems = items.length > 0 ? items : [{ sku: 'NL-NOTE-A5', qty: 1, unitPriceCents: 2400 }];
-  const totalCents = orderItems.reduce((acc: number, item: any) => acc + (item.unitPriceCents || 2400) * item.qty, 0);
-
-  const orderNum = `NR-${1000 + masterOrdersStore.length + 1}`;
-  const newOrder: OrderRecord = {
-    id: `ord_${Date.now()}`,
-    orderNumber: orderNum,
-    userId,
-    status: 'PENDING',
-    totalCents,
-    rail,
-    items: orderItems,
-    createdAt: new Date().toISOString(),
-    idempotencyKey,
-  };
-
-  masterOrdersStore.unshift(newOrder);
-  return res.json({ status: 'success', data: { order: newOrder } });
-});
-
-// GET /api/v1/orders
-ordersRouter.get('/', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  const userOrders = masterOrdersStore.filter((o) => o.userId === userId);
-  return res.json({ status: 'success', data: { orders: userOrders } });
-});
-
-// GET /api/v1/orders/:id
-ordersRouter.get('/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const order = masterOrdersStore.find((o) => o.id === id || o.orderNumber === id);
-  if (!order) {
-    return res.status(404).json({ error: { code: 'ORDER_NOT_FOUND', message: 'Order not found' } });
-  }
-  return res.json({ status: 'success', data: { order } });
 });

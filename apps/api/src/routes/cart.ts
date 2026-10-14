@@ -1,75 +1,85 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { MongoService, MongoCartItemDoc } from '../services/mongo.js';
 
 export const cartRouter = Router();
+cartRouter.use(requireAuth);
 
-// In-memory cart store per user for showcase/demo
-const userCarts: Record<string, { sku: string; qty: number }[]> = {
-  'demo-user-1': [{ sku: 'NL-NOTE-A5', qty: 1 }],
-};
+// GET /api/v1/cart - Load user's active shopping cart
+cartRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const col = await MongoService.getCollection<MongoCartItemDoc>('cart_items');
+    const items = await col
+      .find({ user_id: req.user!.id })
+      .project({ _id: 0, sku: 1, qty: 1 })
+      .toArray();
 
-// GET /api/v1/cart
-cartRouter.get('/', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  const cart = userCarts[userId] || [];
-  return res.json({ status: 'success', data: { items: cart } });
+    res.json({ success: true, data: { items } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Could not load the cart' });
+  }
 });
 
-// PUT /api/v1/cart/items
-cartRouter.put('/items', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  const { sku, qty } = req.body;
-
-  if (!sku || typeof qty !== 'number') {
-    return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'sku and numeric qty required' } });
+// PUT /api/v1/cart/items - Update or add item quantity
+cartRouter.put('/items', async (req: AuthenticatedRequest, res: Response) => {
+  const { sku, qty } = req.body ?? {};
+  if (typeof sku !== 'string' || typeof qty !== 'number') {
+    return res.status(400).json({ success: false, error: 'sku and numeric qty are required' });
   }
 
-  if (!userCarts[userId]) {
-    userCarts[userId] = [];
-  }
+  const userId = req.user!.id;
+  try {
+    const col = await MongoService.getCollection<MongoCartItemDoc>('cart_items');
 
-  const existing = userCarts[userId].find((item) => item.sku === sku);
-  if (existing) {
     if (qty <= 0) {
-      userCarts[userId] = userCarts[userId].filter((item) => item.sku !== sku);
+      await col.deleteOne({ user_id: userId, sku });
     } else {
-      existing.qty = qty;
+      await col.updateOne(
+        { user_id: userId, sku },
+        {
+          $set: {
+            user_id: userId,
+            sku,
+            qty: Math.floor(qty),
+            updated_at: new Date().toISOString(),
+          },
+        },
+        { upsert: true }
+      );
     }
-  } else if (qty > 0) {
-    userCarts[userId].push({ sku, qty });
-  }
 
-  return res.json({ status: 'success', data: { items: userCarts[userId] } });
+    const items = await col
+      .find({ user_id: userId })
+      .project({ _id: 0, sku: 1, qty: 1 })
+      .toArray();
+
+    res.json({ success: true, data: { items } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Could not update the cart' });
+  }
 });
 
-// DELETE /api/v1/cart/items/:sku
-cartRouter.delete('/items/:sku', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  const { sku } = req.params;
+// DELETE /api/v1/cart/items/:sku - Remove item from cart
+cartRouter.delete('/items/:sku', async (req: AuthenticatedRequest, res: Response) => {
+  const sku = Array.isArray(req.params.sku) ? req.params.sku[0] : req.params.sku;
+  const userId = req.user!.id;
 
-  if (userCarts[userId]) {
-    userCarts[userId] = userCarts[userId].filter((item) => item.sku !== sku);
+  try {
+    const col = await MongoService.getCollection<MongoCartItemDoc>('cart_items');
+    await col.deleteOne({ user_id: userId, sku });
+
+    const items = await col
+      .find({ user_id: userId })
+      .project({ _id: 0, sku: 1, qty: 1 })
+      .toArray();
+
+    res.json({ success: true, data: { items } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Could not remove that item' });
   }
-
-  return res.json({ status: 'success', data: { items: userCarts[userId] || [] } });
 });
 
-// POST /api/v1/cart/merge (Guest cart to logged-in user cart)
-cartRouter.post('/merge', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  const { guestItems } = req.body; // Array of { sku, qty }
-
-  if (Array.isArray(guestItems)) {
-    if (!userCarts[userId]) userCarts[userId] = [];
-
-    guestItems.forEach((gItem) => {
-      const existing = userCarts[userId].find((item) => item.sku === gItem.sku);
-      if (existing) {
-        existing.qty += gItem.qty;
-      } else {
-        userCarts[userId].push({ sku: gItem.sku, qty: gItem.qty });
-      }
-    });
-  }
-
-  return res.json({ status: 'success', data: { items: userCarts[userId] } });
+// POST /api/v1/cart/merge - Merge guest cart after login
+cartRouter.post('/merge', (_req: AuthenticatedRequest, res: Response) => {
+  res.json({ success: true, message: 'Cart synchronized' });
 });

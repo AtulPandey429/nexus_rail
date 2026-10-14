@@ -1,22 +1,26 @@
-import crypto from 'crypto';
-
-export interface IpfsReceiptResult {
-  orderId: string;
-  ipfsCid: string;
-  gatewayUrl: string;
-  pinnedAt: string;
-}
+import { requiredEnv } from '../config/env.js';
 
 export class IpfsService {
-  static async pinOrderReceipt(orderId: string, orderData: Record<string, any>): Promise<IpfsReceiptResult> {
-    // Generate deterministic mock IPFS CID v1 (bafybeic...)
-    const mockHash = crypto.createHash('sha256').update(JSON.stringify(orderData)).digest('hex').substring(0, 32);
-    const ipfsCid = `bafybeic${mockHash}nexusrail`;
-    
+  static async pinOrderReceipt(orderId: string, orderData: Record<string, unknown>) {
+    const res = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${requiredEnv('PINATA_JWT')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        pinataContent: { orderId, ...orderData },
+        pinataMetadata: { name: `nexusrail-order-${orderId}` },
+      }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.IpfsHash) {
+      throw new Error(payload?.error?.details || payload?.error || `Pinata returned ${res.status}`);
+    }
     return {
       orderId,
-      ipfsCid,
-      gatewayUrl: `https://gateway.pinata.cloud/ipfs/${ipfsCid}`,
+      ipfsCid: payload.IpfsHash as string,
+      gatewayUrl: `https://gateway.pinata.cloud/ipfs/${payload.IpfsHash}`,
       pinnedAt: new Date().toISOString(),
     };
   }
