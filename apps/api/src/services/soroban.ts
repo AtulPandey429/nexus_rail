@@ -1,23 +1,13 @@
-export interface SorobanContractExecutionStatus {
-  txHash: string;
-  contractId: string;
-  status: 'PENDING' | 'SUCCESS' | 'FAILED';
-  ledgerSeq: number;
-  events: string[];
-}
+import { StellarService } from './stellar.js';
 
 export class SorobanService {
-  static async getContractExecutionStatus(txHash: string): Promise<SorobanContractExecutionStatus> {
+  static async getContractExecutionStatus(txHash: string) {
+    const tx = await StellarService.getTransaction(txHash);
     return {
-      txHash,
-      contractId: 'C1234567890SOROBANCONTRACTTESTNETDEMO',
-      status: 'SUCCESS',
-      ledgerSeq: 1849204,
-      events: [
-        'ContractExecuted: PaymentSettlementContract',
-        'StateUpdated: LedgerBalanceUpdated',
-        'ReceiptPinned: IPFSReceiptGenerated',
-      ],
+      txHash: tx.txHash,
+      status: tx.successful ? 'SUCCESS' : 'FAILED',
+      ledgerSeq: tx.ledger,
+      sourceAccount: tx.source,
     };
   }
 }

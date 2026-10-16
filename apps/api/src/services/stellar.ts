@@ -1,27 +1,31 @@
-import crypto from 'crypto';
+import { Horizon } from '@stellar/stellar-sdk';
+import { requiredEnv } from '../config/env.js';
 
-export interface StellarInvoiceResult {
-  orderId: string;
-  stellarAddress: string;
-  memoText: string;
-  amountXlm: number;
-  expiresAt: string;
+function server() {
+  return new Horizon.Server(requiredEnv('HORIZON_URL'));
 }
 
 export class StellarService {
-  // Official Stellar Horizon Testnet merchant account address
-  private static readonly STELLAR_MERCHANT_ADDRESS = 'GBXGQJWVLWOYHFLVTKWV5FGHA3LNYY2JQ2PF6Z4Z3O3X5PZ4';
-
-  static async createPaymentInvoice(orderId: string, amountXlm: number): Promise<StellarInvoiceResult> {
-    // Generate unique 28-char alphanumeric Memo text mapping
-    const memoText = `NR-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
-
+  static async createPaymentInvoice(orderId: string, amountXlm: number) {
+    const address = requiredEnv('STELLAR_MERCHANT_PUBLIC_KEY');
+    const account = await server().loadAccount(address);
     return {
       orderId,
-      stellarAddress: this.STELLAR_MERCHANT_ADDRESS,
-      memoText,
+      stellarAddress: account.accountId(),
+      sequence: account.sequenceNumber(),
       amountXlm,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      memoText: orderId.replace(/-/g, '').slice(0, 28),
+      network: requiredEnv('HORIZON_URL'),
+    };
+  }
+
+  static async getTransaction(txHash: string) {
+    const tx = await server().transactions().transaction(txHash).call();
+    return {
+      txHash: tx.hash,
+      successful: tx.successful,
+      ledger: tx.ledger_attr,
+      source: tx.source_account,
     };
   }
 }

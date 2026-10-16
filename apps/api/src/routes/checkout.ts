@@ -1,102 +1,152 @@
-import { Router, Request, Response } from 'express';
-import { StripeService } from '../services/stripe.js';
-import { XRPLService } from '../services/xrpl.js';
-import { StellarService } from '../services/stellar.js';
-import { IpfsService } from '../services/ipfs.js';
+import { Router, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
-import { z } from 'zod';
+import { StripeService } from '../services/stripe.js';
+import { IpfsService } from '../services/ipfs.js';
+import { MongoService, MongoOrderDoc } from '../services/mongo.js';
+import { chainRegistry } from '../services/crypto/index.js';
 
 export const checkoutRouter = Router();
 
-// GET /api/v1/checkout/orders/:orderId/ipfs-receipt - Fetch pinned IPFS receipt details
-checkoutRouter.get('/orders/:orderId/ipfs-receipt', async (req: Request, res: Response) => {
-  try {
-    const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
-    const receipt = await IpfsService.pinOrderReceipt(orderId, { orderId, status: 'PAID', timestamp: new Date().toISOString() });
-    res.json({ success: true, receipt });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to generate IPFS receipt' });
-  }
-});
-
-const StripeSessionSchema = z.object({
-  sku: z.string(),
-  quantity: z.number().int().positive().default(1),
-});
-
-const XRPLInvoiceSchema = z.object({
-  orderId: z.string(),
-  amountXrp: z.number().positive(),
-});
-
-const StellarInvoiceSchema = z.object({
-  orderId: z.string(),
-  amountXlm: z.number().positive(),
-});
-
-// POST /api/v1/checkout/stellar/create-invoice - Generate Stellar Horizon payment invoice with Memo text
-checkoutRouter.post('/stellar/create-invoice', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const parseResult = StellarInvoiceSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({ success: false, error: 'Invalid Stellar invoice parameters' });
-    }
-
-    const { orderId, amountXlm } = parseResult.data;
-    const invoice = await StellarService.createPaymentInvoice(orderId, amountXlm);
-
-    res.json({ success: true, invoice });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message || 'Stellar invoice generation failed' });
-  }
-});
-
-// POST /api/v1/checkout/xrpl/create-invoice - Generate XRPL payment invoice with Destination Tag
-checkoutRouter.post('/xrpl/create-invoice', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const parseResult = XRPLInvoiceSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({ success: false, error: 'Invalid XRPL invoice parameters' });
-    }
-
-    const { orderId, amountXrp } = parseResult.data;
-    const invoice = await XRPLService.createPaymentInvoice(orderId, amountXrp);
-
-    res.json({ success: true, invoice });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message || 'XRPL invoice generation failed' });
-  }
-});
-
-// POST /api/v1/checkout/stripe/create-session - Create Stripe Test Checkout Session
+// POST /api/v1/checkout/stripe/create-session
 checkoutRouter.post('/stripe/create-session', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const parseResult = StripeSessionSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({ success: false, error: 'Invalid checkout parameters' });
-    }
-
-    const { sku, quantity } = parseResult.data;
-    const userId = req.user!.id;
-    const result = await StripeService.createCheckoutSession(userId, sku, quantity);
-
-    res.json({ success: true, data: result });
+    const session = await StripeService.createCheckoutFromCart(req.user!.id);
+    res.json({ success: true, data: session });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message || 'Stripe session creation failed' });
+    res.status(400).json({ success: false, error: error.message || 'Stripe checkout failed' });
   }
 });
 
-// POST /api/v1/webhooks/stripe - Stripe Raw Webhook Listener
-checkoutRouter.post('/webhooks/stripe', (req: Request, res: Response) => {
-  const signature = (req.headers['stripe-signature'] as string) || 'mock_sig';
-  const rawBody = JSON.stringify(req.body);
+// Dynamic Multi-Chain Invoice Creation: POST /api/v1/checkout/:chain/create-invoice
+checkoutRouter.post('/:chain/create-invoice', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const chain = String(req.params.chain || '').toLowerCase();
+  const orderId = String(req.body?.orderId || '');
 
-  const isValid = StripeService.verifyWebhookSignature(rawBody, signature);
-  if (!isValid) {
-    return res.status(400).json({ success: false, error: 'Invalid webhook signature' });
+  if (!orderId) {
+    return res.status(400).json({ success: false, error: 'orderId is required' });
   }
 
-  // Handle checkout.session.completed event
-  console.log('✅ [Stripe Webhook] Order payment verified successfully');
-  res.json({ received: true, status: 'PAID' });
+  try {
+    const provider = chainRegistry.getRequiredProvider(chain);
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const order = await ordersCol.findOne({
+      $or: [{ id: orderId }, { order_number: orderId }],
+      user_id: req.user!.id,
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    const invoice = await provider.createInvoice(order.id, order.total_cents);
+    const invoiceResponse = {
+      ...invoice,
+      destination: invoice.recipientAddress,
+      destinationTag: invoice.paymentIdentifierType === 'destination_tag' ? Number(invoice.paymentIdentifier) : undefined,
+      memo: invoice.paymentIdentifierType === 'memo_text' ? String(invoice.paymentIdentifier) : undefined,
+      memoType: invoice.paymentIdentifierType === 'memo_text' ? 'text' : undefined,
+      amount: String(invoice.amountAsset),
+      amountXrp: provider.assetSymbol === 'XRP' ? invoice.amountAsset : undefined,
+      amountXlm: provider.assetSymbol === 'XLM' ? String(invoice.amountAsset) : undefined,
+    };
+
+    // Save payment details on order
+    await ordersCol.updateOne(
+      { id: order.id },
+      {
+        $set: {
+          payment_rail: provider.assetSymbol,
+          payment_address: invoice.recipientAddress,
+          payment_memo: String(invoice.paymentIdentifier),
+          updated_at: new Date().toISOString(),
+        },
+      }
+    );
+
+    res.json({ success: true, invoice: invoiceResponse });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: error.message || `${chain.toUpperCase()} invoice failed` });
+  }
+});
+
+// Dynamic Multi-Chain Payment Verification: POST /api/v1/checkout/:chain/verify-payment
+checkoutRouter.post('/:chain/verify-payment', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const chain = String(req.params.chain || '').toLowerCase();
+  const orderId = String(req.body?.orderId || '');
+  const txHash = String(req.body?.txHash || '');
+
+  if (!orderId || !txHash) {
+    return res.status(400).json({ success: false, error: 'orderId and txHash are required' });
+  }
+
+  try {
+    const provider = chainRegistry.getRequiredProvider(chain);
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const order = await ordersCol.findOne({
+      $or: [{ id: orderId }, { order_number: orderId }],
+      user_id: req.user!.id,
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    const verification = await provider.verifyPayment(order.id, txHash);
+
+    if (verification.verified) {
+      await ordersCol.updateOne(
+        { id: order.id },
+        {
+          $set: {
+            status: 'PAID',
+            tx_hash: txHash,
+            payment_rail: provider.assetSymbol,
+            updated_at: new Date().toISOString(),
+          },
+        }
+      );
+    }
+
+    res.json({
+      success: verification.verified,
+      data: verification,
+      orderStatus: verification.verified ? 'PAID' : order.status,
+    });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: error.message || 'Payment verification failed' });
+  }
+});
+
+// GET /api/v1/checkout/orders/:orderId/ipfs-receipt
+checkoutRouter.get('/orders/:orderId/ipfs-receipt', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  try {
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const order = await ordersCol.findOne({
+      $or: [{ id: orderId }, { order_number: orderId }],
+      user_id: req.user!.id,
+    });
+
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+
+    if (order.ipfs_cid) {
+      return res.json({
+        success: true,
+        receipt: { orderId: order.id, ipfsHash: order.ipfs_cid, gatewayUrl: `https://gateway.pinata.cloud/ipfs/${order.ipfs_cid}` },
+      });
+    }
+
+    const receipt = await IpfsService.pinOrderReceipt(order.id, {
+      orderNumber: order.order_number,
+      status: order.status,
+      totalCents: order.total_cents,
+      rail: order.payment_rail,
+      txHash: order.tx_hash,
+    });
+
+    await ordersCol.updateOne({ id: order.id }, { $set: { ipfs_cid: receipt.ipfsCid } });
+    res.json({ success: true, receipt: { orderId: order.id, ipfsHash: receipt.ipfsCid, gatewayUrl: receipt.gatewayUrl } });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: error.message || 'Could not pin receipt' });
+  }
 });
