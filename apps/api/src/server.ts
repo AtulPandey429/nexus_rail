@@ -19,7 +19,7 @@ import { cartRouter } from './routes/cart.js';
 import { ordersRouter } from './routes/orders.js';
 import { guideRouter } from './routes/guide.js';
 import { adminRouter } from './routes/admin.js';
-import { webhooksRouter } from './routes/webhooks.js';
+import { stripeWebhookHandler, webhooksRouter } from './routes/webhooks.js';
 import { rwaGoldRouter } from './routes/rwaGold.js';
 import { rwaModularRouter } from './routes/rwa/rwaModularRouter.js';
 import type { HealthResponse } from '@nexusrail/shared';
@@ -28,6 +28,7 @@ const app = express();
 const startTime = Date.now();
 
 app.use(cors({ origin: true, credentials: true }));
+app.post('/api/v1/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use(express.json());
 
 // Routes

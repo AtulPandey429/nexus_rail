@@ -1,57 +1,66 @@
 import crypto from 'crypto';
-
-export interface ActionProposal {
-  proposalId: string;
-  userId: string;
-  action: 'PURCHASE_ORDER' | 'DEPOSIT_FUNDS';
-  payload: Record<string, any>;
-  status: 'PROPOSED' | 'CONFIRMED' | 'EXPIRED';
-  expiresAt: number;
-}
-
-const proposalStore = new Map<string, ActionProposal>();
+import { MongoService, MongoProposalDoc } from '../services/mongo.js';
 
 export class ProposalLockManager {
-  static createProposal(userId: string, action: 'PURCHASE_ORDER' | 'DEPOSIT_FUNDS', payload: Record<string, any>, ttlSeconds: number = 300): ActionProposal {
-    const proposalId = `prop_${crypto.randomBytes(6).toString('hex')}`;
-    const proposal: ActionProposal = {
-      proposalId,
-      userId,
+  static async createProposal(
+    userId: string,
+    action: 'PURCHASE_ORDER' | 'DEPOSIT_FUNDS',
+    payload: Record<string, unknown>
+  ) {
+    const proposalId = `prop_${crypto.randomBytes(8).toString('hex')}`;
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes TTL
+    const now = new Date().toISOString();
+
+    const proposalDoc: MongoProposalDoc = {
+      id: proposalId,
+      user_id: userId,
       action,
       payload,
       status: 'PROPOSED',
-      expiresAt: Date.now() + ttlSeconds * 1000,
+      expiresAt,
+      created_at: now,
     };
 
-    proposalStore.set(proposalId, proposal);
-    return proposal;
+    const col = await MongoService.getCollection<MongoProposalDoc>('proposals');
+    await col.insertOne(proposalDoc as any);
+
+    return {
+      proposalId: proposalDoc.id,
+      userId: proposalDoc.user_id,
+      action: proposalDoc.action,
+      payload: proposalDoc.payload,
+      status: proposalDoc.status,
+      expiresAt: proposalDoc.expiresAt.toISOString(),
+    };
   }
 
-  static getProposal(proposalId: string): ActionProposal | null {
-    const proposal = proposalStore.get(proposalId);
-    if (!proposal) return null;
-    if (proposal.expiresAt < Date.now()) {
-      proposal.status = 'EXPIRED';
-      proposalStore.delete(proposalId);
-      return null;
-    }
-    return proposal;
-  }
+  static async consumeProposal(proposalId: string, userId: string) {
+    const col = await MongoService.getCollection<MongoProposalDoc>('proposals');
 
-  static consumeProposal(proposalId: string, userId: string): ActionProposal {
-    const proposal = this.getProposal(proposalId);
-    if (!proposal) {
-      throw new Error('Proposal lock not found or expired');
-    }
-    if (proposal.userId !== userId) {
-      throw new Error('Unauthorized proposal lock ownership');
-    }
-    if (proposal.status !== 'PROPOSED') {
-      throw new Error(`Proposal already consumed or invalid state (${proposal.status})`);
+    // Atomically find, validate expiry, and update status
+    const updated = await col.findOneAndUpdate(
+      {
+        id: proposalId,
+        user_id: userId,
+        status: 'PROPOSED',
+        expiresAt: { $gt: new Date() },
+      },
+      {
+        $set: { status: 'CONFIRMED' },
+      },
+      { returnDocument: 'before' }
+    );
+
+    if (!updated) {
+      // Check if it existed but was expired or already used
+      const existing = await col.findOne({ id: proposalId });
+      if (!existing) throw new Error('Proposal was not found');
+      if (existing.user_id !== userId) throw new Error('This proposal belongs to another account');
+      if (existing.status !== 'PROPOSED') throw new Error('Proposal was already used');
+      if (existing.expiresAt.getTime() <= Date.now()) throw new Error('Proposal expired');
+      throw new Error('Proposal could not be consumed');
     }
 
-    proposal.status = 'CONFIRMED';
-    proposalStore.delete(proposalId); // Atomic single-use consumption
-    return proposal;
+    return updated;
   }
 }

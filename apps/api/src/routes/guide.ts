@@ -1,77 +1,67 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { db, dbError } from '../db/supabase.js';
+import { ProductService } from '../services/products.js';
+import { AIRouterService } from '../services/ai/aiRouter.js';
 
 export const guideRouter = Router();
+guideRouter.use(requireAuth);
 
-const threadMessages: Record<string, { role: 'user' | 'assistant'; body: string; suggestedSkus?: string[]; createdAt: string }[]> = {
-  'demo-user-1': [
-    {
-      role: 'assistant',
-      body: 'Hello! I am your NexusRail Catalog Guide. Ask me anything about our desk kit products!',
-      createdAt: new Date(Date.now() - 100000).toISOString(),
+guideRouter.get('/messages', async (req: AuthenticatedRequest, res: Response) => {
+  const { data, error } = await db()
+    .from('guide_messages')
+    .select('role, body, suggested_skus')
+    .eq('user_id', req.user!.id)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({
+    success: true,
+    data: {
+      messages: (data ?? []).map((row) => ({ role: row.role, body: row.body, suggestedSkus: row.suggested_skus ?? [] })),
     },
-  ],
-};
-
-// GET /api/v1/guide/messages
-guideRouter.get('/messages', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  return res.json({ status: 'success', data: { messages: threadMessages[userId] || [] } });
+  });
 });
 
-// POST /api/v1/guide/messages (Read-only model suggestions, strict SKU filtering)
-guideRouter.post('/messages', (req: Request, res: Response) => {
-  const userId = (req.headers['x-user-id'] as string) || 'demo-user-1';
-  const { message } = req.body;
-
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'message string is required' } });
+guideRouter.post('/messages', async (req: AuthenticatedRequest, res: Response) => {
+  const message = req.body?.message;
+  if (typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ success: false, error: 'message is required' });
   }
-
-  if (!threadMessages[userId]) {
-    threadMessages[userId] = [];
+  try {
+    const products = await ProductService.getActiveProducts();
+    const catalog = products.map((product) => `${product.sku}: ${product.title} ($${(product.price_cents / 100).toFixed(2)})`).join('\n');
+    const savedUser = await db().from('guide_messages').insert({ user_id: req.user!.id, role: 'user', body: message, suggested_skus: [] });
+    if (savedUser.error) throw dbError(savedUser.error, 'Could not save the question');
+    const ai = await AIRouterService.chatCompletion([
+      {
+        role: 'system',
+        content: `You recommend products from this catalog only. Mention SKUs exactly when you recommend them.\n${catalog || 'The catalog is empty.'}`,
+      },
+      { role: 'user', content: message },
+    ]);
+    const suggestedSkus = products.map((product) => product.sku).filter((sku) => ai.reply.includes(sku));
+    const savedAssistant = await db().from('guide_messages').insert({
+      user_id: req.user!.id,
+      role: 'assistant',
+      body: ai.reply,
+      suggested_skus: suggestedSkus,
+    });
+    if (savedAssistant.error) throw dbError(savedAssistant.error, 'Could not save the reply');
+    const thread = await db()
+      .from('guide_messages')
+      .select('role, body, suggested_skus')
+      .eq('user_id', req.user!.id)
+      .order('created_at', { ascending: true });
+    if (thread.error) throw dbError(thread.error, 'Could not load the thread');
+    res.json({
+      success: true,
+      data: {
+        reply: ai.reply,
+        suggestedSkus,
+        messages: (thread.data ?? []).map((row) => ({ role: row.role, body: row.body, suggestedSkus: row.suggested_skus ?? [] })),
+      },
+    });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'The catalog guide failed' });
   }
-
-  // Record User Message
-  threadMessages[userId].push({
-    role: 'user',
-    body: message,
-    createdAt: new Date().toISOString(),
-  });
-
-  // Generate Catalog Guide Response (Read-Only)
-  let reply = 'I recommend exploring our flagship desk kits in the catalog.';
-  let suggestedSkus: string[] = [];
-
-  const lower = message.toLowerCase();
-  if (lower.includes('notebook') || lower.includes('paper') || lower.includes('note') || lower.includes('25') || lower.includes('30')) {
-    reply = 'The Nexus A5 Hardcover Notebook Set is $24.00 USD. It features premium 120gsm paper and a lay-flat binding, making it ideal for daily journaling and planning.';
-    suggestedSkus = ['NL-NOTE-A5'];
-  } else if (lower.includes('pen') || lower.includes('write')) {
-    reply = 'The Nexus Precision Gel Pen Set is $18.00 USD. It includes 3 ultra-smooth 0.5mm matte black pens.';
-    suggestedSkus = ['NL-PEN-SET'];
-  } else if (lower.includes('lamp') || lower.includes('light')) {
-    reply = 'The Nexus Minimalist LED Desk Lamp is $42.00 USD. It offers touch-dimmable warm LED lighting with USB-C power.';
-    suggestedSkus = ['NL-LAMP'];
-  } else {
-    reply = 'We have three featured desk kits: the A5 Notebook Set ($24), Gel Pen Set ($18), and Minimalist LED Desk Lamp ($42). Which one fits your setup?';
-    suggestedSkus = ['NL-NOTE-A5', 'NL-PEN-SET', 'NL-LAMP'];
-  }
-
-  const assistantMsg = {
-    role: 'assistant' as const,
-    body: reply,
-    suggestedSkus,
-    createdAt: new Date().toISOString(),
-  };
-
-  threadMessages[userId].push(assistantMsg);
-
-  return res.json({
-    status: 'success',
-    data: {
-      reply,
-      suggestedSkus,
-      messages: threadMessages[userId],
-    },
-  });
 });
