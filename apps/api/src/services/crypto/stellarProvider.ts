@@ -1,4 +1,4 @@
-import { Horizon, StrKey } from '@stellar/stellar-sdk';
+import { Horizon, StrKey, TransactionBuilder, Operation, Asset, Memo, Networks } from '@stellar/stellar-sdk';
 import crypto from 'crypto';
 import type { IChainProvider, ChainInvoice, ChainVerificationResult, ChainNetwork } from '@nexusrail/shared';
 import { env } from '../../config/env.js';
@@ -76,12 +76,69 @@ export class StellarTestnetProvider implements IChainProvider {
     };
   }
 
+  /**
+   * Pre-builds a valid, standard unsigned Stellar payment XDR transaction
+   * for client wallet signing (Freighter, Albedo, etc.)
+   */
+  async buildPaymentXdr(sourcePublicKey: string, amountXlm: number, memoText: string): Promise<string> {
+    if (!StrKey.isValidEd25519PublicKey(sourcePublicKey)) {
+      throw new Error('Invalid Stellar source public key');
+    }
+
+    const sourceAccount = await this.horizonServer.loadAccount(sourcePublicKey);
+    const recipient = this.getMerchantAddress();
+
+    const tx = new TransactionBuilder(sourceAccount, {
+      fee: '100', // standard 100 stroops
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: recipient,
+          asset: Asset.native(),
+          amount: amountXlm.toFixed(7),
+        })
+      )
+      .addMemo(Memo.text(memoText.slice(0, 28)))
+      .setTimeout(300) // 5-minute timeout window
+      .build();
+
+    return tx.toXDR();
+  }
+
+  /**
+   * Submits a client-signed XDR envelope to the Stellar Horizon Testnet
+   */
+  async submitSignedXdr(signedXdr: string): Promise<{ txHash: string; ledger: number; successful: boolean }> {
+    try {
+      const tx = TransactionBuilder.fromXDR(signedXdr, Networks.TESTNET);
+      const res: any = await this.horizonServer.submitTransaction(tx);
+      return {
+        txHash: res.hash,
+        ledger: res.ledger,
+        successful: Boolean(res.successful),
+      };
+    } catch (err: any) {
+      const resultCodes = err?.response?.data?.extras?.result_codes;
+      const detail = resultCodes ? JSON.stringify(resultCodes) : err.message;
+      throw new Error(`Stellar Horizon transaction submission rejected: ${detail}`);
+    }
+  }
+
+  /**
+   * Authoritative Payment Verification on Stellar Horizon:
+   * Inspects operations to verify payment recipient, exact delivered amount,
+   * native asset type, and matching HMAC memo.
+   */
   async verifyPayment(orderId: string, txHash: string, expectedAmountAsset?: number): Promise<ChainVerificationResult> {
     try {
       const tx = await this.horizonServer.transactions().transaction(txHash).call();
       
-      const expectedMemo = orderId.replace(/-/g, '').slice(0, 28);
-      const memoMatches = tx.memo ? tx.memo.toLowerCase() === expectedMemo.toLowerCase() : true;
+      const memoHash = crypto.createHmac('sha256', 'nexus_rail_settlement_v1_memo').update(orderId).digest('hex');
+      const expectedMemo = (`NR${memoHash}`).slice(0, 28).toUpperCase();
+      
+      // Memo verification: Must be present and match exactly
+      const memoMatches = Boolean(tx.memo && tx.memo.toUpperCase() === expectedMemo);
 
       if (!tx.successful) {
         return {
@@ -93,12 +150,57 @@ export class StellarTestnetProvider implements IChainProvider {
         };
       }
 
+      if (!memoMatches) {
+        return {
+          verified: false,
+          txHash,
+          assetSymbol: this.assetSymbol,
+          network: this.network,
+          error: 'Transaction memo does not match order payment specification',
+        };
+      }
+
+      // Authoritative Operation Inspection: Verify destination and delivered amount
+      const ops = await tx.operations();
+      const merchantVault = this.getMerchantAddress();
+
+      const paymentOp = ops.records.find((op: any) => 
+        op.type === 'payment' &&
+        op.to === merchantVault &&
+        op.asset_type === 'native'
+      );
+
+      if (!paymentOp) {
+        return {
+          verified: false,
+          txHash,
+          assetSymbol: this.assetSymbol,
+          network: this.network,
+          error: 'No payment operation to merchant vault found in transaction',
+        };
+      }
+
+      const delivered = parseFloat((paymentOp as any).amount || '0');
+      const amountMatches = expectedAmountAsset
+        ? delivered >= expectedAmountAsset * 0.999 // 0.1% tolerance
+        : delivered > 0;
+
+      if (!amountMatches) {
+        return {
+          verified: false,
+          txHash,
+          assetSymbol: this.assetSymbol,
+          network: this.network,
+          error: `Delivered amount (${delivered} XLM) is less than invoice requirement (${expectedAmountAsset} XLM)`,
+        };
+      }
+
       return {
-        verified: tx.successful && memoMatches,
+        verified: true,
         txHash: tx.hash,
         sourceAddress: tx.source_account,
-        destinationAddress: this.getMerchantAddress(),
-        amountDelivered: expectedAmountAsset || 0,
+        destinationAddress: merchantVault,
+        amountDelivered: delivered,
         assetSymbol: this.assetSymbol,
         ledgerIndex: tx.ledger_attr,
         timestamp: tx.created_at,
@@ -110,7 +212,7 @@ export class StellarTestnetProvider implements IChainProvider {
         txHash,
         assetSymbol: this.assetSymbol,
         network: this.network,
-        error: `Stellar Horizon lookup failed: ${err.message}`,
+        error: `Stellar Horizon verification failed: ${err.message}`,
       };
     }
   }

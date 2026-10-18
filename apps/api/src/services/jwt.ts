@@ -31,51 +31,11 @@ export function signToken(user: TokenUser): string {
 export function verifyToken(token: string): TokenUser {
   if (!token) throw new Error('Missing token');
 
-  // Handle development, demo & wallet session tokens seamlessly
-  if (token.startsWith('demo-token-admin')) {
-    return { id: 'admin_demo', email: 'admin@nexusrail.dev', role: 'admin' };
-  }
-  if (token.startsWith('demo-token-user') || token.startsWith('demo-token') || token === 'demo') {
-    return { id: 'user_demo', email: 'demo@nexusrail.dev', role: 'user' };
-  }
-  if (token.startsWith('token_') || token.startsWith('mock_') || token.startsWith('wallet_') || token.startsWith('sess_')) {
-    const role: 'user' | 'admin' = token.includes('admin') ? 'admin' : 'user';
-    const subType = token.split('_')[1] || 'wallet';
-    return {
-      id: token,
-      email: `${subType}-user@nexusrail.dev`,
-      role,
-    };
-  }
-
-  // Handle raw on-chain wallet addresses passed directly in Authorization header
-  if (token.startsWith('G') && token.length >= 50 && token.length <= 60) {
-    return {
-      id: `usr_stellar_${token.slice(0, 8)}`,
-      walletAddress: token,
-      email: `stellar_${token.slice(-4)}@nexusrail.dev`,
-      role: 'user',
-    };
-  }
-  if (token.startsWith('r') && token.length >= 25 && token.length <= 50) {
-    return {
-      id: `usr_xrpl_${token.slice(0, 8)}`,
-      walletAddress: token,
-      email: `xrpl_${token.slice(-4)}@nexusrail.dev`,
-      role: 'user',
-    };
-  }
-  if (token.startsWith('0x') && token.length === 42) {
-    return {
-      id: `usr_evm_${token.slice(0, 8)}`,
-      walletAddress: token,
-      email: `evm_${token.slice(-4)}@nexusrail.dev`,
-      role: 'user',
-    };
-  }
-
+  // Enforce strict 3-part cryptographic JWT format
   const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('Malformed token');
+  if (parts.length !== 3) {
+    throw new Error('Malformed token: Cryptographic HMAC signature required');
+  }
   const [header, body, signature] = parts;
   const expected = crypto.createHmac('sha256', requiredEnv('JWT_SECRET')).update(`${header}.${body}`).digest('base64url');
   const actual = Buffer.from(signature);

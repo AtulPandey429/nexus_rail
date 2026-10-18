@@ -3,7 +3,7 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { StripeService } from '../services/stripe.js';
 import { IpfsService } from '../services/ipfs.js';
 import { MongoService, MongoOrderDoc } from '../services/mongo.js';
-import { chainRegistry } from '../services/crypto/index.js';
+import { chainRegistry, stellarProvider } from '../services/crypto/index.js';
 
 export const checkoutRouter = Router();
 
@@ -67,6 +67,59 @@ checkoutRouter.post('/:chain/create-invoice', requireAuth, async (req: Authentic
     res.json({ success: true, invoice: invoiceResponse });
   } catch (error: any) {
     res.status(502).json({ success: false, error: error.message || `${chain.toUpperCase()} invoice failed` });
+  }
+});
+
+// Build unsigned Stellar payment XDR for Freighter: POST /api/v1/checkout/stellar/prepare-xdr
+checkoutRouter.post('/stellar/prepare-xdr', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { orderId, sourcePublicKey } = req.body || {};
+  if (!orderId || !sourcePublicKey) {
+    return res.status(400).json({ success: false, error: 'orderId and sourcePublicKey are required' });
+  }
+
+  try {
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const order = await ordersCol.findOne({
+      $or: [{ id: orderId }, { order_number: orderId }],
+      user_id: req.user!.id,
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    const invoice = await stellarProvider.createInvoice(order.id, order.total_cents);
+    const xdr = await stellarProvider.buildPaymentXdr(
+      sourcePublicKey,
+      invoice.amountAsset,
+      String(invoice.paymentIdentifier)
+    );
+
+    res.json({
+      success: true,
+      xdr,
+      destination: invoice.recipientAddress,
+      amountXlm: invoice.amountAsset,
+      memo: invoice.paymentIdentifier,
+      networkPassphrase: 'Test SDF Network ; September 2015',
+    });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: error.message || 'Failed to prepare Stellar XDR' });
+  }
+});
+
+// Submit client-signed XDR to Horizon: POST /api/v1/checkout/stellar/submit-xdr
+checkoutRouter.post('/stellar/submit-xdr', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  const { signedXdr } = _req.body || {};
+  if (!signedXdr) {
+    return res.status(400).json({ success: false, error: 'signedXdr is required' });
+  }
+
+  try {
+    const result = await stellarProvider.submitSignedXdr(signedXdr);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: error.message || 'Horizon submission rejected' });
   }
 });
 

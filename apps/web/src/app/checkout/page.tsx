@@ -30,6 +30,7 @@ import {
   payWithGemWallet,
 } from '@/lib/wallets';
 import { WalletConnectModal } from '@/components/WalletConnectModal';
+import { TransactionSafetyCenter } from '@/components/TransactionSafetyCenter';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -58,6 +59,7 @@ function CheckoutContent() {
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(58);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [showSafetyCenter, setShowSafetyCenter] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
 
   // Real extension detection
@@ -148,16 +150,17 @@ function CheckoutContent() {
         // Real Freighter testnet signing
         const res = await payWithFreighter({
           amount: activeTotalCrypto,
-          destination: 'GD6P7TESTNETNEXUSRAILRECEPTACLE0000000000000000000000000000',
-          memo: `Order ${orderId}`,
+          destination: 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
+          memo: `NR-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`,
+          orderId,
         });
         txHash = res.txHash || `8fa2${Math.random().toString(16).slice(2, 8)}c91d`;
       } else if (selectedRail === 'XRPL' && hasGemWallet) {
         // Real GemWallet testnet signing
         const res = await payWithGemWallet({
           amountXrp: activeTotalCrypto,
-          destination: 'rNexusRailTestnetDestinationAddress111111',
-          destinationTag: 1048,
+          destination: 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW',
+          destinationTag: 104857,
         });
         txHash = res.txHash || `xrpl_${Math.random().toString(16).slice(2, 10)}`;
       } else {
@@ -448,7 +451,7 @@ function CheckoutContent() {
               {/* Confirm & Pay CTA */}
               <button
                 type="button"
-                onClick={handleConfirmAndPay}
+                onClick={() => setShowSafetyCenter(true)}
                 disabled={isProcessing}
                 className="w-full py-4 rounded-lg bg-[#7FF8C6] hover:bg-[#6EE7B7] text-[#052E20] font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[#7FF8C6]/10 active:scale-[0.99] disabled:opacity-50 mt-2"
               >
@@ -456,7 +459,7 @@ function CheckoutContent() {
                   <span>Signing transaction on {selectedRail}...</span>
                 ) : (
                   <>
-                    <span>Confirm & pay {activeTotalCrypto} {activeToken}</span>
+                    <span>Review & Authorize {activeTotalCrypto} {activeToken}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -558,6 +561,32 @@ function CheckoutContent() {
         </div>
 
       </main>
+
+      {/* Phase 3: Transaction Safety Center Pre-Flight Modal */}
+      {showSafetyCenter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-xl">
+            <TransactionSafetyCenter
+              chain={selectedRail === 'STELLAR' ? 'stellar' : 'xrpl'}
+              networkName={selectedRail === 'STELLAR' ? 'STELLAR TESTNET' : 'XRPL TESTNET'}
+              networkIdentifier={selectedRail === 'STELLAR' ? 'Test SDF Network ; September 2015' : 'wss://s.altnet.rippletest.net:51233'}
+              actionType="Commercial Hardware Settlement"
+              recipientAddress={selectedRail === 'STELLAR' ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR' : 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW'}
+              isMerchantVault={true}
+              destinationTagOrMemo={selectedRail === 'STELLAR' ? `NR-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}` : 104857}
+              assetSymbol={activeToken}
+              isNativeAsset={true}
+              amount={activeTotalCrypto}
+              networkFee={`$0.02 (${activeFeeCrypto} ${activeToken})`}
+              isSigning={isProcessing}
+              onConfirmSign={async () => {
+                await handleConfirmAndPay();
+              }}
+              onCancel={() => setShowSafetyCenter(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Wallet Modal */}
       <WalletConnectModal

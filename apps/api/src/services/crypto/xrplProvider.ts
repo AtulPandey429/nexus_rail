@@ -132,24 +132,37 @@ export class XrplTestnetProvider implements IChainProvider {
       const recipient = this.getMerchantAddress();
       const destinationMatches = result?.Destination === recipient;
 
-      // Verify destination tag
-      const hash = crypto.createHash('sha256').update(orderId).digest();
-      const expectedTag = (hash.readUInt32BE(0) % 2000000000) + 1000;
+      // Verify destination tag using the matching bespoke HMAC derivation
+      const tagDigest = crypto.createHmac('sha256', 'nexus_rail_settlement_v1_tag').update(orderId).digest();
+      const expectedTag = (tagDigest.readUInt32BE(0) % 2_000_000_000) + 100_000;
       const tagMatches = result?.DestinationTag === expectedTag;
 
-      const verified = Boolean(result?.validated && txSuccess && destinationMatches && tagMatches);
+      // Authoritative Delivered Amount inspection (Prevents XRPL Partial Payment exploit)
+      let deliveredXrp = 0;
+      if (meta && typeof meta === 'object') {
+        const deliv = (meta as any).delivered_amount || (meta as any).DeliveredAmount;
+        if (deliv) {
+          deliveredXrp = typeof deliv === 'string' ? Number(deliv) / 1_000_000 : Number(deliv.value || 0);
+        }
+      }
+      if (deliveredXrp === 0 && result?.Amount && typeof result.Amount === 'string') {
+        deliveredXrp = Number(result.Amount) / 1_000_000;
+      }
+
+      const amountMatches = expectedAmountAsset ? deliveredXrp >= expectedAmountAsset * 0.999 : deliveredXrp > 0;
+      const verified = Boolean(result?.validated && txSuccess && destinationMatches && tagMatches && amountMatches);
 
       return {
         verified,
         txHash,
         sourceAddress: result?.Account,
         destinationAddress: result?.Destination,
-        amountDelivered: result?.Amount ? Number(result.Amount) / 1_000_000 : expectedAmountAsset || 0,
+        amountDelivered: deliveredXrp,
         assetSymbol: this.assetSymbol,
         ledgerIndex: result?.ledger_index,
         timestamp: new Date().toISOString(),
         network: this.network,
-        error: !verified ? 'Transaction does not match order parameters or did not succeed' : undefined,
+        error: !verified ? 'Transaction does not match order parameters, delivered insufficient funds, or is unvalidated' : undefined,
       };
     } catch (err: any) {
       return {

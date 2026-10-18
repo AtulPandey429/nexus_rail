@@ -27,7 +27,24 @@ import type { HealthResponse } from '@nexusrail/shared';
 const app = express();
 const startTime = Date.now();
 
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigins = [
+  env.CORS_ORIGIN,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  env.APP_URL,
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS policy violation: Origin "${origin}" is not authorized`));
+    },
+    credentials: true,
+  })
+);
 app.post('/api/v1/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use(express.json());
 
@@ -81,12 +98,16 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ success: false, error: 'API Route Not Found' });
 });
 
-// Structured Global JSON Error Handler
+// Structured Global JSON Error Handler (Sanitized for Production)
 app.use((err: any, _req: Request, res: Response, _next: any) => {
   console.error('❌ [NexusRail API Error]:', err);
-  res.status(err.status || 500).json({
+  const isProd = env.NODE_ENV === 'production';
+  const statusCode = typeof err.status === 'number' ? err.status : 500;
+  res.status(statusCode).json({
     success: false,
-    error: err.message || 'Internal Server Error',
+    error: isProd && statusCode >= 500
+      ? 'An unexpected internal error occurred. Please contact system support.'
+      : err.message || 'Internal Server Error',
   });
 });
 
