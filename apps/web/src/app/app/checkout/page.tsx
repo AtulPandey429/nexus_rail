@@ -23,12 +23,12 @@ import {
   Smartphone,
   Globe,
   CreditCard,
-  CreditCard as CardIcon,
 } from 'lucide-react';
 import { fetchCartLines, CartLine, startStripeCheckout } from '@/lib/shop';
+import { useLiveExchangeRates } from '@/lib/rates';
 import {
-  isFreighterAvailable,
-  isGemWalletAvailable,
+  checkFreighterInstalled,
+  checkGemWalletInstalled,
   isCrossmarkAvailable,
   buildSep0007Uri,
   buildAlbedoPayUrl,
@@ -37,6 +37,13 @@ import {
   payWithGemWallet,
   payWithCrossmark,
 } from '@/lib/wallets';
+import {
+  FreighterIcon,
+  GemWalletIcon,
+  CrossmarkIcon,
+  XamanIcon,
+  AlbedoIcon,
+} from '@/components/WalletIcons';
 
 type PaymentRailChoice = 'STELLAR' | 'XRPL' | 'STRIPE' | 'WALLET';
 type StellarWalletSubtype = 'freighter' | 'albedo' | 'mobile_lobstr' | 'manual';
@@ -70,7 +77,6 @@ function CheckoutInner() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [simStep, setSimStep] = useState(1);
-  const [manualTxHash, setManualTxHash] = useState('');
 
   useEffect(() => {
     fetchCartLines().then((lines) => {
@@ -78,8 +84,8 @@ function CheckoutInner() {
     }).catch(() => {});
 
     // Check extensions
-    setHasFreighter(isFreighterAvailable());
-    setHasGemWallet(isGemWalletAvailable());
+    checkFreighterInstalled().then(setHasFreighter);
+    checkGemWalletInstalled().then(setHasGemWallet);
     setHasCrossmark(isCrossmarkAvailable());
   }, []);
 
@@ -97,17 +103,17 @@ function CheckoutInner() {
 
   const totalDollars = (totalCents / 100).toFixed(2);
 
-  // Conversion rates (Stellar XLM ≈ $0.124, XRPL XRP ≈ $0.582)
-  const xlmRate = 0.124;
-  const xrpRate = 0.582;
+  // Live Conversion rates (with 30-min cache)
+  const { xlmUsd, xrpUsd, source: rateSource, fromCache: rateFromCache, ttlMinutes: rateTtl } = useLiveExchangeRates();
 
-  const amountXlm = (Number(totalDollars) / xlmRate).toFixed(2);
-  const amountXrp = (Number(totalDollars) / xrpRate).toFixed(2);
+  const amountXlm = (Number(totalDollars) / (xlmUsd || 0.1778)).toFixed(2);
+  const amountXrp = (Number(totalDollars) / (xrpUsd || 1.2972)).toFixed(2);
 
-  const destinationStellar = 'GB7V4DQL5Y7P2KEMOG537AQUZ7I5I3YQZTXFVR5F752J7E663NR5XLM';
-  const destinationXrpl = 'rNexusRailTreasuryLiveTestnetConsensusXRPL';
-  const destinationTagXrpl = 104802;
-  const memoStellar = orderId;
+  // Live testnet merchant destination addresses (funded validator nodes)
+  const destinationStellar = 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR';
+  const destinationXrpl = 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW';
+  const destinationTagXrpl = 100000 + Math.abs(orderId.split('').reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) % 899999, 0));
+  const memoStellar = orderId.replace(/-/g, '').slice(0, 28);
 
   // URIs for mobile & web
   const sep0007Uri = buildSep0007Uri({ destination: destinationStellar, amount: amountXlm, memo: memoStellar });
@@ -129,7 +135,7 @@ function CheckoutInner() {
     );
   };
 
-  // Trigger Freighter Payment
+  // Trigger Freighter Native Extension Popup
   const handlePayFreighter = async () => {
     setWalletError(null);
     setIsProcessing(true);
@@ -144,13 +150,13 @@ function CheckoutInner() {
       setTimeout(() => setSimStep(4), 1000);
       setTimeout(() => finishPayment(res.txHash, 'STELLAR'), 1800);
     } catch (err: any) {
-      setWalletError(err.message || 'Freighter payment was cancelled or failed.');
+      setWalletError(err.message || 'Freighter popup was cancelled or failed.');
       setIsProcessing(false);
       setSimStep(1);
     }
   };
 
-  // Trigger GemWallet Payment
+  // Trigger GemWallet Native Extension Popup
   const handlePayGemWallet = async () => {
     setWalletError(null);
     setIsProcessing(true);
@@ -165,13 +171,13 @@ function CheckoutInner() {
       setTimeout(() => setSimStep(4), 1000);
       setTimeout(() => finishPayment(res.txHash, 'XRPL'), 1800);
     } catch (err: any) {
-      setWalletError(err.message || 'GemWallet payment was rejected or not found.');
+      setWalletError(err.message || 'GemWallet popup was cancelled or not found.');
       setIsProcessing(false);
       setSimStep(1);
     }
   };
 
-  // Trigger Crossmark Payment
+  // Trigger Crossmark Native Extension Popup
   const handlePayCrossmark = async () => {
     setWalletError(null);
     setIsProcessing(true);
@@ -186,7 +192,7 @@ function CheckoutInner() {
       setTimeout(() => setSimStep(4), 1000);
       setTimeout(() => finishPayment(res.txHash, 'XRPL'), 1800);
     } catch (err: any) {
-      setWalletError(err.message || 'Crossmark payment failed.');
+      setWalletError(err.message || 'Crossmark popup was cancelled.');
       setIsProcessing(false);
       setSimStep(1);
     }
@@ -195,7 +201,6 @@ function CheckoutInner() {
   // Open Albedo Signer
   const handleOpenAlbedo = () => {
     window.open(albedoUrl, 'albedo-signer', 'width=500,height=700');
-    // Start polling or simulate success when user completes
     setIsProcessing(true);
     setSimStep(2);
     setTimeout(() => setSimStep(3), 2000);
@@ -205,7 +210,7 @@ function CheckoutInner() {
     }, 4000);
   };
 
-  // Handle Stripe Checkout
+  // Handle Stripe Checkout (Dynamic clientUrl redirect)
   const handleStripe = async () => {
     setWalletError(null);
     setIsProcessing(true);
@@ -335,7 +340,7 @@ function CheckoutInner() {
                       : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:border-nexus-muted/40'
                   }`}
                 >
-                  <CardIcon className="w-4 h-4 text-rail-emerald" />
+                  <CreditCard className="w-4 h-4 text-rail-emerald" />
                   <span className="font-bold text-xs text-white">Stripe</span>
                   <span className="text-[10px] text-nexus-muted font-mono">Card &bull; Apple Pay</span>
                 </button>
@@ -369,62 +374,74 @@ function CheckoutInner() {
                       <span>Step 2: Choose Stellar Wallet Option</span>
                     </span>
                     <span className="text-xs font-mono text-stellar-cyan font-bold">
-                      {amountXlm} XLM ($0.124/XLM)
+                      {amountXlm} XLM (~${(xlmUsd || 0.1778).toFixed(4)}/XLM)
                     </span>
                   </div>
 
-                  {/* Subtype Pill Nav */}
+                  {/* Subtype Pill Nav with Icons */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
                     <button
                       type="button"
                       onClick={() => setStellarSubtype('freighter')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         stellarSubtype === 'freighter'
                           ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      Freighter
-                      {hasFreighter && <span className="block text-[9px] text-rail-emerald">Installed</span>}
+                      <FreighterIcon className="w-5 h-5 shrink-0 rounded" />
+                      <div className="text-left">
+                        <span>Freighter</span>
+                        {hasFreighter && <span className="block text-[9px] text-rail-emerald">Ready</span>}
+                      </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setStellarSubtype('albedo')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         stellarSubtype === 'albedo'
                           ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      Albedo
-                      <span className="block text-[9px] text-stellar-cyan">Universal Web</span>
+                      <AlbedoIcon className="w-5 h-5 shrink-0 rounded" />
+                      <div className="text-left">
+                        <span>Albedo</span>
+                        <span className="block text-[9px] text-stellar-cyan">Web Signer</span>
+                      </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setStellarSubtype('mobile_lobstr')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         stellarSubtype === 'mobile_lobstr'
                           ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      LOBSTR / QR
-                      <span className="block text-[9px] text-nexus-muted">Mobile App</span>
+                      <Smartphone className="w-5 h-5 shrink-0 text-stellar-cyan" />
+                      <div className="text-left">
+                        <span>LOBSTR / QR</span>
+                        <span className="block text-[9px] text-nexus-muted">Mobile App</span>
+                      </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setStellarSubtype('manual')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         stellarSubtype === 'manual'
                           ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      Manual
-                      <span className="block text-[9px] text-nexus-muted">Copy / Exchange</span>
+                      <Copy className="w-5 h-5 shrink-0 text-nexus-muted" />
+                      <div className="text-left">
+                        <span>Manual</span>
+                        <span className="block text-[9px] text-nexus-muted">Address + Memo</span>
+                      </div>
                     </button>
                   </div>
 
@@ -432,13 +449,11 @@ function CheckoutInner() {
                   {stellarSubtype === 'freighter' && (
                     <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-stellar-cyan/20 border border-stellar-cyan/40 flex items-center justify-center text-stellar-cyan font-bold text-sm">
-                            *
-                          </div>
+                        <div className="flex items-center gap-3">
+                          <FreighterIcon className="w-9 h-9 rounded-xl shrink-0" />
                           <div>
                             <h4 className="text-sm font-bold text-white">Freighter Wallet Extension</h4>
-                            <p className="text-xs font-mono text-nexus-muted">Native non-custodial browser signer for Stellar</p>
+                            <p className="text-xs font-mono text-nexus-muted">Official Stellar non-custodial browser signer</p>
                           </div>
                         </div>
                         {hasFreighter ? (
@@ -447,7 +462,7 @@ function CheckoutInner() {
                           </span>
                         ) : (
                           <span className="text-[10px] font-mono bg-amber-400/10 text-amber-400 border border-amber-400/30 px-2 py-0.5 rounded">
-                            Not Installed
+                            Click to Open / Connect
                           </span>
                         )}
                       </div>
@@ -467,53 +482,32 @@ function CheckoutInner() {
                         </div>
                       </div>
 
-                      {hasFreighter ? (
-                        <button
-                          type="button"
-                          onClick={handlePayFreighter}
-                          disabled={isProcessing}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-stellar-cyan text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-stellar-cyan/10 disabled:opacity-60"
-                        >
-                          {isProcessing ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              <span>Confirming with Freighter...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Zap className="w-4 h-4" />
-                              <span>Pay {amountXlm} XLM with Freighter</span>
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <a
-                            href="https://www.freighter.app/"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl bg-nexus-card border border-stellar-cyan/50 text-stellar-cyan hover:bg-stellar-cyan/10 text-xs font-mono font-bold transition-colors"
-                          >
-                            <span>Install Freighter</span>
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => setStellarSubtype('albedo')}
-                            className="flex-1 p-3 rounded-xl bg-nexus-surface border border-nexus-border text-white hover:border-rail-emerald text-xs font-mono transition-colors"
-                          >
-                            Use Albedo (No Install)
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handlePayFreighter}
+                        disabled={isProcessing}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-stellar-cyan text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-stellar-cyan/10 disabled:opacity-60"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Confirming in Freighter extension...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-4 h-4" />
+                            <span>Pay {amountXlm} XLM with Freighter (Open Popup)</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
 
                   {/* Subtype 2: Albedo */}
                   {stellarSubtype === 'albedo' && (
                     <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
-                      <div className="flex items-center gap-2.5">
-                        <Globe className="w-6 h-6 text-stellar-cyan" />
+                      <div className="flex items-center gap-3">
+                        <AlbedoIcon className="w-9 h-9 rounded-xl shrink-0" />
                         <div>
                           <h4 className="text-sm font-bold text-white">Albedo Universal Web Signer</h4>
                           <p className="text-xs font-mono text-nexus-muted">
@@ -613,62 +607,74 @@ function CheckoutInner() {
                       <span>Step 2: Choose XRPL Wallet Option</span>
                     </span>
                     <span className="text-xs font-mono text-xrpl-blue font-bold">
-                      {amountXrp} XRP ($0.582/XRP)
+                      {amountXrp} XRP (~${(xrpUsd || 1.2972).toFixed(4)}/XRP)
                     </span>
                   </div>
 
-                  {/* Subtype Pill Nav */}
+                  {/* Subtype Pill Nav with Icons */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
                     <button
                       type="button"
                       onClick={() => setXrplSubtype('gemwallet')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         xrplSubtype === 'gemwallet'
                           ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      GemWallet
-                      {hasGemWallet && <span className="block text-[9px] text-rail-emerald">Installed</span>}
+                      <GemWalletIcon className="w-5 h-5 shrink-0 rounded" />
+                      <div className="text-left">
+                        <span>GemWallet</span>
+                        {hasGemWallet && <span className="block text-[9px] text-rail-emerald">Ready</span>}
+                      </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setXrplSubtype('crossmark')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         xrplSubtype === 'crossmark'
                           ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      Crossmark
-                      {hasCrossmark && <span className="block text-[9px] text-rail-emerald">Installed</span>}
+                      <CrossmarkIcon className="w-5 h-5 shrink-0 rounded" />
+                      <div className="text-left">
+                        <span>Crossmark</span>
+                        {hasCrossmark && <span className="block text-[9px] text-rail-emerald">Ready</span>}
+                      </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setXrplSubtype('xaman_mobile')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         xrplSubtype === 'xaman_mobile'
                           ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      Xaman / Xumm
-                      <span className="block text-[9px] text-xrpl-blue">Mobile QR</span>
+                      <XamanIcon className="w-5 h-5 shrink-0 rounded" />
+                      <div className="text-left">
+                        <span>Xaman</span>
+                        <span className="block text-[9px] text-xrpl-blue">Mobile QR</span>
+                      </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setXrplSubtype('manual')}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
                         xrplSubtype === 'manual'
                           ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
                           : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
                       }`}
                     >
-                      Manual
-                      <span className="block text-[9px] text-nexus-muted">Address + Tag</span>
+                      <Copy className="w-5 h-5 shrink-0 text-nexus-muted" />
+                      <div className="text-left">
+                        <span>Manual</span>
+                        <span className="block text-[9px] text-nexus-muted">Address + Tag</span>
+                      </div>
                     </button>
                   </div>
 
@@ -676,13 +682,11 @@ function CheckoutInner() {
                   {xrplSubtype === 'gemwallet' && (
                     <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-xrpl-blue/20 border border-xrpl-blue/40 flex items-center justify-center text-xrpl-blue font-bold text-sm">
-                            💎
-                          </div>
+                        <div className="flex items-center gap-3">
+                          <GemWalletIcon className="w-9 h-9 rounded-xl shrink-0" />
                           <div>
                             <h4 className="text-sm font-bold text-white">GemWallet Extension</h4>
-                            <p className="text-xs font-mono text-nexus-muted">High-speed web3 wallet for XRPL</p>
+                            <p className="text-xs font-mono text-nexus-muted">High-speed web3 wallet for XRPL payments</p>
                           </div>
                         </div>
                         {hasGemWallet ? (
@@ -691,7 +695,7 @@ function CheckoutInner() {
                           </span>
                         ) : (
                           <span className="text-[10px] font-mono bg-amber-400/10 text-amber-400 border border-amber-400/30 px-2 py-0.5 rounded">
-                            Not Installed
+                            Click to Open / Pay
                           </span>
                         )}
                       </div>
@@ -711,45 +715,24 @@ function CheckoutInner() {
                         </div>
                       </div>
 
-                      {hasGemWallet ? (
-                        <button
-                          type="button"
-                          onClick={handlePayGemWallet}
-                          disabled={isProcessing}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-xrpl-blue text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-xrpl-blue/10 disabled:opacity-60"
-                        >
-                          {isProcessing ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              <span>Signing with GemWallet...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Zap className="w-4 h-4" />
-                              <span>Pay {amountXrp} XRP with GemWallet</span>
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <a
-                            href="https://gemwallet.app/"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl bg-nexus-card border border-xrpl-blue/50 text-xrpl-blue hover:bg-xrpl-blue/10 text-xs font-mono font-bold transition-colors"
-                          >
-                            <span>Install GemWallet</span>
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => setXrplSubtype('xaman_mobile')}
-                            className="flex-1 p-3 rounded-xl bg-nexus-surface border border-nexus-border text-white hover:border-rail-emerald text-xs font-mono transition-colors"
-                          >
-                            Use Xaman (Mobile QR)
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handlePayGemWallet}
+                        disabled={isProcessing}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-xrpl-blue text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-xrpl-blue/10 disabled:opacity-60"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Confirming in GemWallet extension...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-4 h-4" />
+                            <span>Pay {amountXrp} XRP with GemWallet (Open Popup)</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
 
@@ -757,10 +740,8 @@ function CheckoutInner() {
                   {xrplSubtype === 'crossmark' && (
                     <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-xrpl-blue/20 border border-xrpl-blue/40 flex items-center justify-center text-xrpl-blue font-bold text-sm">
-                            ⚡
-                          </div>
+                        <div className="flex items-center gap-3">
+                          <CrossmarkIcon className="w-9 h-9 rounded-xl shrink-0" />
                           <div>
                             <h4 className="text-sm font-bold text-white">Crossmark Browser Wallet</h4>
                             <p className="text-xs font-mono text-nexus-muted">First-class browser extension for XRP Ledger</p>
@@ -772,32 +753,20 @@ function CheckoutInner() {
                           </span>
                         ) : (
                           <span className="text-[10px] font-mono bg-amber-400/10 text-amber-400 border border-amber-400/30 px-2 py-0.5 rounded">
-                            Not Installed
+                            Click to Open
                           </span>
                         )}
                       </div>
 
-                      {hasCrossmark ? (
-                        <button
-                          type="button"
-                          onClick={handlePayCrossmark}
-                          disabled={isProcessing}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-xrpl-blue text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-xrpl-blue/10"
-                        >
-                          <Zap className="w-4 h-4" />
-                          <span>Pay {amountXrp} XRP with Crossmark</span>
-                        </button>
-                      ) : (
-                        <a
-                          href="https://crossmark.io/"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-nexus-card border border-xrpl-blue/50 text-xrpl-blue hover:bg-xrpl-blue/10 text-xs font-mono font-bold transition-colors w-full"
-                        >
-                          <span>Download Crossmark Extension</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handlePayCrossmark}
+                        disabled={isProcessing}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-xrpl-blue text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-xrpl-blue/10"
+                      >
+                        <Zap className="w-4 h-4" />
+                        <span>Pay {amountXrp} XRP with Crossmark</span>
+                      </button>
                     </div>
                   )}
 
@@ -805,7 +774,7 @@ function CheckoutInner() {
                   {xrplSubtype === 'xaman_mobile' && (
                     <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4 text-center">
                       <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold text-white">
-                        <Smartphone className="w-4 h-4 text-xrpl-blue" />
+                        <XamanIcon className="w-6 h-6 rounded shrink-0" />
                         <span>Scan with Xaman App (iOS / Android)</span>
                       </div>
 
@@ -883,7 +852,7 @@ function CheckoutInner() {
                   </div>
 
                   <p className="text-xs text-nexus-muted leading-relaxed">
-                    Pay securely using Visa, Mastercard, American Express, Apple Pay, or Google Pay through Stripe&apos;s hosted payment page.
+                    Pay securely using Visa, Mastercard, American Express, Apple Pay, or Google Pay through Stripe&apos;s hosted payment gateway. After payment, you will automatically return to your onchain receipt.
                   </p>
 
                   <button

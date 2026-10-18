@@ -9,7 +9,7 @@ function stripe(): Stripe {
 }
 
 export class StripeService {
-  static async createCheckoutFromCart(userId: string) {
+  static async createCheckoutFromCart(userId: string, customClientUrl?: string) {
     const cartCol = await MongoService.getCollection<MongoCartItemDoc>('cart_items');
     const lines = await cartCol.find({ user_id: userId }).toArray();
     if (lines.length === 0) throw new Error('Cart is empty');
@@ -46,11 +46,23 @@ export class StripeService {
     const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
     await ordersCol.insertOne(orderDoc as any);
 
+    // Resolve client origin dynamically (e.g. Vercel deployment URL or localhost)
+    let fallbackOrigin = 'https://nexus-rail.vercel.app';
+    try {
+      const envAppUrl = process.env.APP_URL;
+      if (envAppUrl) fallbackOrigin = envAppUrl;
+    } catch {
+      // quiet fallback
+    }
+
+    const origin = (customClientUrl || fallbackOrigin).replace(/\/+$/, '');
+    const amountDollars = (totalCents / 100).toFixed(2);
+
     const session = await stripe().checkout.sessions.create({
       mode: 'payment',
       client_reference_id: orderId,
-      success_url: `${requiredEnv('APP_URL')}/app/orders?orderId=${orderId}`,
-      cancel_url: `${requiredEnv('APP_URL')}/app/cart`,
+      success_url: `${origin}/app/receipt?orderId=${orderId}&rail=STRIPE&amount=${amountDollars}`,
+      cancel_url: `${origin}/app/cart`,
       metadata: { orderId },
       line_items: priced.map((line) => ({
         quantity: line.qty,

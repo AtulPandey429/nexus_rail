@@ -27,7 +27,7 @@ let fxCache: { data: FxQuote; expiresAt: number } | null = null;
 let metalPendingPromise: Promise<MetalQuote> | null = null;
 let fxPendingPromise: Promise<FxQuote> | null = null;
 
-const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes cache window
 
 async function fetchWithRetry(url: string, headers: Record<string, string>, retries = 2): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -177,8 +177,8 @@ export async function getFxQuote(): Promise<FxQuote> {
       // Safe baseline fallback so checkout invoices never crash on rate limits
       return {
         usd: 1,
-        xrpUsd: 2.25,
-        xlmUsd: 0.28,
+        xrpUsd: 1.2972,
+        xlmUsd: 0.1778,
         source: 'fallback',
         fromCache: true,
         fetchedAt: new Date().toISOString(),

@@ -10,7 +10,8 @@ export const checkoutRouter = Router();
 // POST /api/v1/checkout/stripe/create-session
 checkoutRouter.post('/stripe/create-session', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const session = await StripeService.createCheckoutFromCart(req.user!.id);
+    const clientUrl = req.body?.clientUrl || (req.headers.origin as string) || (req.headers.referer as string);
+    const session = await StripeService.createCheckoutFromCart(req.user!.id, clientUrl);
     res.json({ success: true, data: session });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Stripe checkout failed' });

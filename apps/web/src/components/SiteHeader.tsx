@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingBag, ArrowRight, User } from 'lucide-react';
+import { ShoppingBag, ArrowRight, User, Wallet } from 'lucide-react';
 import { CART_EVENT, clearSession, fetchCartLines, onSessionChange, readSession, SessionUser, verifySession } from '@/lib/shop';
+import { WalletConnectModal } from './WalletConnectModal';
 
 const NAV_LINKS = [
   { href: '/', label: 'Explore' },
@@ -19,6 +20,7 @@ export function SiteHeader() {
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [cartCount, setCartCount] = useState(0);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
   useEffect(() => {
     const sync = () => setUser(readSession().user);
@@ -124,6 +126,15 @@ export function SiteHeader() {
             </div>
           ) : (
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsWalletModalOpen(true)}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nexus-card border border-nexus-border hover:border-rail-emerald/60 text-xs font-mono text-white transition-all"
+              >
+                <Wallet className="w-3.5 h-3.5 text-rail-emerald" />
+                <span>Connect Wallet</span>
+              </button>
+
               <Link
                 href="/login"
                 className="text-xs font-medium text-gray-300 hover:text-white transition-colors"
@@ -141,6 +152,11 @@ export function SiteHeader() {
           )}
         </div>
       </div>
+
+      <WalletConnectModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+      />
     </header>
   );
 }

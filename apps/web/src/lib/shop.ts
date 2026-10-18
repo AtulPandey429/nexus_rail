@@ -124,56 +124,94 @@ export function parseCatalog(payload: unknown): CatalogProduct[] {
   return rows.map(asProduct).filter((item): item is CatalogProduct => item !== null);
 }
 
-export const FIGMA_CATALOG: (CatalogProduct & { category: 'hardware' | 'workspace' | 'essentials'; rating: number; upvotes: number; tag: string })[] = [
+export type CatalogItem = CatalogProduct & {
+  category: 'hardware' | 'workspace' | 'essentials';
+  rail: 'stellar' | 'xrpl' | 'multi';
+  rating: number;
+  upvotes: number;
+  tag: string;
+};
+
+export const FIGMA_CATALOG: CatalogItem[] = [
+  // --- STELLAR SOROBAN PRODUCTS ---
   {
     sku: 'RAIL-ONE',
-    title: 'Rail One',
-    description: 'Self-custody, beautifully offline. Dual-chip cold storage hardware signer with native Stellar and XRPL key generation.',
+    title: 'Rail One (Stellar Signer)',
+    description: 'Self-custody, beautifully offline. Dual-chip cold storage hardware signer with native Stellar Soroban key generation.',
     priceCents: 12900,
     category: 'hardware',
+    rail: 'stellar',
     rating: 4.9,
     upvotes: 248,
-    tag: 'FLAGSHIP',
+    tag: 'STELLAR &bull; HARDWARE',
   },
   {
-    sku: 'RELAY-MAT',
-    title: 'Relay desk mat',
-    description: 'A grounded space for your next move. High-density micro-weave workspace base with stitched non-fray edge.',
-    priceCents: 3900,
+    sku: 'PROD-XLM-PASS',
+    title: 'Stellar Soroban License Pass',
+    description: 'Lifetime developer key for automated Soroban smart contract deployment suite and testnet RPC priority.',
+    priceCents: 19900,
     category: 'workspace',
+    rail: 'stellar',
     rating: 4.8,
     upvotes: 182,
-    tag: 'POPULAR',
+    tag: 'STELLAR &bull; DEV PASS',
   },
   {
-    sku: 'NEXUS-TEE',
-    title: 'Nexus tee',
-    description: 'A uniform for the onchain everyday. Heavyweight 240gsm organic combed cotton with custom tonal embroidery.',
-    priceCents: 3200,
-    category: 'essentials',
+    sku: 'PROD-AGENT-PRO',
+    title: 'NexusRail AI Agent Desk Key',
+    description: 'High-throughput Groq & Gemini agent desk license key with Redis proposal locks for Stellar state monitoring.',
+    priceCents: 2990,
+    category: 'workspace',
+    rail: 'stellar',
     rating: 4.9,
-    upvotes: 145,
-    tag: 'ESSENTIAL',
+    upvotes: 310,
+    tag: 'STELLAR &bull; AI AGENT',
   },
   {
     sku: 'NODE-STAND',
-    title: 'Node stand',
+    title: 'Node stand (Stellar Edition)',
     description: 'Built for a more considered desk. Precision CNC machined aluminum hardware dock with silicone cable channel.',
     priceCents: 5800,
     category: 'hardware',
+    rail: 'stellar',
     rating: 4.7,
     upvotes: 112,
-    tag: 'NEW',
+    tag: 'STELLAR &bull; ACCESSORY',
+  },
+
+  // --- XRPL CONSENSUS PRODUCTS ---
+  {
+    sku: 'PROD-XRP-KIT',
+    title: 'XRPL Starter Validator Node',
+    description: 'Turnkey XRPL validator node hardware kit with pre-loaded ledger sync module and ripple bridge.',
+    priceCents: 49900,
+    category: 'hardware',
+    rail: 'xrpl',
+    rating: 4.9,
+    upvotes: 194,
+    tag: 'XRPL &bull; VALIDATOR',
   },
   {
-    sku: 'SIGNAL-CAP',
-    title: 'Signal cap',
-    description: 'Low profile. Clear signal. Structured 6-panel silhouette with subtle high-density micro-rail embroidery.',
-    priceCents: 2800,
-    category: 'essentials',
+    sku: 'PROD-LEDGER-COLD',
+    title: 'NexusRail XRPL Security Module',
+    description: 'Dual-chip cold storage hardware signer with native XRPL key generation and destination tag tracking.',
+    priceCents: 14900,
+    category: 'hardware',
+    rail: 'xrpl',
     rating: 4.8,
-    upvotes: 94,
-    tag: 'EDITION',
+    upvotes: 165,
+    tag: 'XRPL &bull; COLD SIGNER',
+  },
+  {
+    sku: 'RELAY-MAT',
+    title: 'Relay desk mat (XRPL Edition)',
+    description: 'A grounded space for your next move. High-density micro-weave workspace base with stitched non-fray edge.',
+    priceCents: 3900,
+    category: 'workspace',
+    rail: 'xrpl',
+    rating: 4.8,
+    upvotes: 182,
+    tag: 'XRPL &bull; WORKSPACE',
   },
   {
     sku: 'RAIL-CABLES',
@@ -181,9 +219,34 @@ export const FIGMA_CATALOG: (CatalogProduct & { category: 'hardware' | 'workspac
     description: 'One kit. Every connection. High-spec braided silicone USB-C custom engineered for zero-interference hardware signing.',
     priceCents: 2400,
     category: 'hardware',
+    rail: 'xrpl',
     rating: 4.9,
     upvotes: 88,
-    tag: 'ACCESSORY',
+    tag: 'XRPL &bull; CABLES',
+  },
+
+  // --- CROSS-RAIL EVERYDAY ESSENTIALS ---
+  {
+    sku: 'NEXUS-TEE',
+    title: 'Nexus tee',
+    description: 'A uniform for the onchain everyday. Heavyweight 240gsm organic combed cotton with custom tonal embroidery.',
+    priceCents: 3200,
+    category: 'essentials',
+    rail: 'multi',
+    rating: 4.9,
+    upvotes: 145,
+    tag: 'CROSS-RAIL &bull; APPAREL',
+  },
+  {
+    sku: 'SIGNAL-CAP',
+    title: 'Signal cap',
+    description: 'Low profile. Clear signal. Structured 6-panel silhouette with subtle high-density micro-rail embroidery.',
+    priceCents: 2800,
+    category: 'essentials',
+    rail: 'multi',
+    rating: 4.8,
+    upvotes: 94,
+    tag: 'CROSS-RAIL &bull; HEADWEAR',
   },
 ];
 
@@ -328,10 +391,11 @@ export async function removeCartSku(sku: string) {
 }
 
 export async function startStripeCheckout() {
+  const clientUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
   const res = await fetch('/api/v1/checkout/stripe/create-session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers() },
-    body: JSON.stringify({ fromCart: true }),
+    body: JSON.stringify({ fromCart: true, clientUrl }),
   });
   const payload = await readJson(res);
   const url = payload?.data?.url;

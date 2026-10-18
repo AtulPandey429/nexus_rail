@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@gemwallet/api": "^3.8.0",
     "@nexusrail/shared": "*",
+    "@stellar/freighter-api": "^6.0.1",
     "lucide-react": "^0.475.0",
     "next": "^15.2.3",
     "react": "^19.0.0",
