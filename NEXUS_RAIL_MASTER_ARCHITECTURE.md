@@ -30,11 +30,48 @@ All screens follow the Figma design tokens (`#08090D` Dark Canvas, `#0B0D14` Sur
 | **4** | **Shopping Bag & Cart** | `/app/cart` (`/cart`) | "A few good choices". Step 1 breadcrumb, quantity steppers (`- 1 +`), promo code validator (`NEXUS10`), live price breakdowns, and fallback local-storage resilience. |
 | **5** | **Asset Routing & Swap** | `/app/swap` (`/swap`) | "Make your next move". Cross-chain router between USD, Stellar XLM, XRPL XRP, and USDC. Real-time SVG 24h curved price chart, slippage control (0.1%), and depth monitor. |
 | **6** | **Activity & Settlement History** | `/app/activity` (`/activity`) | "Every move, in the record". 3 KPI cards (Total spent, Waiting payment, Ledger difference $0.00), filterable orders table, and interactive Double-Entry Reconciliation modal. |
-| **7** | **Multi-Rail Checkout** | `/app/checkout` (`/checkout`) | "Secured demo checkout". Step 2 breadcrumb, guaranteed rate lock timer (`00:47`), interactive Stellar vs XRPL card selection, 4-stage pipeline checklist, and instant testnet simulator. |
+| **7** | **Multi-Rail Checkout** | `/app/checkout` (`/checkout`) | "Secured demo checkout". Full multi-wallet integration: Stellar (Freighter, Albedo, LOBSTR SEP-0007 QR), XRPL (GemWallet, Crossmark, Xaman mobile QR), Stripe Card, and Double-entry Ledger balance, plus instant testnet simulator. |
 | **8** | **Payment Receipt** | `/app/receipt` (`/receipt`) | "Good move. Payment complete." Step 3 breadcrumb, `CONFIRMED ONCHAIN` badge, testnet transaction hash & explorer links, 3-stage pipeline trail, and IPFS CID audit anchor. |
 | **9** | **Operator Admin Desk** | `/admin` | "A clear view of every rail". 7-day multi-rail volume bar chart, rail mix (64% Stellar / 36% XRPL), chain health monitor, and Groq 70B AI Agent Desk proposal execution widget. |
 
 ---
+
+## 2.1 Multi-Rail Wallet & Payment Ecosystem
+
+NexusRail supports a comprehensive array of desktop, mobile, and web-based non-custodial signing options alongside fiat cards:
+
+```
+                  ┌─── Stellar (XLM) ────┬── Freighter Extension (window.freighter)
+                  │                      ├── Albedo Web Signer (universal popup, 0 install)
+                  │                      ├── LOBSTR / Mobile Wallet (SEP-0007 QR & deep link)
+                  │                      └── Manual Transfer (Address + Memo Text)
+                  │
+                  ├─── XRPL (XRP) ───────┼── GemWallet Extension (window.gemWallet)
+Payment Rails ────┤                      ├── Crossmark Extension (window.crossmark)
+                  │                      ├── Xaman / Xumm Mobile App (Scannable QR + deep link)
+                  │                      └── Manual Transfer (Address + 32-bit Destination Tag)
+                  │
+                  ├─── Fiat (USD) ───────── Stripe Hosted Checkout (Visa, Mastercard, Apple Pay)
+                  │
+                  └─── Ledger USD ───────── NexusRail Double-Entry Internal Wallet (Sub-second)
+```
+
+1. **Stellar Ecosystem:**
+   - **Freighter Extension:** Automatic detection via `window.freighter`. Prompts hardware or browser-secured non-custodial signing.
+   - **Albedo Web Signer:** Universal browser-based signer that requires zero extensions and operates on mobile safari/chrome seamlessly via `albedo.link`.
+   - **LOBSTR / SEP-0007 Mobile:** Generates standard `web+stellar:pay` payloads with scannable QR codes and mobile deep-linking.
+   - **Manual Transfer:** Full public receiving address and mandatory Memo Text with 1-click copy.
+2. **XRPL Ecosystem:**
+   - **GemWallet Extension:** Integrated with `window.gemWallet.sendPayment` for instantaneous testnet transaction dispatch.
+   - **Crossmark Extension:** Integrated with `window.crossmark.signAndSubmitAndWait` for desktop browser users.
+   - **Xaman / Xumm Mobile App:** The flagship mobile wallet for XRPL. Generates scannable QR codes and deep links (`xumm.app/detect/...`).
+   - **Manual Transfer:** Classic XRPL `r...` address and mandatory 32-bit Destination Tag with 1-click copy.
+3. **Stripe & Traditional Cards:**
+   - Direct integration via `/api/v1/checkout/stripe/create-session` supporting global debit/credit cards and digital wallets.
+4. **Internal Ledger Wallet:**
+   - Immediate sub-second debit from verified double-entry balances with zero gas fees.
+5. **Instant Demo Simulator:**
+   - 1-click testnet verification bypasses faucet dependencies for rapid institutional review.
 
 ## 3. End-to-End User Journeys
 

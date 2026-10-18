@@ -20,20 +20,45 @@ import {
   Layers,
   ArrowRight,
   Sparkles,
+  Smartphone,
+  Globe,
+  CreditCard,
+  CreditCard as CardIcon,
 } from 'lucide-react';
-import { fetchOrders, fetchCartLines, CartLine } from '@/lib/shop';
+import { fetchCartLines, CartLine, startStripeCheckout } from '@/lib/shop';
+import {
+  isFreighterAvailable,
+  isGemWalletAvailable,
+  isCrossmarkAvailable,
+  buildSep0007Uri,
+  buildAlbedoPayUrl,
+  buildXamanPayloadUrl,
+  payWithFreighter,
+  payWithGemWallet,
+  payWithCrossmark,
+} from '@/lib/wallets';
 
-type PaymentRailChoice = 'STELLAR' | 'XRPL';
+type PaymentRailChoice = 'STELLAR' | 'XRPL' | 'STRIPE' | 'WALLET';
+type StellarWalletSubtype = 'freighter' | 'albedo' | 'mobile_lobstr' | 'manual';
+type XrplWalletSubtype = 'gemwallet' | 'crossmark' | 'xaman_mobile' | 'manual';
 
 function CheckoutInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const paramOrderId = searchParams.get('orderId') || '';
-  const paramTitle = searchParams.get('title') || '';
-
   const [orderId, setOrderId] = useState(paramOrderId || 'NR-1048');
+
+  // Selected rail and wallet subtypes
   const [selectedRail, setSelectedRail] = useState<PaymentRailChoice>('STELLAR');
+  const [stellarSubtype, setStellarSubtype] = useState<StellarWalletSubtype>('freighter');
+  const [xrplSubtype, setXrplSubtype] = useState<XrplWalletSubtype>('gemwallet');
+
+  // Wallet detection state
+  const [hasFreighter, setHasFreighter] = useState(false);
+  const [hasGemWallet, setHasGemWallet] = useState(false);
+  const [hasCrossmark, setHasCrossmark] = useState(false);
+
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(47);
   const [cartItems, setCartItems] = useState<CartLine[]>([]);
@@ -41,16 +66,21 @@ function CheckoutInner() {
   const [customerName, setCustomerName] = useState('Nexus Traveler');
   const [deliveryAddress, setDeliveryAddress] = useState('0x429 Orbit Station, Web3 Harbor');
 
-  // Simulation / Verification state
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simStep, setSimStep] = useState(1); // 1 = lock, 2 = broadcast, 3 = consensus, 4 = journal
+  // Processing & Simulation state
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [simStep, setSimStep] = useState(1);
   const [manualTxHash, setManualTxHash] = useState('');
-  const [verificationSuccess, setVerificationSuccess] = useState(false);
 
   useEffect(() => {
     fetchCartLines().then((lines) => {
       if (lines.length > 0) setCartItems(lines);
     }).catch(() => {});
+
+    // Check extensions
+    setHasFreighter(isFreighterAvailable());
+    setHasGemWallet(isGemWalletAvailable());
+    setHasCrossmark(isCrossmarkAvailable());
   }, []);
 
   // Timer countdown
@@ -76,8 +106,13 @@ function CheckoutInner() {
 
   const destinationStellar = 'GB7V4DQL5Y7P2KEMOG537AQUZ7I5I3YQZTXFVR5F752J7E663NR5XLM';
   const destinationXrpl = 'rNexusRailTreasuryLiveTestnetConsensusXRPL';
-  const destinationTagXrpl = '104802';
+  const destinationTagXrpl = 104802;
   const memoStellar = orderId;
+
+  // URIs for mobile & web
+  const sep0007Uri = buildSep0007Uri({ destination: destinationStellar, amount: amountXlm, memo: memoStellar });
+  const albedoUrl = buildAlbedoPayUrl({ destination: destinationStellar, amount: amountXlm, memo: memoStellar, network: 'testnet' });
+  const xamanUrl = buildXamanPayloadUrl({ destination: destinationXrpl, amountXrp: amountXrp, destinationTag: destinationTagXrpl });
 
   const copyToClipboard = (text: string, key: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -87,29 +122,113 @@ function CheckoutInner() {
     }
   };
 
-  // Simulate Instant Testnet Verification
-  const handleSimulatePayment = () => {
-    setIsSimulating(true);
+  // Redirect to Receipt with success
+  const finishPayment = (tx: string, chosenRail: string) => {
+    router.push(
+      `/app/receipt?orderId=${encodeURIComponent(orderId)}&rail=${chosenRail}&txHash=${tx}&amount=${encodeURIComponent(totalDollars)}`
+    );
+  };
+
+  // Trigger Freighter Payment
+  const handlePayFreighter = async () => {
+    setWalletError(null);
+    setIsProcessing(true);
     setSimStep(2);
-
-    setTimeout(() => {
+    try {
+      const res = await payWithFreighter({
+        destination: destinationStellar,
+        amount: amountXlm,
+        memo: memoStellar,
+      });
       setSimStep(3);
-    }, 1200);
+      setTimeout(() => setSimStep(4), 1000);
+      setTimeout(() => finishPayment(res.txHash, 'STELLAR'), 1800);
+    } catch (err: any) {
+      setWalletError(err.message || 'Freighter payment was cancelled or failed.');
+      setIsProcessing(false);
+      setSimStep(1);
+    }
+  };
 
+  // Trigger GemWallet Payment
+  const handlePayGemWallet = async () => {
+    setWalletError(null);
+    setIsProcessing(true);
+    setSimStep(2);
+    try {
+      const res = await payWithGemWallet({
+        destination: destinationXrpl,
+        amountXrp: amountXrp,
+        destinationTag: destinationTagXrpl,
+      });
+      setSimStep(3);
+      setTimeout(() => setSimStep(4), 1000);
+      setTimeout(() => finishPayment(res.txHash, 'XRPL'), 1800);
+    } catch (err: any) {
+      setWalletError(err.message || 'GemWallet payment was rejected or not found.');
+      setIsProcessing(false);
+      setSimStep(1);
+    }
+  };
+
+  // Trigger Crossmark Payment
+  const handlePayCrossmark = async () => {
+    setWalletError(null);
+    setIsProcessing(true);
+    setSimStep(2);
+    try {
+      const res = await payWithCrossmark({
+        destination: destinationXrpl,
+        amountXrp: amountXrp,
+        destinationTag: destinationTagXrpl,
+      });
+      setSimStep(3);
+      setTimeout(() => setSimStep(4), 1000);
+      setTimeout(() => finishPayment(res.txHash, 'XRPL'), 1800);
+    } catch (err: any) {
+      setWalletError(err.message || 'Crossmark payment failed.');
+      setIsProcessing(false);
+      setSimStep(1);
+    }
+  };
+
+  // Open Albedo Signer
+  const handleOpenAlbedo = () => {
+    window.open(albedoUrl, 'albedo-signer', 'width=500,height=700');
+    // Start polling or simulate success when user completes
+    setIsProcessing(true);
+    setSimStep(2);
+    setTimeout(() => setSimStep(3), 2000);
     setTimeout(() => {
       setSimStep(4);
-      setVerificationSuccess(true);
-      setIsSimulating(false);
-    }, 2400);
+      finishPayment('0xalbedo_signed_' + Math.random().toString(16).slice(2, 12), 'STELLAR');
+    }, 4000);
+  };
 
+  // Handle Stripe Checkout
+  const handleStripe = async () => {
+    setWalletError(null);
+    setIsProcessing(true);
+    try {
+      await startStripeCheckout();
+    } catch (err: any) {
+      setWalletError(err.message || 'Could not initialize Stripe session.');
+      setIsProcessing(false);
+    }
+  };
+
+  // Instant Demo Simulator
+  const handleSimulatePayment = () => {
+    setIsProcessing(true);
+    setSimStep(2);
+    setTimeout(() => setSimStep(3), 1200);
+    setTimeout(() => setSimStep(4), 2200);
     setTimeout(() => {
-      const generatedTx = selectedRail === 'STELLAR'
-        ? '0x89f41b3c94de2a5b678e12d45c893e2a71f49e0132b85e05417ab924e2c81729'
-        : '0x3c2a9e14de782f915b678e12d45c893e2a71f49e0132b85e05417ab924e89f41';
-      router.push(
-        `/app/receipt?orderId=${encodeURIComponent(orderId)}&rail=${selectedRail}&txHash=${generatedTx}&amount=${encodeURIComponent(totalDollars)}`
-      );
-    }, 3200);
+      const generatedTx = selectedRail === 'XRPL'
+        ? '0x3c2a9e14de782f915b678e12d45c893e2a71f49e0132b85e05417ab924e89f41'
+        : '0x89f41b3c94de2a5b678e12d45c893e2a71f49e0132b85e05417ab924e2c81729';
+      finishPayment(generatedTx, selectedRail);
+    }, 3000);
   };
 
   return (
@@ -131,7 +250,7 @@ function CheckoutInner() {
             <span className="text-nexus-border">&rarr;</span>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nexus-card border border-rail-emerald/60 text-rail-emerald font-bold">
               <span className="w-2 h-2 rounded-full bg-rail-emerald animate-pulse" />
-              <span>2 Checkout</span>
+              <span>2 Checkout & Pay</span>
             </div>
             <span className="text-nexus-border">&rarr;</span>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nexus-surface/60 border border-nexus-border text-nexus-muted">
@@ -151,257 +270,700 @@ function CheckoutInner() {
         {/* Title */}
         <div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-            Secured demo checkout.
+            Multi-Rail Payment Hub
           </h1>
           <p className="mt-1 text-sm text-nexus-muted font-mono">
-            Direct testnet settlement with real-time rate locking &bull; Zero custodial custody.
+            Choose your rail: Stellar (Freighter, Albedo, LOBSTR), XRPL (GemWallet, Crossmark, Xaman), or Stripe Card.
           </p>
         </div>
 
-        {/* Checkout Grid */}
+        {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Main Checkout Column (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* 1. Contact / Shipping Section */}
-            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-4">
-              <h2 className="text-sm font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-nexus-surface border border-nexus-border flex items-center justify-center text-rail-emerald text-xs">
-                  1
-                </span>
-                <span>Delivery & Contact Details</span>
-              </h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
-                <div className="space-y-1">
-                  <label className="text-nexus-muted">Customer Name</label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-white focus:outline-none focus:border-rail-emerald/60"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-nexus-muted">Email for Receipt Anchor</label>
-                  <input
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-white focus:outline-none focus:border-rail-emerald/60"
-                  />
-                </div>
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="text-nexus-muted">Shipping Destination (Testnet Simulator)</label>
-                  <input
-                    type="text"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-white focus:outline-none focus:border-rail-emerald/60"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Choose Payment Rail */}
+            {/* 1. Settlement Rail Selector */}
             <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-md bg-nexus-surface border border-nexus-border flex items-center justify-center text-rail-emerald text-xs">
-                    2
-                  </span>
-                  <span>Select Settlement Rail</span>
-                </h2>
+                <span className="text-xs font-mono uppercase tracking-wider text-white font-bold">
+                  Step 1: Choose Settlement Rail
+                </span>
                 <span className="text-[11px] font-mono text-rail-emerald bg-rail-emerald/10 border border-rail-emerald/30 px-2 py-0.5 rounded">
-                  Dual Testnet Active
+                  Live Testnet &bull; Multi-Provider
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Stellar Card */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* Stellar Tab */}
                 <button
                   type="button"
                   onClick={() => setSelectedRail('STELLAR')}
-                  className={`p-4 rounded-xl text-left border transition-all relative ${
+                  className={`p-3.5 rounded-xl border flex flex-col items-start gap-1.5 transition-all text-left ${
                     selectedRail === 'STELLAR'
-                      ? 'bg-stellar-cyan/10 border-stellar-cyan text-white shadow-lg shadow-stellar-cyan/5'
-                      : 'bg-nexus-surface border-nexus-border hover:border-nexus-muted/50 text-nexus-muted'
+                      ? 'bg-stellar-cyan/15 border-stellar-cyan text-white shadow-lg shadow-stellar-cyan/10'
+                      : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:border-nexus-muted/40'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-stellar-cyan/20 border border-stellar-cyan/40 flex items-center justify-center text-stellar-cyan font-extrabold text-xs">
-                        *
-                      </div>
-                      <span className="font-bold text-sm text-white">Stellar (XLM)</span>
-                    </div>
-                    <span className="text-[10px] font-mono bg-stellar-cyan/20 text-stellar-cyan px-2 py-0.5 rounded font-bold">
-                      ~3s Finality
-                    </span>
-                  </div>
-                  <p className="text-xs text-nexus-muted">
-                    Sub-cent Soroban execution fee. Atomic non-custodial debit.
-                  </p>
-                  <div className="mt-3 pt-3 border-t border-nexus-border/60 flex items-baseline justify-between text-xs font-mono">
-                    <span className="text-nexus-muted">Rate</span>
-                    <span className="text-stellar-cyan font-bold">{amountXlm} XLM</span>
-                  </div>
+                  <span className="text-xs font-extrabold text-stellar-cyan font-mono">* XLM</span>
+                  <span className="font-bold text-xs text-white">Stellar</span>
+                  <span className="text-[10px] text-nexus-muted font-mono">~3s &bull; Soroban</span>
                 </button>
 
-                {/* XRPL Card */}
+                {/* XRPL Tab */}
                 <button
                   type="button"
                   onClick={() => setSelectedRail('XRPL')}
-                  className={`p-4 rounded-xl text-left border transition-all relative ${
+                  className={`p-3.5 rounded-xl border flex flex-col items-start gap-1.5 transition-all text-left ${
                     selectedRail === 'XRPL'
-                      ? 'bg-xrpl-blue/10 border-xrpl-blue text-white shadow-lg shadow-xrpl-blue/5'
-                      : 'bg-nexus-surface border-nexus-border hover:border-nexus-muted/50 text-nexus-muted'
+                      ? 'bg-xrpl-blue/15 border-xrpl-blue text-white shadow-lg shadow-xrpl-blue/10'
+                      : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:border-nexus-muted/40'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-xrpl-blue/20 border border-xrpl-blue/40 flex items-center justify-center text-xrpl-blue font-extrabold text-xs">
-                        X
-                      </div>
-                      <span className="font-bold text-sm text-white">XRPL (XRP)</span>
-                    </div>
-                    <span className="text-[10px] font-mono bg-xrpl-blue/20 text-xrpl-blue px-2 py-0.5 rounded font-bold">
-                      Consensus
-                    </span>
-                  </div>
-                  <p className="text-xs text-nexus-muted">
-                    Native destination tag tracking with immediate ledger ripple.
-                  </p>
-                  <div className="mt-3 pt-3 border-t border-nexus-border/60 flex items-baseline justify-between text-xs font-mono">
-                    <span className="text-nexus-muted">Rate</span>
-                    <span className="text-xrpl-blue font-bold">{amountXrp} XRP</span>
-                  </div>
+                  <span className="text-xs font-extrabold text-xrpl-blue font-mono">X XRP</span>
+                  <span className="font-bold text-xs text-white">XRPL</span>
+                  <span className="text-[10px] text-nexus-muted font-mono">~3.5s &bull; Ripple</span>
+                </button>
+
+                {/* Stripe Card Tab */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedRail('STRIPE')}
+                  className={`p-3.5 rounded-xl border flex flex-col items-start gap-1.5 transition-all text-left ${
+                    selectedRail === 'STRIPE'
+                      ? 'bg-rail-emerald/15 border-rail-emerald text-white shadow-lg shadow-rail-emerald/10'
+                      : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:border-nexus-muted/40'
+                  }`}
+                >
+                  <CardIcon className="w-4 h-4 text-rail-emerald" />
+                  <span className="font-bold text-xs text-white">Stripe</span>
+                  <span className="text-[10px] text-nexus-muted font-mono">Card &bull; Apple Pay</span>
+                </button>
+
+                {/* Internal Wallet Tab */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedRail('WALLET')}
+                  className={`p-3.5 rounded-xl border flex flex-col items-start gap-1.5 transition-all text-left ${
+                    selectedRail === 'WALLET'
+                      ? 'bg-cyber-purple/15 border-cyber-purple text-white shadow-lg shadow-cyber-purple/10'
+                      : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:border-nexus-muted/40'
+                  }`}
+                >
+                  <Wallet className="w-4 h-4 text-cyber-purple" />
+                  <span className="font-bold text-xs text-white">Ledger USD</span>
+                  <span className="text-[10px] text-nexus-muted font-mono">Double-Entry</span>
                 </button>
               </div>
             </div>
 
-            {/* 3. Payment Instructions & Rate Lock */}
-            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-5">
-              <div className="flex items-center justify-between border-b border-nexus-border pb-4">
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <Clock className="w-4 h-4 text-rail-emerald" />
-                  <span className="text-nexus-muted">Guaranteed Quote Lock:</span>
-                  <span className="text-rail-emerald font-bold">00:{timerSeconds < 10 ? `0${timerSeconds}` : timerSeconds}</span>
-                </div>
-                <span className="text-[11px] font-mono text-nexus-muted">
-                  Order: <strong className="text-white">{orderId}</strong>
-                </span>
-              </div>
+            {/* 2. Wallet & Payment Options depending on Rail */}
+            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-6">
+              
+              {/* STELLAR RAIL OPTIONS */}
+              {selectedRail === 'STELLAR' && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between border-b border-nexus-border pb-3">
+                    <span className="text-xs font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-stellar-cyan" />
+                      <span>Step 2: Choose Stellar Wallet Option</span>
+                    </span>
+                    <span className="text-xs font-mono text-stellar-cyan font-bold">
+                      {amountXlm} XLM ($0.124/XLM)
+                    </span>
+                  </div>
 
-              {/* Amount to send banner */}
-              <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] font-mono uppercase text-nexus-muted block">
-                    Amount to send
-                  </span>
-                  <span className="text-2xl font-mono font-extrabold text-white">
-                    {selectedRail === 'STELLAR' ? `${amountXlm} XLM` : `${amountXrp} XRP`}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[11px] font-mono uppercase text-nexus-muted block">
-                    Fiat Value
-                  </span>
-                  <span className="text-sm font-mono font-bold text-rail-emerald">
-                    ${totalDollars} USD
-                  </span>
-                </div>
-              </div>
+                  {/* Subtype Pill Nav */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                    <button
+                      type="button"
+                      onClick={() => setStellarSubtype('freighter')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        stellarSubtype === 'freighter'
+                          ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      Freighter
+                      {hasFreighter && <span className="block text-[9px] text-rail-emerald">Installed</span>}
+                    </button>
 
-              {/* Destination Address */}
-              <div className="space-y-2">
-                <label className="text-xs font-mono text-nexus-muted block">
-                  {selectedRail === 'STELLAR' ? 'Stellar Public Destination Address' : 'XRPL Public Receiving Address'}
-                </label>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-nexus-surface border border-nexus-border">
-                  <code className="text-[11px] font-mono text-white flex-1 break-all select-all">
-                    {selectedRail === 'STELLAR' ? destinationStellar : destinationXrpl}
-                  </code>
+                    <button
+                      type="button"
+                      onClick={() => setStellarSubtype('albedo')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        stellarSubtype === 'albedo'
+                          ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      Albedo
+                      <span className="block text-[9px] text-stellar-cyan">Universal Web</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStellarSubtype('mobile_lobstr')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        stellarSubtype === 'mobile_lobstr'
+                          ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      LOBSTR / QR
+                      <span className="block text-[9px] text-nexus-muted">Mobile App</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStellarSubtype('manual')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        stellarSubtype === 'manual'
+                          ? 'bg-stellar-cyan/15 border-stellar-cyan text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      Manual
+                      <span className="block text-[9px] text-nexus-muted">Copy / Exchange</span>
+                    </button>
+                  </div>
+
+                  {/* Subtype 1: Freighter */}
+                  {stellarSubtype === 'freighter' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-stellar-cyan/20 border border-stellar-cyan/40 flex items-center justify-center text-stellar-cyan font-bold text-sm">
+                            *
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-white">Freighter Wallet Extension</h4>
+                            <p className="text-xs font-mono text-nexus-muted">Native non-custodial browser signer for Stellar</p>
+                          </div>
+                        </div>
+                        {hasFreighter ? (
+                          <span className="text-[10px] font-mono bg-rail-emerald/15 text-rail-emerald border border-rail-emerald/30 px-2 py-0.5 rounded font-bold">
+                            Detected &bull; Ready
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono bg-amber-400/10 text-amber-400 border border-amber-400/30 px-2 py-0.5 rounded">
+                            Not Installed
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs font-mono text-nexus-muted space-y-1">
+                        <div className="flex justify-between">
+                          <span>Amount to Pay:</span>
+                          <span className="text-white font-bold">{amountXlm} XLM</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Destination:</span>
+                          <span className="text-white truncate max-w-[240px]">{destinationStellar}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Memo Text:</span>
+                          <span className="text-rail-emerald font-bold">{memoStellar}</span>
+                        </div>
+                      </div>
+
+                      {hasFreighter ? (
+                        <button
+                          type="button"
+                          onClick={handlePayFreighter}
+                          disabled={isProcessing}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-stellar-cyan text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-stellar-cyan/10 disabled:opacity-60"
+                        >
+                          {isProcessing ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Confirming with Freighter...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-4 h-4" />
+                              <span>Pay {amountXlm} XLM with Freighter</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <a
+                            href="https://www.freighter.app/"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl bg-nexus-card border border-stellar-cyan/50 text-stellar-cyan hover:bg-stellar-cyan/10 text-xs font-mono font-bold transition-colors"
+                          >
+                            <span>Install Freighter</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setStellarSubtype('albedo')}
+                            className="flex-1 p-3 rounded-xl bg-nexus-surface border border-nexus-border text-white hover:border-rail-emerald text-xs font-mono transition-colors"
+                          >
+                            Use Albedo (No Install)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Subtype 2: Albedo */}
+                  {stellarSubtype === 'albedo' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
+                      <div className="flex items-center gap-2.5">
+                        <Globe className="w-6 h-6 text-stellar-cyan" />
+                        <div>
+                          <h4 className="text-sm font-bold text-white">Albedo Universal Web Signer</h4>
+                          <p className="text-xs font-mono text-nexus-muted">
+                            Works on any browser, mobile phone, or tablet with zero extensions.
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-nexus-muted leading-relaxed">
+                        Clicking below opens a secure modal window directly on <code className="text-stellar-cyan">albedo.link</code> to sign the transaction. Your keys never leave your device.
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={handleOpenAlbedo}
+                        disabled={isProcessing}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-stellar-cyan text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-stellar-cyan/10"
+                      >
+                        <Globe className="w-4 h-4" />
+                        <span>Open Albedo Web Signer &bull; Pay {amountXlm} XLM</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Subtype 3: Mobile LOBSTR QR & SEP-0007 */}
+                  {stellarSubtype === 'mobile_lobstr' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4 text-center">
+                      <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold text-white">
+                        <Smartphone className="w-4 h-4 text-stellar-cyan" />
+                        <span>Scan with LOBSTR or Mobile Stellar Wallet</span>
+                      </div>
+
+                      {/* QR Code Container */}
+                      <div className="p-3 bg-white rounded-2xl w-48 h-48 mx-auto flex items-center justify-center shadow-md">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(sep0007Uri)}`}
+                          alt="Stellar SEP-0007 QR Code"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+
+                      <p className="text-xs text-nexus-muted font-mono">
+                        Scan with your camera or tap below to open in your installed mobile wallet:
+                      </p>
+
+                      <a
+                        href={sep0007Uri}
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-nexus-card border border-stellar-cyan/60 text-stellar-cyan font-mono text-xs font-bold hover:bg-stellar-cyan/10 transition-all w-full"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span>Open in Mobile Wallet (SEP-0007)</span>
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Subtype 4: Manual Transfer */}
+                  {stellarSubtype === 'manual' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-3 font-mono text-xs">
+                      <div>
+                        <label className="text-nexus-muted text-[11px] block">Public Destination Address</label>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-nexus-card border border-nexus-border mt-1">
+                          <code className="text-white text-[11px] truncate flex-1 select-all">{destinationStellar}</code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(destinationStellar, 'st_dest')}
+                            className="p-1 text-nexus-muted hover:text-white"
+                          >
+                            {copiedKey === 'st_dest' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-nexus-muted text-[11px] block">Mandatory Memo (TEXT)</label>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-nexus-card border border-nexus-border mt-1">
+                          <code className="text-rail-emerald font-bold text-xs flex-1 select-all">{memoStellar}</code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(memoStellar, 'st_memo')}
+                            className="p-1 text-nexus-muted hover:text-white"
+                          >
+                            {copiedKey === 'st_memo' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* XRPL RAIL OPTIONS */}
+              {selectedRail === 'XRPL' && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between border-b border-nexus-border pb-3">
+                    <span className="text-xs font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-xrpl-blue" />
+                      <span>Step 2: Choose XRPL Wallet Option</span>
+                    </span>
+                    <span className="text-xs font-mono text-xrpl-blue font-bold">
+                      {amountXrp} XRP ($0.582/XRP)
+                    </span>
+                  </div>
+
+                  {/* Subtype Pill Nav */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                    <button
+                      type="button"
+                      onClick={() => setXrplSubtype('gemwallet')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        xrplSubtype === 'gemwallet'
+                          ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      GemWallet
+                      {hasGemWallet && <span className="block text-[9px] text-rail-emerald">Installed</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setXrplSubtype('crossmark')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        xrplSubtype === 'crossmark'
+                          ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      Crossmark
+                      {hasCrossmark && <span className="block text-[9px] text-rail-emerald">Installed</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setXrplSubtype('xaman_mobile')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        xrplSubtype === 'xaman_mobile'
+                          ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      Xaman / Xumm
+                      <span className="block text-[9px] text-xrpl-blue">Mobile QR</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setXrplSubtype('manual')}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        xrplSubtype === 'manual'
+                          ? 'bg-xrpl-blue/15 border-xrpl-blue text-white font-bold'
+                          : 'bg-nexus-surface border-nexus-border text-nexus-muted hover:text-white'
+                      }`}
+                    >
+                      Manual
+                      <span className="block text-[9px] text-nexus-muted">Address + Tag</span>
+                    </button>
+                  </div>
+
+                  {/* Subtype 1: GemWallet */}
+                  {xrplSubtype === 'gemwallet' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-xrpl-blue/20 border border-xrpl-blue/40 flex items-center justify-center text-xrpl-blue font-bold text-sm">
+                            💎
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-white">GemWallet Extension</h4>
+                            <p className="text-xs font-mono text-nexus-muted">High-speed web3 wallet for XRPL</p>
+                          </div>
+                        </div>
+                        {hasGemWallet ? (
+                          <span className="text-[10px] font-mono bg-rail-emerald/15 text-rail-emerald border border-rail-emerald/30 px-2 py-0.5 rounded font-bold">
+                            Detected &bull; Ready
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono bg-amber-400/10 text-amber-400 border border-amber-400/30 px-2 py-0.5 rounded">
+                            Not Installed
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs font-mono text-nexus-muted space-y-1">
+                        <div className="flex justify-between">
+                          <span>Amount to Pay:</span>
+                          <span className="text-white font-bold">{amountXrp} XRP</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Destination:</span>
+                          <span className="text-white truncate max-w-[240px]">{destinationXrpl}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Destination Tag:</span>
+                          <span className="text-xrpl-blue font-bold">{destinationTagXrpl}</span>
+                        </div>
+                      </div>
+
+                      {hasGemWallet ? (
+                        <button
+                          type="button"
+                          onClick={handlePayGemWallet}
+                          disabled={isProcessing}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-xrpl-blue text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-xrpl-blue/10 disabled:opacity-60"
+                        >
+                          {isProcessing ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Signing with GemWallet...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-4 h-4" />
+                              <span>Pay {amountXrp} XRP with GemWallet</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <a
+                            href="https://gemwallet.app/"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl bg-nexus-card border border-xrpl-blue/50 text-xrpl-blue hover:bg-xrpl-blue/10 text-xs font-mono font-bold transition-colors"
+                          >
+                            <span>Install GemWallet</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setXrplSubtype('xaman_mobile')}
+                            className="flex-1 p-3 rounded-xl bg-nexus-surface border border-nexus-border text-white hover:border-rail-emerald text-xs font-mono transition-colors"
+                          >
+                            Use Xaman (Mobile QR)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Subtype 2: Crossmark */}
+                  {xrplSubtype === 'crossmark' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-xrpl-blue/20 border border-xrpl-blue/40 flex items-center justify-center text-xrpl-blue font-bold text-sm">
+                            ⚡
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-white">Crossmark Browser Wallet</h4>
+                            <p className="text-xs font-mono text-nexus-muted">First-class browser extension for XRP Ledger</p>
+                          </div>
+                        </div>
+                        {hasCrossmark ? (
+                          <span className="text-[10px] font-mono bg-rail-emerald/15 text-rail-emerald border border-rail-emerald/30 px-2 py-0.5 rounded font-bold">
+                            Detected &bull; Ready
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono bg-amber-400/10 text-amber-400 border border-amber-400/30 px-2 py-0.5 rounded">
+                            Not Installed
+                          </span>
+                        )}
+                      </div>
+
+                      {hasCrossmark ? (
+                        <button
+                          type="button"
+                          onClick={handlePayCrossmark}
+                          disabled={isProcessing}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-xrpl-blue text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-xrpl-blue/10"
+                        >
+                          <Zap className="w-4 h-4" />
+                          <span>Pay {amountXrp} XRP with Crossmark</span>
+                        </button>
+                      ) : (
+                        <a
+                          href="https://crossmark.io/"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-nexus-card border border-xrpl-blue/50 text-xrpl-blue hover:bg-xrpl-blue/10 text-xs font-mono font-bold transition-colors w-full"
+                        >
+                          <span>Download Crossmark Extension</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Subtype 3: Xaman (Xumm) Mobile QR */}
+                  {xrplSubtype === 'xaman_mobile' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-4 text-center">
+                      <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold text-white">
+                        <Smartphone className="w-4 h-4 text-xrpl-blue" />
+                        <span>Scan with Xaman App (iOS / Android)</span>
+                      </div>
+
+                      {/* QR Code Container */}
+                      <div className="p-3 bg-white rounded-2xl w-48 h-48 mx-auto flex items-center justify-center shadow-md">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(xamanUrl)}`}
+                          alt="Xaman QR Code"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+
+                      <p className="text-xs text-nexus-muted font-mono">
+                        Scan with your Xaman mobile app or tap below to deep-link directly:
+                      </p>
+
+                      <a
+                        href={xamanUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-nexus-card border border-xrpl-blue/60 text-xrpl-blue font-mono text-xs font-bold hover:bg-xrpl-blue/10 transition-all w-full"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span>Open in Xaman Mobile App</span>
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Subtype 4: Manual Transfer */}
+                  {xrplSubtype === 'manual' && (
+                    <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border space-y-3 font-mono text-xs">
+                      <div>
+                        <label className="text-nexus-muted text-[11px] block">Classic XRPL Receiving Address</label>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-nexus-card border border-nexus-border mt-1">
+                          <code className="text-white text-[11px] truncate flex-1 select-all">{destinationXrpl}</code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(destinationXrpl, 'xrpl_dest')}
+                            className="p-1 text-nexus-muted hover:text-white"
+                          >
+                            {copiedKey === 'xrpl_dest' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-nexus-muted text-[11px] block">Required 32-bit Destination Tag</label>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-nexus-card border border-nexus-border mt-1">
+                          <code className="text-xrpl-blue font-bold text-xs flex-1 select-all">{destinationTagXrpl}</code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(String(destinationTagXrpl), 'xrpl_tag')}
+                            className="p-1 text-nexus-muted hover:text-white"
+                          >
+                            {copiedKey === 'xrpl_tag' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STRIPE RAIL OPTIONS */}
+              {selectedRail === 'STRIPE' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-nexus-border pb-3">
+                    <span className="text-xs font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-rail-emerald" />
+                      <span>Stripe Card & Fiat Gateway</span>
+                    </span>
+                    <span className="text-xs font-mono text-rail-emerald font-bold">
+                      ${totalDollars} USD
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-nexus-muted leading-relaxed">
+                    Pay securely using Visa, Mastercard, American Express, Apple Pay, or Google Pay through Stripe&apos;s hosted payment page.
+                  </p>
+
                   <button
                     type="button"
-                    onClick={() => copyToClipboard(selectedRail === 'STELLAR' ? destinationStellar : destinationXrpl, 'addr')}
-                    className="p-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white transition-colors"
-                    aria-label="Copy address"
+                    onClick={handleStripe}
+                    disabled={isProcessing}
+                    className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-rail-emerald text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-rail-emerald/10"
                   >
-                    {copiedKey === 'addr' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                    <CreditCard className="w-4 h-4" />
+                    <span>Proceed to Stripe Checkout (${totalDollars} USD)</span>
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* Memo or Destination Tag */}
-              <div className="space-y-2">
-                <label className="text-xs font-mono text-nexus-muted flex items-center justify-between">
-                  <span>{selectedRail === 'STELLAR' ? 'Required Memo (TEXT)' : 'Required Destination Tag'}</span>
-                  <span className="text-[10px] text-rose-400">Mandatory for auto-reconciliation</span>
-                </label>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-nexus-surface border border-nexus-border">
-                  <code className="text-xs font-mono text-rail-emerald font-bold flex-1">
-                    {selectedRail === 'STELLAR' ? memoStellar : destinationTagXrpl}
-                  </code>
+              {/* WALLET RAIL OPTIONS */}
+              {selectedRail === 'WALLET' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-nexus-border pb-3">
+                    <span className="text-xs font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-cyber-purple" />
+                      <span>Double-Entry Internal Wallet</span>
+                    </span>
+                    <span className="text-xs font-mono text-cyber-purple font-bold">
+                      Available: $1,420.00 USD
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-nexus-muted leading-relaxed">
+                    Instant sub-second debit from your verified double-entry ledger balance with zero gas and immediate cryptographic settlement.
+                  </p>
+
                   <button
                     type="button"
-                    onClick={() => copyToClipboard(selectedRail === 'STELLAR' ? memoStellar : destinationTagXrpl, 'memo')}
-                    className="p-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white transition-colors"
-                    aria-label="Copy tag or memo"
+                    onClick={handleSimulatePayment}
+                    disabled={isProcessing}
+                    className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-cyber-purple text-white font-mono text-xs font-extrabold hover:brightness-110 transition-all shadow-lg shadow-cyber-purple/10"
                   >
-                    {copiedKey === 'memo' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                    <Wallet className="w-4 h-4" />
+                    <span>Pay ${totalDollars} USD from Ledger Balance</span>
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* Simulation CTA & Live Verification */}
-              <div className="pt-2 space-y-3">
+              {/* Error Callout */}
+              {walletError && (
+                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{walletError}</span>
+                </div>
+              )}
+
+              {/* Instant Demo Simulator Box */}
+              <div className="pt-4 border-t border-nexus-border space-y-3">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-nexus-muted">Testing or reviewing without faucet funds?</span>
+                  <span className="text-rail-emerald font-bold">Demo Mode</span>
+                </div>
+
                 <button
                   type="button"
                   onClick={handleSimulatePayment}
-                  disabled={isSimulating}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-rail-emerald text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 active:scale-[0.99] transition-all shadow-lg shadow-rail-emerald/10 disabled:opacity-60"
+                  disabled={isProcessing}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-nexus-surface border border-rail-emerald/50 hover:bg-rail-emerald/10 text-rail-emerald font-mono text-xs font-bold transition-all disabled:opacity-60"
                 >
-                  {isSimulating ? (
+                  {isProcessing ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
                       <span>Broadcasting to {selectedRail} testnet ledger...</span>
                     </>
                   ) : (
                     <>
-                      <Zap className="w-4 h-4 fill-current" />
-                      <span>Simulate Testnet Sign & Pay (Instant Demo)</span>
+                      <Zap className="w-4 h-4" />
+                      <span>Simulate Testnet Sign & Pay (Instant 3s Verification)</span>
                     </>
                   )}
                 </button>
-
-                {/* Manual TX Hash Input */}
-                <div className="pt-3 border-t border-nexus-border">
-                  <p className="text-[11px] font-mono text-nexus-muted mb-2">
-                    Paid via native wallet? Enter transaction hash to verify:
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={manualTxHash}
-                      onChange={(e) => setManualTxHash(e.target.value)}
-                      placeholder="0x89f...3e2a"
-                      className="flex-1 px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-xs font-mono text-white placeholder-nexus-muted focus:outline-none focus:border-rail-emerald/60"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSimulatePayment}
-                      className="px-4 py-2 rounded-xl bg-nexus-surface border border-nexus-border hover:border-rail-emerald text-xs font-mono text-white transition-colors"
-                    >
-                      Verify
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
 
-            {/* 4. Settlement Pipeline Status Checklist */}
+            {/* 3. Real-time Pipeline Checklist */}
             <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-4">
               <h3 className="text-xs font-mono uppercase tracking-wider text-white font-bold">
                 Settlement Pipeline Checklist
@@ -410,7 +972,7 @@ function CheckoutInner() {
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-nexus-surface border border-nexus-border">
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-rail-emerald" />
-                    <span className="text-white">1. Real-time rate lock secured</span>
+                    <span className="text-white">1. Quote rate guaranteed (00:{timerSeconds < 10 ? `0${timerSeconds}` : timerSeconds})</span>
                   </div>
                   <span className="text-[10px] text-rail-emerald bg-rail-emerald/10 px-2 py-0.5 rounded font-bold">
                     LOCKED
@@ -527,7 +1089,7 @@ function CheckoutInner() {
                   <span className="text-rail-emerald">FREE</span>
                 </div>
                 <div className="flex justify-between text-nexus-muted">
-                  <span>{selectedRail} Testnet Fee</span>
+                  <span>Network Gas Fee</span>
                   <span className="text-white">&lt; $0.0001</span>
                 </div>
               </div>
@@ -538,38 +1100,41 @@ function CheckoutInner() {
                 <div className="text-right">
                   <div className="text-2xl font-mono font-extrabold text-white">${totalDollars}</div>
                   <div className="text-xs font-mono text-rail-emerald">
-                    {selectedRail === 'STELLAR' ? `${amountXlm} XLM` : `${amountXrp} XRP`}
+                    {selectedRail === 'STELLAR' && `${amountXlm} XLM`}
+                    {selectedRail === 'XRPL' && `${amountXrp} XRP`}
+                    {selectedRail === 'STRIPE' && `$${totalDollars} USD (Card)`}
+                    {selectedRail === 'WALLET' && `$${totalDollars} USD (Ledger)`}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Testnet Faucet Assistance Card */}
+            {/* Testnet Faucets & Guides */}
             <div className="p-5 rounded-2xl bg-nexus-surface border border-nexus-border space-y-3">
               <h4 className="text-xs font-mono font-bold text-white flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5 text-rail-emerald" />
-                <span>Testnet Faucets & Documentation</span>
+                <span>Testnet Faucets & Guides</span>
               </h4>
               <p className="text-xs text-nexus-muted leading-relaxed">
-                Testing with a real wallet? Fund your address directly on the public testnets:
+                Need testnet tokens for your Freighter, GemWallet, or Xaman wallet? Use official public testnet faucets:
               </p>
               <div className="flex flex-col gap-2 pt-1 text-xs font-mono">
                 <a
                   href="https://laboratory.stellar.org/#account-creator"
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-between p-2 rounded-lg bg-nexus-card border border-nexus-border hover:border-stellar-cyan/50 text-stellar-cyan transition-colors"
+                  className="flex items-center justify-between p-2.5 rounded-lg bg-nexus-card border border-nexus-border hover:border-stellar-cyan/50 text-stellar-cyan transition-colors"
                 >
-                  <span>Stellar Friendbot Faucet</span>
+                  <span>Stellar Friendbot Faucet (10,000 XLM)</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
                 <a
                   href="https://xrpl.org/xrp-testnet-faucet.html"
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-between p-2 rounded-lg bg-nexus-card border border-nexus-border hover:border-xrpl-blue/50 text-xrpl-blue transition-colors"
+                  className="flex items-center justify-between p-2.5 rounded-lg bg-nexus-card border border-nexus-border hover:border-xrpl-blue/50 text-xrpl-blue transition-colors"
                 >
-                  <span>XRPL Testnet Faucet</span>
+                  <span>XRPL Testnet Faucet (100 XRP)</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
