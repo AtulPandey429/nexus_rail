@@ -51,7 +51,11 @@ app.use('/api/v1/webhooks', webhooksRouter);
 app.use('/api/v1/rwa', rwaGoldRouter);
 app.use('/api/v1/rwa-modular', rwaModularRouter);
 
-// Health Check Endpoint
+// Health Check Endpoints
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', service: 'nexusrail-api', uptimeSeconds: Math.floor((Date.now() - startTime) / 1000) });
+});
+
 app.get('/api/v1/health', (_req: Request, res: Response) => {
   const payload: HealthResponse = {
     status: 'ok',

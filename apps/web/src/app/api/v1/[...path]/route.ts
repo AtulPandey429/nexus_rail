@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_SERVER_URL = process.env.API_SERVER_URL;
+const API_SERVER_URL = process.env.API_SERVER_URL || process.env.NEXT_PUBLIC_API_SERVER_URL || 'https://nexus-rail.onrender.com';
 
 async function proxy(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   if (!API_SERVER_URL) {
