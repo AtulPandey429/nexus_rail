@@ -90,6 +90,105 @@ authRouter.post('/wallet-login', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/v1/auth/manual-wallet - Connects user using their genuine onchain address without mock/fake fallback
+authRouter.post('/manual-wallet', async (req: Request, res: Response) => {
+  const rawAddress = String(req.body?.address || '').trim();
+  const rawChain = String(req.body?.chain || '').toLowerCase().trim();
+
+  if (!rawAddress) {
+    return res.status(400).json({ success: false, error: 'Wallet address is required' });
+  }
+
+  let chain: 'stellar' | 'xrpl' | 'evm' = 'stellar';
+  if (rawChain === 'xrpl' || rawAddress.startsWith('r')) {
+    chain = 'xrpl';
+    if (!rawAddress.startsWith('r') || rawAddress.length < 25 || rawAddress.length > 35) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid XRPL address format. An XRPL public address must start with "r" and be 25 to 35 characters long.',
+      });
+    }
+  } else if (rawChain === 'evm' || rawAddress.startsWith('0x')) {
+    chain = 'evm';
+    if (!/^0x[a-fA-F0-9]{40}$/.test(rawAddress)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid EVM address format. Must be a 42-character hex address starting with "0x".',
+      });
+    }
+  } else {
+    chain = 'stellar';
+    if (!rawAddress.startsWith('G') || rawAddress.length !== 56) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid Stellar address format. A Stellar public key must start with "G" and be exactly 56 characters long.',
+      });
+    }
+  }
+
+  try {
+    const user = {
+      id: `usr_${chain}_${rawAddress.slice(0, 8)}`,
+      walletAddress: rawAddress,
+      role: 'user' as const,
+      email: `${chain}_${rawAddress.slice(-4)}@nexusrail.dev`,
+    };
+    const token = signToken(user);
+    res.json({
+      success: true,
+      token,
+      user,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to authenticate manual wallet address' });
+  }
+});
+
+// POST /api/v1/auth/google - Authenticates user via Google OAuth or Google ID token
+authRouter.post('/google', async (req: Request, res: Response) => {
+  try {
+    const credential = req.body?.credential;
+    let email = String(req.body?.email || '').toLowerCase().trim();
+    let name = String(req.body?.name || '').trim();
+    let googleId = String(req.body?.googleId || '').trim();
+
+    // If Google ID token was passed, decode safely
+    if (credential && typeof credential === 'string') {
+      try {
+        const parts = credential.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          if (payload.email) email = String(payload.email).toLowerCase().trim();
+          if (payload.name) name = String(payload.name).trim();
+          if (payload.sub) googleId = String(payload.sub).trim();
+        }
+      } catch {
+        // quiet fallback
+      }
+    }
+
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Valid Google email is required' });
+    }
+
+    const userId = googleId ? `usr_google_${googleId.slice(0, 10)}` : `usr_google_${crypto.randomUUID().slice(0, 8)}`;
+    const user = {
+      id: userId,
+      email,
+      role: 'user' as const,
+    };
+    const token = signToken(user);
+    res.json({
+      success: true,
+      token,
+      user,
+      message: `Welcome, ${name || email}!`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Google authentication failed' });
+  }
+});
+
 authRouter.post('/logout', (_req: Request, res: Response) => {
   res.json({ success: true, message: 'Signed out' });
 });

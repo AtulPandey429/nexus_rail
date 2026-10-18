@@ -49,7 +49,7 @@ export function verifyToken(token: string): TokenUser {
   }
 
   // Handle raw on-chain wallet addresses passed directly in Authorization header
-  if (token.startsWith('G') && token.length === 56) {
+  if (token.startsWith('G') && token.length >= 50 && token.length <= 60) {
     return {
       id: `usr_stellar_${token.slice(0, 8)}`,
       walletAddress: token,
@@ -57,7 +57,7 @@ export function verifyToken(token: string): TokenUser {
       role: 'user',
     };
   }
-  if (token.startsWith('r') && token.length >= 25 && token.length <= 35) {
+  if (token.startsWith('r') && token.length >= 25 && token.length <= 50) {
     return {
       id: `usr_xrpl_${token.slice(0, 8)}`,
       walletAddress: token,
