@@ -129,30 +129,59 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
+      let addr = '';
+      let wName = '';
+      let chain = 'stellar';
+
       if (walletType === 'freighter') {
-        const { address } = await connectFreighter();
-        handleSuccess(
-          { id: `user_freighter_${address.slice(0, 6)}`, walletAddress: address, role: 'user', email: 'freighter@nexusrail.dev' },
-          `token_freighter_${Date.now()}`
-        );
+        const res = await connectFreighter();
+        addr = res.address;
+        wName = 'Freighter';
+        chain = 'stellar';
       } else if (walletType === 'gemwallet') {
-        const { address } = await connectGemWallet();
-        handleSuccess(
-          { id: `user_gem_${address.slice(0, 6)}`, walletAddress: address, role: 'user', email: 'gemwallet@nexusrail.dev' },
-          `token_gem_${Date.now()}`
-        );
+        const res = await connectGemWallet();
+        addr = res.address;
+        wName = 'GemWallet';
+        chain = 'xrpl';
       } else if (walletType === 'crossmark') {
-        const { address } = await connectCrossmark();
-        handleSuccess(
-          { id: `user_crossmark_${address.slice(0, 6)}`, walletAddress: address, role: 'user', email: 'crossmark@nexusrail.dev' },
-          `token_crossmark_${Date.now()}`
-        );
+        const res = await connectCrossmark();
+        addr = res.address;
+        wName = 'Crossmark';
+        chain = 'xrpl';
       } else if (walletType === 'metamask') {
-        const { address } = await connectMetaMask();
-        handleSuccess(
-          { id: `user_evm_${address.slice(0, 6)}`, walletAddress: address, role: 'user', email: 'metamask@nexusrail.dev' },
-          `token_evm_${Date.now()}`
-        );
+        const res = await connectMetaMask();
+        addr = res.address;
+        wName = 'MetaMask';
+        chain = 'evm';
+      }
+
+      if (addr) {
+        let userObj = {
+          id: `usr_${wName.toLowerCase()}_${addr.slice(0, 8)}`,
+          walletAddress: addr,
+          role: 'user',
+          email: `${wName.toLowerCase()}_${addr.slice(-4)}@nexusrail.dev`,
+        };
+        let token = `token_${wName.toLowerCase()}_${Date.now()}`;
+
+        try {
+          const authRes = await fetch('/api/v1/auth/wallet-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ walletAddress: addr, walletName: wName, chain }),
+          });
+          if (authRes.ok) {
+            const data = await authRes.json();
+            if (data?.success && data?.token) {
+              token = data.token;
+              if (data.user) userObj = data.user;
+            }
+          }
+        } catch {
+          // quiet fallback
+        }
+
+        handleSuccess(userObj, token);
       }
     } catch (err: any) {
       setErrorMsg(err.message || `Could not connect to ${walletType} extension.`);

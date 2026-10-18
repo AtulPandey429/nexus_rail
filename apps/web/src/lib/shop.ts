@@ -268,22 +268,82 @@ function setLocalCart(items: { sku: string; qty: number }[]) {
   notifyCart();
 }
 
-export async function fetchCatalog(): Promise<CatalogProduct[]> {
+const CATALOG_STORAGE_KEY = 'nexus_products_catalog_cache_v1';
+const CATALOG_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes cache window
+
+export interface CachedCatalogData {
+  products: CatalogItem[];
+  expiresAt: number;
+  cachedAt: string;
+  source: 'api' | 'cache' | 'fallback';
+}
+
+export function getCachedCatalog(): CachedCatalogData | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(CATALOG_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: CachedCatalogData = JSON.parse(raw);
+    if (parsed.expiresAt && parsed.expiresAt > Date.now() && Array.isArray(parsed.products) && parsed.products.length > 0) {
+      return { ...parsed, source: 'cache' };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export async function fetchCatalog(forceRefresh = false): Promise<CatalogItem[]> {
+  if (!forceRefresh) {
+    const cached = getCachedCatalog();
+    if (cached) return cached.products;
+  }
+
   try {
     const res = await fetch('/api/v1/products', { cache: 'no-store' });
     const payload = await readJson(res);
-    if (res.ok && payload?.success === true) {
-      const parsed = parseCatalog(payload);
-      if (parsed.length > 0) {
-        // Merge with FIGMA_CATALOG so all 6 figma products are always accessible
-        const knownSkus = new Set(parsed.map(p => p.sku));
-        const missing = FIGMA_CATALOG.filter(p => !knownSkus.has(p.sku));
-        return [...parsed, ...missing];
+    if (res.ok && payload?.success === true && Array.isArray(payload.data)) {
+      const items: CatalogItem[] = payload.data.map((doc: any) => ({
+        sku: String(doc.sku),
+        title: String(doc.title),
+        description: String(doc.description || ''),
+        priceCents: Number(doc.price_cents || doc.priceCents || 0),
+        category: (doc.category as any) || 'hardware',
+        rail: (doc.rail as any) || (doc.sku.includes('XRP') || doc.sku === 'RELAY-MAT' || doc.sku === 'PROD-LEDGER-COLD' ? 'xrpl' : doc.sku.includes('XLM') || doc.sku === 'RAIL-ONE' || doc.sku === 'NODE-STAND' || doc.sku === 'RAIL-CABLES' || doc.sku === 'PROD-AGENT-PRO' ? 'stellar' : 'multi'),
+        tag: String(doc.tag || (doc.category === 'hardware' ? 'Hardware' : 'Official')),
+        rating: Number(doc.rating || 4.9),
+        upvotes: Number(doc.upvotes_count || doc.upvotes || 100),
+      }));
+
+      if (items.length > 0) {
+        if (typeof window !== 'undefined') {
+          const cachePayload: CachedCatalogData = {
+            products: items,
+            expiresAt: Date.now() + CATALOG_CACHE_TTL_MS,
+            cachedAt: new Date().toISOString(),
+            source: 'api',
+          };
+          localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(cachePayload));
+          window.dispatchEvent(new CustomEvent('nexus-catalog-updated', { detail: cachePayload }));
+        }
+        return items;
       }
     }
-  } catch {
-    // network or api error, fallback smoothly
+  } catch (err) {
+    console.warn('⚠️ Could not fetch product catalog from API, falling back:', err);
   }
+
+  // Graceful fallback to stale cache or FIGMA_CATALOG if API is offline
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(CATALOG_STORAGE_KEY);
+      if (raw) {
+        const stale: CachedCatalogData = JSON.parse(raw);
+        if (Array.isArray(stale.products) && stale.products.length > 0) return stale.products;
+      }
+    } catch {}
+  }
+
   return FIGMA_CATALOG;
 }
 

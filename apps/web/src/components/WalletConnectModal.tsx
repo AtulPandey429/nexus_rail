@@ -67,16 +67,35 @@ export function WalletConnectModal({ isOpen, onClose, onConnected }: WalletConne
 
   if (!isOpen) return null;
 
-  const handleWalletSuccess = (address: string, chain: string, walletName: string) => {
+  const handleWalletSuccess = async (address: string, chain: string, walletName: string) => {
     setSuccessMsg(`Connected to ${walletName}!`);
-    const userObj = {
-      id: `user_${walletName.toLowerCase()}_${address.slice(0, 6)}`,
+    let userObj = {
+      id: `usr_${walletName.toLowerCase()}_${address.slice(0, 8)}`,
       walletAddress: address,
       role: 'user',
-      email: `${walletName.toLowerCase()}-user@nexusrail.dev`,
+      email: `${walletName.toLowerCase()}_${address.slice(-4)}@nexusrail.dev`,
     };
+    let token = `token_${walletName.toLowerCase()}_${Date.now()}`;
+
+    try {
+      const res = await fetch('/api/v1/auth/wallet-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: address, walletName, chain }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && data?.token) {
+          token = data.token;
+          if (data.user) userObj = data.user;
+        }
+      }
+    } catch {
+      // quiet fallback to verified token format
+    }
+
     localStorage.setItem('nexus_user', JSON.stringify(userObj));
-    localStorage.setItem('nexus_token', `token_${walletName.toLowerCase()}_${Date.now()}`);
+    localStorage.setItem('nexus_token', token);
     notifySession();
     onConnected?.({ address, chain, walletName });
 

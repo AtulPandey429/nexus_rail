@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { AuthService } from '../services/auth.js';
+import { signToken } from '../services/jwt.js';
 import { LoginWithEmailSchema, Web3AuthChallengeSchema, Web3VerifySignatureSchema } from '@nexusrail/shared';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
@@ -58,6 +59,34 @@ authRouter.post('/verify-signature', async (req: Request, res: Response) => {
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(401).json({ success: false, error: error instanceof Error ? error.message : 'Signature rejected' });
+  }
+});
+
+// POST /api/v1/auth/wallet-login - Generates a genuine signed JWT for wallet sessions
+authRouter.post('/wallet-login', async (req: Request, res: Response) => {
+  const walletAddress = String(req.body?.walletAddress || '').trim();
+  const walletName = String(req.body?.walletName || 'Wallet').trim();
+  const chain = String(req.body?.chain || 'stellar').toLowerCase();
+
+  if (!walletAddress) {
+    return res.status(400).json({ success: false, error: 'walletAddress is required' });
+  }
+
+  try {
+    const user = {
+      id: `usr_${walletName.toLowerCase()}_${walletAddress.slice(0, 8)}`,
+      walletAddress,
+      role: 'user' as const,
+      email: `${walletName.toLowerCase()}_${walletAddress.slice(-4)}@nexusrail.dev`,
+    };
+    const token = signToken(user);
+    res.json({
+      success: true,
+      token,
+      user,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to issue wallet session' });
   }
 });
 

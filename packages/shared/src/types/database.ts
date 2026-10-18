@@ -24,6 +24,9 @@ export interface DbProduct {
   stock_quantity: number;
   active: boolean;
   upvotes_count: number;
+  rail?: 'stellar' | 'xrpl' | 'multi';
+  tag?: string;
+  rating?: number;
   created_at: string;
 }
 

@@ -22,7 +22,18 @@ import {
   ExternalLink,
   RefreshCw,
 } from 'lucide-react';
-import { FIGMA_CATALOG, CatalogItem, addSkuToCart, fetchCartLines, CartLine, readSession, SessionUser, onSessionChange } from '@/lib/shop';
+import {
+  FIGMA_CATALOG,
+  CatalogItem,
+  fetchCatalog,
+  getCachedCatalog,
+  addSkuToCart,
+  fetchCartLines,
+  CartLine,
+  readSession,
+  SessionUser,
+  onSessionChange,
+} from '@/lib/shop';
 import { useLiveExchangeRates } from '@/lib/rates';
 
 type CategoryFilter = 'all' | 'hardware' | 'workspace' | 'essentials';
@@ -38,6 +49,14 @@ export default function StoreCatalogPage() {
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [user, setUser] = useState<SessionUser | null>(null);
+
+  // Dynamic API Catalog with 30-minute caching
+  const [catalog, setCatalog] = useState<CatalogItem[]>(() => {
+    const cached = getCachedCatalog();
+    return cached && cached.products.length > 0 ? cached.products : FIGMA_CATALOG;
+  });
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogSource, setCatalogSource] = useState<'api' | 'cache' | 'fallback'>('cache');
 
   // Live Conversion Rates with 30-minute caching
   const { xlmUsd, xrpUsd, source, fromCache, ttlMinutes, refreshRates, loading: ratesLoading } = useLiveExchangeRates();
@@ -65,6 +84,25 @@ export default function StoreCatalogPage() {
     return onSessionChange(syncUser);
   }, []);
 
+  // Fetch product catalog from API (cached for 30m)
+  useEffect(() => {
+    fetchCatalog().then((items) => {
+      setCatalog(items);
+      const updated = getCachedCatalog();
+      if (updated) setCatalogSource(updated.source);
+    }).catch(() => {});
+
+    const onCatalogUpdate = (e: Event) => {
+      const custom = e as CustomEvent;
+      if (custom.detail?.products) {
+        setCatalog(custom.detail.products);
+        if (custom.detail.source) setCatalogSource(custom.detail.source);
+      }
+    };
+    window.addEventListener('nexus-catalog-updated', onCatalogUpdate);
+    return () => window.removeEventListener('nexus-catalog-updated', onCatalogUpdate);
+  }, []);
+
   useEffect(() => {
     fetchCartLines().then(setCartLines).catch(() => {});
     const onCart = () => {
@@ -73,6 +111,20 @@ export default function StoreCatalogPage() {
     window.addEventListener('nexus-cart', onCart);
     return () => window.removeEventListener('nexus-cart', onCart);
   }, []);
+
+  const handleRefreshAll = async () => {
+    setCatalogLoading(true);
+    try {
+      await refreshRates();
+      const freshProducts = await fetchCatalog(true);
+      setCatalog(freshProducts);
+      setCatalogSource('api');
+    } catch {
+      // quiet fallback
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
 
   const handleAdd = async (sku: string) => {
     setAddingSku(sku);
@@ -87,9 +139,9 @@ export default function StoreCatalogPage() {
     }
   };
 
-  // Filter products by category and search
+  // Filter products by category and search (Dynamic API Products)
   const filteredProducts = useMemo(() => {
-    return FIGMA_CATALOG.filter((product) => {
+    return catalog.filter((product) => {
       const matchesCategory =
         selectedCategory === 'all' || product.category === selectedCategory;
       const matchesSearch =
@@ -104,7 +156,7 @@ export default function StoreCatalogPage() {
       if (sortBy === 'rating') return b.rating - a.rating;
       return b.upvotes - a.upvotes;
     });
-  }, [selectedCategory, searchQuery, sortBy]);
+  }, [catalog, selectedCategory, searchQuery, sortBy]);
 
   // Section division
   const stellarProducts = filteredProducts.filter((p) => p.rail === 'stellar');
@@ -439,6 +491,10 @@ export default function StoreCatalogPage() {
                         ? `850.00 XRP Available (~$${(850 * xrpUsd).toFixed(2)} USD)`
                         : `Dual-Rail Active • XLM: $${xlmUsd.toFixed(4)} | XRP: $${xrpUsd.toFixed(4)}`}
                     </span>
+                    <span className="mx-2 text-nexus-border">&bull;</span>
+                    <span className="text-[11px] font-mono text-nexus-muted">
+                      Catalog: <span className="text-rail-emerald uppercase">{catalogSource}</span> (30m cache)
+                    </span>
                   </p>
                 </div>
               </div>
@@ -455,7 +511,7 @@ export default function StoreCatalogPage() {
                       : 'bg-nexus-surface/50 text-nexus-muted border-nexus-border hover:text-white'
                   }`}
                 >
-                  All (10)
+                  All ({catalog.length})
                 </button>
                 <button
                   type="button"
@@ -466,7 +522,7 @@ export default function StoreCatalogPage() {
                       : 'bg-nexus-surface/50 text-nexus-muted border-nexus-border hover:text-white'
                   }`}
                 >
-                  * Stellar (4)
+                  * Stellar ({catalog.filter((p) => p.rail === 'stellar').length})
                 </button>
                 <button
                   type="button"
@@ -477,16 +533,17 @@ export default function StoreCatalogPage() {
                       : 'bg-nexus-surface/50 text-nexus-muted border-nexus-border hover:text-white'
                   }`}
                 >
-                  X XRPL (4)
+                  X XRPL ({catalog.filter((p) => p.rail === 'xrpl').length})
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => refreshRates()}
-                  title="Force refresh live rates"
-                  className="p-1.5 rounded-xl bg-nexus-surface/50 border border-nexus-border hover:border-rail-emerald/60 text-nexus-muted hover:text-white transition-all ml-1"
+                  onClick={handleRefreshAll}
+                  title="Force refresh live rates & catalog from API"
+                  className="px-2.5 py-1.5 rounded-xl bg-nexus-surface/50 border border-nexus-border hover:border-rail-emerald/60 text-nexus-muted hover:text-white transition-all ml-1 flex items-center gap-1.5"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${ratesLoading ? 'animate-spin text-rail-emerald' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${ratesLoading || catalogLoading ? 'animate-spin text-rail-emerald' : ''}`} />
+                  <span className="text-[10px] font-mono hidden sm:inline">Refresh API</span>
                 </button>
               </div>
             </div>
