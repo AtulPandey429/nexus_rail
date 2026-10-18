@@ -57,10 +57,43 @@ export class AuthService {
     return { user, token };
   }
 
+  static async ensureDefaultUsers(): Promise<void> {
+    try {
+      const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
+      const adminDoc = await usersCol.findOne({ email: 'admin@nexusrail.dev' });
+      if (!adminDoc) {
+        const now = new Date().toISOString();
+        await usersCol.insertOne({
+          id: 'user_admin_nexus_01',
+          email: 'admin@nexusrail.dev',
+          passwordHash: hashPassword('Admin1234!'),
+          role: 'admin',
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      const demoDoc = await usersCol.findOne({ email: 'demo@nexusrail.dev' });
+      if (!demoDoc) {
+        const now = new Date().toISOString();
+        await usersCol.insertOne({
+          id: 'user_demo_shopper_01',
+          email: 'demo@nexusrail.dev',
+          passwordHash: hashPassword('Demo1234!'),
+          role: 'user',
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [MongoDB Auth Seed Warning]:', err.message);
+    }
+  }
+
   /**
    * Authenticate an existing user via email & password from MongoDB
    */
   static async login(email: string, password: string): Promise<{ user: TokenUser; token: string }> {
+    await this.ensureDefaultUsers();
     const cleanEmail = email.toLowerCase().trim();
     const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
 

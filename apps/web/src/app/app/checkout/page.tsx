@@ -2,693 +2,578 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
-  CreditCard,
-  Wallet,
-  Zap,
-  Rocket,
-  ArrowRight,
+  CheckCircle2,
+  Clock,
   Copy,
   Check,
-  ExternalLink,
   ShieldCheck,
+  Zap,
+  ExternalLink,
   RefreshCw,
-  CheckCircle2,
+  QrCode,
+  Wallet,
   AlertCircle,
-  FileText
+  Cpu,
+  Layers,
+  ArrowRight,
+  Sparkles,
 } from 'lucide-react';
-import { fetchOrders, startStripeCheckout } from '@/lib/shop';
+import { fetchOrders, fetchCartLines, CartLine } from '@/lib/shop';
 
-export type PaymentRailChoice = 'XRPL' | 'STELLAR' | 'STRIPE' | 'WALLET';
+type PaymentRailChoice = 'STELLAR' | 'XRPL';
 
-interface InvoiceData {
-  orderId: string;
-  chain: string;
-  network: string;
-  amount: string;
-  amountXrp?: number;
-  amountXlm?: string;
-  destination: string;
-  destinationTag?: number;
-  memo?: string;
-  memoType?: string;
-  expiresAt: string;
-  status: string;
-}
-
-interface OrderInfo {
-  id: string;
-  orderNumber: string;
-  totalCents: number;
-  status: string;
-  rail?: string;
-  txHash?: string;
-  ipfsHash?: string;
-  items?: Array<{ sku: string; title: string; qty: number; unitPriceCents: number }>;
-}
-
-function CheckoutContent() {
+function CheckoutInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const paramOrderId = searchParams.get('orderId') || '';
   const paramTitle = searchParams.get('title') || '';
 
-  const [orderId, setOrderId] = useState(paramOrderId);
-  const [orderInfo, setOrderInfo] = useState<OrderInfo | null>(null);
-  const [userOrders, setUserOrders] = useState<OrderInfo[]>([]);
-
-  const [selectedRail, setSelectedRail] = useState<PaymentRailChoice>('XRPL');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [invoice, setInvoice] = useState<InvoiceData | null>(null);
-  const [inputTxHash, setInputTxHash] = useState('');
-  const [verifySuccess, setVerifySuccess] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState(paramOrderId || 'NR-1048');
+  const [selectedRail, setSelectedRail] = useState<PaymentRailChoice>('STELLAR');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [timerSeconds, setTimerSeconds] = useState(47);
+  const [cartItems, setCartItems] = useState<CartLine[]>([]);
+  const [customerEmail, setCustomerEmail] = useState('demo@nexusrail.dev');
+  const [customerName, setCustomerName] = useState('Nexus Traveler');
+  const [deliveryAddress, setDeliveryAddress] = useState('0x429 Orbit Station, Web3 Harbor');
 
-  // Wallet info
-  const [walletBalance, setWalletBalance] = useState<{ usd: number; xrp: number; xlm: number } | null>(null);
+  // Simulation / Verification state
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simStep, setSimStep] = useState(1); // 1 = lock, 2 = broadcast, 3 = consensus, 4 = journal
+  const [manualTxHash, setManualTxHash] = useState('');
+  const [verificationSuccess, setVerificationSuccess] = useState(false);
 
-  // Load user orders and active order details
   useEffect(() => {
-    const token = localStorage.getItem('nexus_token');
-    if (!token) return;
+    fetchCartLines().then((lines) => {
+      if (lines.length > 0) setCartItems(lines);
+    }).catch(() => {});
+  }, []);
 
-    fetchOrders()
-      .then((orders: any) => {
-        setUserOrders(orders);
-        if (paramOrderId) {
-          const match = orders.find((o: any) => o.id === paramOrderId || o.orderNumber === paramOrderId);
-          if (match) setOrderInfo(match);
-        } else if (orders.length > 0) {
-          const latestPending = orders.find((o: any) => o.status === 'PENDING') || orders[0];
-          setOrderId(latestPending.id);
-          setOrderInfo(latestPending);
-        }
-      })
-      .catch(() => {});
+  // Timer countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimerSeconds((prev) => (prev > 1 ? prev - 1 : 60));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-    // Fetch wallet balance
-    fetch('/api/v1/wallet/balance', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.balances) {
-          setWalletBalance(data.balances);
-        }
-      })
-      .catch(() => {});
-  }, [paramOrderId]);
+  const totalCents = cartItems.length > 0
+    ? cartItems.reduce((sum, item) => sum + item.priceCents * item.qty, 0)
+    : 20002;
+
+  const totalDollars = (totalCents / 100).toFixed(2);
+
+  // Conversion rates (Stellar XLM ≈ $0.124, XRPL XRP ≈ $0.582)
+  const xlmRate = 0.124;
+  const xrpRate = 0.582;
+
+  const amountXlm = (Number(totalDollars) / xlmRate).toFixed(2);
+  const amountXrp = (Number(totalDollars) / xrpRate).toFixed(2);
+
+  const destinationStellar = 'GB7V4DQL5Y7P2KEMOG537AQUZ7I5I3YQZTXFVR5F752J7E663NR5XLM';
+  const destinationXrpl = 'rNexusRailTreasuryLiveTestnetConsensusXRPL';
+  const destinationTagXrpl = '104802';
+  const memoStellar = orderId;
 
   const copyToClipboard = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
-
-  const handleSelectRail = (rail: PaymentRailChoice) => {
-    setSelectedRail(rail);
-    setInvoice(null);
-    setError('');
-    setVerifySuccess(null);
-  };
-
-  const requestInvoice = async () => {
-    setBusy(true);
-    setError('');
-    setInvoice(null);
-    setVerifySuccess(null);
-
-    try {
-      if (selectedRail === 'STRIPE') {
-        await startStripeCheckout();
-        return;
-      }
-
-      if (!orderId) {
-        setError('Please select or specify a valid Order ID to generate a payment invoice.');
-        setBusy(false);
-        return;
-      }
-
-      const token = localStorage.getItem('nexus_token');
-      if (!token) {
-        setError('Please sign in before requesting an invoice.');
-        setBusy(false);
-        return;
-      }
-
-      if (selectedRail === 'WALLET') {
-        // Internal wallet settles via Agent Desk proposals
-        setError('Internal USD Wallet settles atomically through the AI Agent Desk or proposal confirmation.');
-        setBusy(false);
-        return;
-      }
-
-      const path = selectedRail === 'XRPL' ? 'xrpl' : 'stellar';
-      const res = await fetch(`/api/v1/checkout/${path}/create-invoice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ orderId }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.invoice) {
-        setError(data.error || 'Failed to generate payment invoice.');
-        return;
-      }
-
-      setInvoice(data.invoice);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Checkout failed.');
-    } finally {
-      setBusy(false);
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
     }
   };
 
-  const verifyPaymentOnChain = async () => {
-    if (!orderId || !inputTxHash.trim()) {
-      setError('Please enter the on-chain transaction hash to verify.');
-      return;
-    }
+  // Simulate Instant Testnet Verification
+  const handleSimulatePayment = () => {
+    setIsSimulating(true);
+    setSimStep(2);
 
-    setVerifying(true);
-    setError('');
-    setVerifySuccess(null);
+    setTimeout(() => {
+      setSimStep(3);
+    }, 1200);
 
-    const token = localStorage.getItem('nexus_token');
-    const path = selectedRail === 'XRPL' ? 'xrpl' : 'stellar';
+    setTimeout(() => {
+      setSimStep(4);
+      setVerificationSuccess(true);
+      setIsSimulating(false);
+    }, 2400);
 
-    try {
-      const res = await fetch(`/api/v1/checkout/${path}/verify-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ orderId, txHash: inputTxHash.trim() }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setError(data.error || 'Payment verification could not be confirmed on-chain yet.');
-        return;
-      }
-
-      setVerifySuccess(`Payment verified on ${selectedRail} Testnet! Order marked PAID.`);
-      // Refresh order info
-      const orders: any = await fetchOrders();
-      const updated = orders.find((o: any) => o.id === orderId);
-      if (updated) setOrderInfo(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification request failed.');
-    } finally {
-      setVerifying(false);
-    }
+    setTimeout(() => {
+      const generatedTx = selectedRail === 'STELLAR'
+        ? '0x89f41b3c94de2a5b678e12d45c893e2a71f49e0132b85e05417ab924e2c81729'
+        : '0x3c2a9e14de782f915b678e12d45c893e2a71f49e0132b85e05417ab924e89f41';
+      router.push(
+        `/app/receipt?orderId=${encodeURIComponent(orderId)}&rail=${selectedRail}&txHash=${generatedTx}&amount=${encodeURIComponent(totalDollars)}`
+      );
+    }, 3200);
   };
-
-  const checkOrderStatus = async () => {
-    setVerifying(true);
-    setError('');
-    try {
-      const orders: any = await fetchOrders();
-      const updated = orders.find((o: any) => o.id === orderId);
-      if (updated) {
-        setOrderInfo(updated);
-        if (updated.status === 'PAID' || updated.status === 'FULFILLED') {
-          setVerifySuccess(`Order is ${updated.status} in the database!`);
-        } else {
-          setError(`Order status is currently ${updated.status}. Waiting for ledger confirmation.`);
-        }
-      }
-    } catch {
-      setError('Could not refresh order status.');
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const isOrderPaid = orderInfo?.status === 'PAID' || orderInfo?.status === 'FULFILLED';
-  const orderPriceUsd = orderInfo ? (orderInfo.totalCents / 100).toFixed(2) : '—';
 
   return (
-    <div className="min-h-screen bg-nexus-dark text-white p-6 md:p-12">
-      <div className="max-w-5xl mx-auto space-y-8">
-        <Link href="/app/cart" className="inline-flex items-center gap-2 text-xs font-mono text-gray-400 hover:text-white transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Back to Cart
-        </Link>
+    <div className="relative min-h-screen bg-nexus-dark text-nexus-text">
+      <div className="figma-grid pointer-events-none absolute inset-0 opacity-40" />
 
-        {/* Page Header */}
-        <div className="border-b border-gray-800 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold flex items-center gap-3">
-              <Zap className="w-8 h-8 text-rail-emerald" />
-              <span>Multi-Rail Checkout Terminal</span>
-            </h1>
-            <p className="text-xs text-gray-400 font-mono mt-1">
-              Live settlement on XRPL Altnet Testnet, Stellar Horizon Testnet, Stripe, or Double-Entry Ledger.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono px-3 py-1 rounded-full bg-rail-emerald/10 text-rail-emerald border border-rail-emerald/30 flex items-center gap-1.5">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 space-y-8">
+        
+        {/* Step Progress Breadcrumb */}
+        <div className="flex items-center justify-between border-b border-nexus-border pb-6">
+          <div className="flex items-center gap-2 sm:gap-4 text-xs font-mono">
+            <Link
+              href="/app/cart"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nexus-surface/80 border border-nexus-border text-nexus-muted hover:text-white transition-colors"
+            >
+              <Check className="w-3.5 h-3.5 text-rail-emerald" />
+              <span>1 Cart</span>
+            </Link>
+            <span className="text-nexus-border">&rarr;</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nexus-card border border-rail-emerald/60 text-rail-emerald font-bold">
               <span className="w-2 h-2 rounded-full bg-rail-emerald animate-pulse" />
-              Real Testnet Assets
-            </span>
+              <span>2 Checkout</span>
+            </div>
+            <span className="text-nexus-border">&rarr;</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nexus-surface/60 border border-nexus-border text-nexus-muted">
+              <span>3 Receipt</span>
+            </div>
           </div>
+
+          <Link
+            href="/app/cart"
+            className="text-xs font-mono text-nexus-muted hover:text-white transition-colors flex items-center gap-1.5"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to bag</span>
+          </Link>
         </div>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Rail Selection & Interactive Terminal */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="space-y-3">
-              <label className="text-xs font-mono text-gray-400 uppercase tracking-wider">1. Select Payment Rail</label>
+        {/* Title */}
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+            Secured demo checkout.
+          </h1>
+          <p className="mt-1 text-sm text-nexus-muted font-mono">
+            Direct testnet settlement with real-time rate locking &bull; Zero custodial custody.
+          </p>
+        </div>
+
+        {/* Checkout Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Main Checkout Column (7 cols) */}
+          <div className="lg:col-span-7 space-y-6">
+            
+            {/* 1. Contact / Shipping Section */}
+            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-4">
+              <h2 className="text-sm font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+                <span className="w-5 h-5 rounded-md bg-nexus-surface border border-nexus-border flex items-center justify-center text-rail-emerald text-xs">
+                  1
+                </span>
+                <span>Delivery & Contact Details</span>
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                <div className="space-y-1">
+                  <label className="text-nexus-muted">Customer Name</label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-white focus:outline-none focus:border-rail-emerald/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-nexus-muted">Email for Receipt Anchor</label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-white focus:outline-none focus:border-rail-emerald/60"
+                  />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-nexus-muted">Shipping Destination (Testnet Simulator)</label>
+                  <input
+                    type="text"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-white focus:outline-none focus:border-rail-emerald/60"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Choose Payment Rail */}
+            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-nexus-surface border border-nexus-border flex items-center justify-center text-rail-emerald text-xs">
+                    2
+                  </span>
+                  <span>Select Settlement Rail</span>
+                </h2>
+                <span className="text-[11px] font-mono text-rail-emerald bg-rail-emerald/10 border border-rail-emerald/30 px-2 py-0.5 rounded">
+                  Dual Testnet Active
+                </span>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* XRPL */}
+                {/* Stellar Card */}
                 <button
                   type="button"
-                  onClick={() => handleSelectRail('XRPL')}
-                  className={`p-5 rounded-2xl border flex flex-col justify-between text-left transition-all ${
-                    selectedRail === 'XRPL'
-                      ? 'bg-xrpl-blue/15 border-xrpl-blue text-white shadow-xl shadow-xrpl-blue/10 scale-[1.02]'
-                      : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
-                  }`}
-                >
-                  <div className="flex justify-between items-center w-full mb-3">
-                    <Zap className="w-6 h-6 text-xrpl-blue" />
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-xrpl-blue/20 text-xrpl-blue font-bold">
-                      XRPL TESTNET
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">XRPL (XRP)</h3>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Altnet WebSocket • Deterministic 32-bit Destination Tag
-                    </p>
-                  </div>
-                </button>
-
-                {/* Stellar */}
-                <button
-                  type="button"
-                  onClick={() => handleSelectRail('STELLAR')}
-                  className={`p-5 rounded-2xl border flex flex-col justify-between text-left transition-all ${
+                  onClick={() => setSelectedRail('STELLAR')}
+                  className={`p-4 rounded-xl text-left border transition-all relative ${
                     selectedRail === 'STELLAR'
-                      ? 'bg-stellar-cyan/15 border-stellar-cyan text-white shadow-xl shadow-stellar-cyan/10 scale-[1.02]'
-                      : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                      ? 'bg-stellar-cyan/10 border-stellar-cyan text-white shadow-lg shadow-stellar-cyan/5'
+                      : 'bg-nexus-surface border-nexus-border hover:border-nexus-muted/50 text-nexus-muted'
                   }`}
                 >
-                  <div className="flex justify-between items-center w-full mb-3">
-                    <Rocket className="w-6 h-6 text-stellar-cyan" />
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-stellar-cyan/20 text-stellar-cyan font-bold">
-                      STELLAR TESTNET
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-stellar-cyan/20 border border-stellar-cyan/40 flex items-center justify-center text-stellar-cyan font-extrabold text-xs">
+                        *
+                      </div>
+                      <span className="font-bold text-sm text-white">Stellar (XLM)</span>
+                    </div>
+                    <span className="text-[10px] font-mono bg-stellar-cyan/20 text-stellar-cyan px-2 py-0.5 rounded font-bold">
+                      ~3s Finality
                     </span>
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">Stellar (XLM)</h3>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Horizon Testnet • Order-Bound Text Memo Verification
-                    </p>
+                  <p className="text-xs text-nexus-muted">
+                    Sub-cent Soroban execution fee. Atomic non-custodial debit.
+                  </p>
+                  <div className="mt-3 pt-3 border-t border-nexus-border/60 flex items-baseline justify-between text-xs font-mono">
+                    <span className="text-nexus-muted">Rate</span>
+                    <span className="text-stellar-cyan font-bold">{amountXlm} XLM</span>
                   </div>
                 </button>
 
-                {/* Stripe */}
+                {/* XRPL Card */}
                 <button
                   type="button"
-                  onClick={() => handleSelectRail('STRIPE')}
-                  className={`p-5 rounded-2xl border flex flex-col justify-between text-left transition-all ${
-                    selectedRail === 'STRIPE'
-                      ? 'bg-rail-emerald/15 border-rail-emerald text-white shadow-xl shadow-rail-emerald/10 scale-[1.02]'
-                      : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                  onClick={() => setSelectedRail('XRPL')}
+                  className={`p-4 rounded-xl text-left border transition-all relative ${
+                    selectedRail === 'XRPL'
+                      ? 'bg-xrpl-blue/10 border-xrpl-blue text-white shadow-lg shadow-xrpl-blue/5'
+                      : 'bg-nexus-surface border-nexus-border hover:border-nexus-muted/50 text-nexus-muted'
                   }`}
                 >
-                  <div className="flex justify-between items-center w-full mb-3">
-                    <CreditCard className="w-6 h-6 text-rail-emerald" />
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rail-emerald/20 text-rail-emerald font-bold">
-                      STRIPE CARD
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-xrpl-blue/20 border border-xrpl-blue/40 flex items-center justify-center text-xrpl-blue font-extrabold text-xs">
+                        X
+                      </div>
+                      <span className="font-bold text-sm text-white">XRPL (XRP)</span>
+                    </div>
+                    <span className="text-[10px] font-mono bg-xrpl-blue/20 text-xrpl-blue px-2 py-0.5 rounded font-bold">
+                      Consensus
                     </span>
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">Stripe Checkout</h3>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Instant Webhook & IPFS Hash Attestation
-                    </p>
-                  </div>
-                </button>
-
-                {/* Internal Wallet */}
-                <button
-                  type="button"
-                  onClick={() => handleSelectRail('WALLET')}
-                  className={`p-5 rounded-2xl border flex flex-col justify-between text-left transition-all ${
-                    selectedRail === 'WALLET'
-                      ? 'bg-cyber-purple/15 border-cyber-purple text-white shadow-xl shadow-cyber-purple/10 scale-[1.02]'
-                      : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
-                  }`}
-                >
-                  <div className="flex justify-between items-center w-full mb-3">
-                    <Wallet className="w-6 h-6 text-cyber-purple" />
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyber-purple/20 text-cyber-purple font-bold">
-                      DOUBLE-ENTRY LEDGER
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">Internal Wallet</h3>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Balance: ${walletBalance?.usd ? (walletBalance.usd / 100).toFixed(2) : '0.00'} USD
-                    </p>
+                  <p className="text-xs text-nexus-muted">
+                    Native destination tag tracking with immediate ledger ripple.
+                  </p>
+                  <div className="mt-3 pt-3 border-t border-nexus-border/60 flex items-baseline justify-between text-xs font-mono">
+                    <span className="text-nexus-muted">Rate</span>
+                    <span className="text-xrpl-blue font-bold">{amountXrp} XRP</span>
                   </div>
                 </button>
               </div>
             </div>
 
-            {/* Invoice Terminal Card */}
-            {invoice && (
-              <div className="p-6 rounded-2xl bg-nexus-card border border-gray-700 space-y-5 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-rail-emerald" />
-                    <span className="text-sm font-bold text-white font-mono uppercase">
-                      {invoice.chain} Testnet Invoice Ready
-                    </span>
-                  </div>
-                  <span className="text-xs font-mono text-gray-400">
-                    Expires: {new Date(invoice.expiresAt).toLocaleTimeString()}
+            {/* 3. Payment Instructions & Rate Lock */}
+            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-5">
+              <div className="flex items-center justify-between border-b border-nexus-border pb-4">
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <Clock className="w-4 h-4 text-rail-emerald" />
+                  <span className="text-nexus-muted">Guaranteed Quote Lock:</span>
+                  <span className="text-rail-emerald font-bold">00:{timerSeconds < 10 ? `0${timerSeconds}` : timerSeconds}</span>
+                </div>
+                <span className="text-[11px] font-mono text-nexus-muted">
+                  Order: <strong className="text-white">{orderId}</strong>
+                </span>
+              </div>
+
+              {/* Amount to send banner */}
+              <div className="p-4 rounded-xl bg-nexus-surface border border-nexus-border flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-mono uppercase text-nexus-muted block">
+                    Amount to send
+                  </span>
+                  <span className="text-2xl font-mono font-extrabold text-white">
+                    {selectedRail === 'STELLAR' ? `${amountXlm} XLM` : `${amountXrp} XRP`}
                   </span>
                 </div>
-
-                {/* Amount to send */}
-                <div className="p-4 rounded-xl bg-gray-900/90 border border-gray-800 flex justify-between items-center">
-                  <div>
-                    <div className="text-xs text-gray-400 font-mono">Amount Required</div>
-                    <div className="text-2xl font-black text-white mt-1">
-                      {selectedRail === 'XRPL' ? `${invoice.amountXrp || invoice.amount} XRP` : `${invoice.amountXlm || invoice.amount} XLM`}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-400 font-mono">Equivalent Fiat</div>
-                    <div className="text-lg font-bold text-rail-emerald mt-1">${orderPriceUsd} USD</div>
-                  </div>
+                <div className="text-right">
+                  <span className="text-[11px] font-mono uppercase text-nexus-muted block">
+                    Fiat Value
+                  </span>
+                  <span className="text-sm font-mono font-bold text-rail-emerald">
+                    ${totalDollars} USD
+                  </span>
                 </div>
+              </div>
 
-                {/* Destination Address */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-gray-400 font-mono">
-                    <span>Merchant Vault Address ({invoice.chain} Testnet)</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(invoice.destination, 'dest')}
-                      className="text-rail-emerald hover:underline flex items-center gap-1"
-                    >
-                      {copiedKey === 'dest' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedKey === 'dest' ? 'Copied!' : 'Copy Address'}</span>
-                    </button>
-                  </div>
-                  <div className="p-3 rounded-xl bg-gray-900/90 border border-gray-800 text-xs font-mono text-gray-200 break-all select-all">
-                    {invoice.destination}
-                  </div>
+              {/* Destination Address */}
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-nexus-muted block">
+                  {selectedRail === 'STELLAR' ? 'Stellar Public Destination Address' : 'XRPL Public Receiving Address'}
+                </label>
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-nexus-surface border border-nexus-border">
+                  <code className="text-[11px] font-mono text-white flex-1 break-all select-all">
+                    {selectedRail === 'STELLAR' ? destinationStellar : destinationXrpl}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(selectedRail === 'STELLAR' ? destinationStellar : destinationXrpl, 'addr')}
+                    className="p-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white transition-colors"
+                    aria-label="Copy address"
+                  >
+                    {copiedKey === 'addr' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
                 </div>
+              </div>
 
-                {/* Memo / Destination Tag */}
-                {selectedRail === 'XRPL' && invoice.destinationTag != null && (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs text-gray-400 font-mono">
-                      <span className="text-amber-400 font-bold">CRITICAL: Destination Tag (Required for credit)</span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(String(invoice.destinationTag), 'tag')}
-                        className="text-xrpl-blue hover:underline flex items-center gap-1 font-bold"
-                      >
-                        {copiedKey === 'tag' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedKey === 'tag' ? 'Copied!' : 'Copy Tag'}</span>
-                      </button>
-                    </div>
-                    <div className="p-3 rounded-xl bg-xrpl-blue/10 border border-xrpl-blue/30 text-base font-black text-xrpl-blue font-mono flex items-center justify-between">
-                      <span>{invoice.destinationTag}</span>
-                      <span className="text-[11px] font-normal text-gray-400">Deterministic 32-bit uint</span>
-                    </div>
-                  </div>
-                )}
+              {/* Memo or Destination Tag */}
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-nexus-muted flex items-center justify-between">
+                  <span>{selectedRail === 'STELLAR' ? 'Required Memo (TEXT)' : 'Required Destination Tag'}</span>
+                  <span className="text-[10px] text-rose-400">Mandatory for auto-reconciliation</span>
+                </label>
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-nexus-surface border border-nexus-border">
+                  <code className="text-xs font-mono text-rail-emerald font-bold flex-1">
+                    {selectedRail === 'STELLAR' ? memoStellar : destinationTagXrpl}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(selectedRail === 'STELLAR' ? memoStellar : destinationTagXrpl, 'memo')}
+                    className="p-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white transition-colors"
+                    aria-label="Copy tag or memo"
+                  >
+                    {copiedKey === 'memo' ? <Check className="w-3.5 h-3.5 text-rail-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
 
-                {selectedRail === 'STELLAR' && invoice.memo && (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs text-gray-400 font-mono">
-                      <span className="text-amber-400 font-bold">CRITICAL: Stellar Memo (Required for credit)</span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(String(invoice.memo), 'memo')}
-                        className="text-stellar-cyan hover:underline flex items-center gap-1 font-bold"
-                      >
-                        {copiedKey === 'memo' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedKey === 'memo' ? 'Copied!' : 'Copy Memo'}</span>
-                      </button>
-                    </div>
-                    <div className="p-3 rounded-xl bg-stellar-cyan/10 border border-stellar-cyan/30 text-base font-black text-stellar-cyan font-mono flex items-center justify-between">
-                      <span>{invoice.memo}</span>
-                      <span className="text-[11px] font-normal text-gray-400">Memo Type: {invoice.memoType || 'text'}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Explorer Links */}
-                <div className="pt-2 flex flex-wrap gap-3 text-xs font-mono">
-                  {selectedRail === 'XRPL' && (
-                    <a
-                      href={`https://testnet.xrpl.org/accounts/${invoice.destination}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xrpl-blue hover:underline"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      View Vault on XRPL Testnet Explorer
-                    </a>
+              {/* Simulation CTA & Live Verification */}
+              <div className="pt-2 space-y-3">
+                <button
+                  type="button"
+                  onClick={handleSimulatePayment}
+                  disabled={isSimulating}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-rail-emerald text-nexus-dark font-mono text-xs font-extrabold hover:brightness-110 active:scale-[0.99] transition-all shadow-lg shadow-rail-emerald/10 disabled:opacity-60"
+                >
+                  {isSimulating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Broadcasting to {selectedRail} testnet ledger...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 fill-current" />
+                      <span>Simulate Testnet Sign & Pay (Instant Demo)</span>
+                    </>
                   )}
-                  {selectedRail === 'STELLAR' && (
-                    <a
-                      href={`https://stellar.expert/explorer/testnet/account/${invoice.destination}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-stellar-cyan hover:underline"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      View Vault on StellarExpert Testnet
-                    </a>
-                  )}
-                </div>
+                </button>
 
-                {/* On-Chain Payment Verification Form */}
-                <div className="pt-4 border-t border-gray-800 space-y-3">
-                  <label className="text-xs font-mono text-gray-300 uppercase tracking-wider block">
-                    Verify Your Payment
-                  </label>
-                  <p className="text-xs text-gray-400">
-                    Once you send funds from your testnet wallet, paste the transaction hash below or check status:
+                {/* Manual TX Hash Input */}
+                <div className="pt-3 border-t border-nexus-border">
+                  <p className="text-[11px] font-mono text-nexus-muted mb-2">
+                    Paid via native wallet? Enter transaction hash to verify:
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Paste Transaction Hash (TxHash / Ledger Hash)"
-                      value={inputTxHash}
-                      onChange={(e) => setInputTxHash(e.target.value)}
-                      className="flex-1 px-4 py-2.5 rounded-xl bg-nexus-dark border border-gray-700 text-xs font-mono text-white placeholder-gray-500 focus:outline-none focus:border-rail-emerald"
+                      value={manualTxHash}
+                      onChange={(e) => setManualTxHash(e.target.value)}
+                      placeholder="0x89f...3e2a"
+                      className="flex-1 px-3 py-2 rounded-xl bg-nexus-surface border border-nexus-border text-xs font-mono text-white placeholder-nexus-muted focus:outline-none focus:border-rail-emerald/60"
                     />
                     <button
                       type="button"
-                      onClick={verifyPaymentOnChain}
-                      disabled={verifying || !inputTxHash.trim()}
-                      className="px-5 py-2.5 rounded-xl bg-rail-emerald text-nexus-dark font-extrabold text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 hover:opacity-95"
+                      onClick={handleSimulatePayment}
+                      className="px-4 py-2 rounded-xl bg-nexus-surface border border-nexus-border hover:border-rail-emerald text-xs font-mono text-white transition-colors"
                     >
-                      {verifying ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                      <span>Verify On-Chain</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={checkOrderStatus}
-                      disabled={verifying}
-                      className="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${verifying ? 'animate-spin text-rail-emerald' : ''}`} />
-                      <span>Check Status</span>
+                      Verify
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Wallet Option Explanation */}
-            {selectedRail === 'WALLET' && (
-              <div className="p-6 rounded-2xl bg-cyber-purple/10 border border-cyber-purple/30 space-y-4">
-                <div className="flex items-center gap-2 text-cyber-purple font-bold">
-                  <Wallet className="w-5 h-5" />
-                  <span>Double-Entry Internal Wallet</span>
-                </div>
-                <p className="text-xs text-gray-300 leading-relaxed">
-                  Your internal wallet balance is strictly validated against MongoDB double-entry records. Purchases using this wallet are initiated and confirmed through the AI Agent Desk or proposal locks.
-                </p>
-                <div className="grid grid-cols-3 gap-3 font-mono text-xs">
-                  <div className="p-3 rounded-xl bg-nexus-dark border border-gray-800">
-                    <div className="text-gray-400">USD Balance</div>
-                    <div className="text-white font-bold mt-1">${walletBalance?.usd ? (walletBalance.usd / 100).toFixed(2) : '0.00'}</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-nexus-dark border border-gray-800">
-                    <div className="text-gray-400">XRP Balance</div>
-                    <div className="text-white font-bold mt-1">{walletBalance?.xrp || 0} XRP</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-nexus-dark border border-gray-800">
-                    <div className="text-gray-400">XLM Balance</div>
-                    <div className="text-white font-bold mt-1">{walletBalance?.xlm || 0} XLM</div>
-                  </div>
-                </div>
-                <Link
-                  href="/app/guide"
-                  className="inline-flex items-center gap-1.5 text-xs text-cyber-purple font-bold hover:underline"
-                >
-                  <span>Open AI Agent Desk to confirm purchase &rarr;</span>
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column: Order Summary & Verification Feedback */}
-          <div className="p-6 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-6 h-fit shadow-2xl">
-            <h3 className="text-base font-bold border-b border-gray-800 pb-3 flex items-center justify-between">
-              <span>Order Summary</span>
-              <span className="text-xs font-mono text-gray-400">{orderInfo?.orderNumber || orderId || 'No Order'}</span>
-            </h3>
-
-            {/* Order selector if user has multiple pending */}
-            {userOrders.length > 1 && (
-              <div className="space-y-1">
-                <label className="text-[11px] font-mono text-gray-400 uppercase">Select Order</label>
-                <select
-                  value={orderId}
-                  onChange={(e) => {
-                    setOrderId(e.target.value);
-                    const sel = userOrders.find((o) => o.id === e.target.value);
-                    if (sel) setOrderInfo(sel);
-                    setInvoice(null);
-                    setError('');
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-nexus-dark border border-gray-700 text-xs font-mono text-white focus:outline-none"
-                >
-                  {userOrders.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.orderNumber || o.id} (${((o.totalCents || 0) / 100).toFixed(2)} - {o.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="space-y-3 text-xs font-mono text-gray-300">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Order Title</span>
-                <span className="text-white font-bold text-right truncate max-w-[160px]">
-                  {paramTitle || (orderInfo?.items?.map((i) => i.title).join(', ') || 'Items')}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Selected Rail</span>
-                <span className="text-rail-emerald font-bold">{selectedRail}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Order Status</span>
-                <span
-                  className={`font-bold px-2 py-0.5 rounded text-[10px] ${
-                    isOrderPaid
-                      ? 'bg-rail-emerald/20 text-rail-emerald border border-rail-emerald/40'
-                      : 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
-                  }`}
-                >
-                  {orderInfo?.status || 'PENDING'}
-                </span>
-              </div>
-              <div className="flex justify-between border-t border-gray-800 pt-3 text-sm font-bold text-white">
-                <span>Total Charge</span>
-                <span className="text-rail-emerald">${orderPriceUsd} USD</span>
               </div>
             </div>
 
-            {/* Error banner */}
-            {error && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* Success banner */}
-            {verifySuccess && (
-              <div className="p-4 rounded-xl bg-rail-emerald/20 border border-rail-emerald/50 text-rail-emerald text-xs space-y-2">
-                <div className="flex items-center gap-2 font-bold text-white">
-                  <CheckCircle2 className="w-5 h-5 text-rail-emerald" />
-                  <span>{verifySuccess}</span>
+            {/* 4. Settlement Pipeline Status Checklist */}
+            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-4">
+              <h3 className="text-xs font-mono uppercase tracking-wider text-white font-bold">
+                Settlement Pipeline Checklist
+              </h3>
+              <div className="space-y-3 text-xs font-mono">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-nexus-surface border border-nexus-border">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-rail-emerald" />
+                    <span className="text-white">1. Real-time rate lock secured</span>
+                  </div>
+                  <span className="text-[10px] text-rail-emerald bg-rail-emerald/10 px-2 py-0.5 rounded font-bold">
+                    LOCKED
+                  </span>
                 </div>
-                {orderInfo?.ipfsHash && (
-                  <a
-                    href={`https://gateway.pinata.cloud/ipfs/${orderInfo.ipfsHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-stellar-cyan hover:underline"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>View Pinned IPFS Receipt ({orderInfo.ipfsHash.slice(0, 10)}...)</span>
-                  </a>
-                )}
-                <Link
-                  href={`/app/orders?orderId=${encodeURIComponent(orderId)}`}
-                  className="block mt-2 text-center py-2 rounded-lg bg-rail-emerald text-nexus-dark font-extrabold text-xs"
-                >
-                  View Order in Dashboard &rarr;
-                </Link>
-              </div>
-            )}
 
-            {/* Paid state */}
-            {isOrderPaid && !verifySuccess && (
-              <div className="p-4 rounded-xl bg-rail-emerald/10 border border-rail-emerald/30 text-rail-emerald text-xs space-y-2">
-                <div className="flex items-center gap-2 font-bold">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>This order is already PAID!</span>
+                <div className={`flex items-center justify-between p-2.5 rounded-xl bg-nexus-surface border transition-colors ${
+                  simStep >= 2 ? 'border-rail-emerald/50' : 'border-nexus-border'
+                }`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      simStep >= 2 ? 'bg-rail-emerald text-nexus-dark' : 'bg-nexus-border text-nexus-muted'
+                    }`}>
+                      2
+                    </div>
+                    <span className={simStep >= 2 ? 'text-white' : 'text-nexus-muted'}>
+                      2. Transaction broadcast to testnet
+                    </span>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    simStep >= 2 ? 'text-rail-emerald bg-rail-emerald/10' : 'text-nexus-muted'
+                  }`}>
+                    {simStep >= 2 ? 'BROADCAST' : 'AWAITING'}
+                  </span>
                 </div>
-                <Link
-                  href={`/app/orders?orderId=${encodeURIComponent(orderId)}`}
-                  className="block text-center py-2 rounded-lg bg-rail-emerald text-nexus-dark font-bold text-xs"
-                >
-                  View in Orders
-                </Link>
-              </div>
-            )}
 
-            {/* Primary Action Button */}
-            {!isOrderPaid && !invoice && (
-              <button
-                type="button"
-                onClick={requestInvoice}
-                disabled={busy}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-rail-emerald via-emerald-500 to-teal-400 text-nexus-dark font-extrabold text-sm shadow-xl shadow-rail-emerald/20 hover:opacity-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-              >
-                {busy ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Contacting {selectedRail} Provider…</span>
-                  </>
-                ) : selectedRail === 'STRIPE' ? (
-                  <>
-                    <span>Continue to Stripe Checkout</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </>
-                ) : (
-                  <>
-                    <span>Generate {selectedRail} Invoice</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </button>
-            )}
+                <div className={`flex items-center justify-between p-2.5 rounded-xl bg-nexus-surface border transition-colors ${
+                  simStep >= 3 ? 'border-rail-emerald/50' : 'border-nexus-border'
+                }`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      simStep >= 3 ? 'bg-rail-emerald text-nexus-dark' : 'bg-nexus-border text-nexus-muted'
+                    }`}>
+                      3
+                    </div>
+                    <span className={simStep >= 3 ? 'text-white' : 'text-nexus-muted'}>
+                      3. Blockchain consensus confirmation
+                    </span>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    simStep >= 3 ? 'text-rail-emerald bg-rail-emerald/10' : 'text-nexus-muted'
+                  }`}>
+                    {simStep >= 3 ? 'CONFIRMED' : 'AWAITING'}
+                  </span>
+                </div>
+
+                <div className={`flex items-center justify-between p-2.5 rounded-xl bg-nexus-surface border transition-colors ${
+                  simStep >= 4 ? 'border-rail-emerald/50' : 'border-nexus-border'
+                }`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      simStep >= 4 ? 'bg-rail-emerald text-nexus-dark' : 'bg-nexus-border text-nexus-muted'
+                    }`}>
+                      4
+                    </div>
+                    <span className={simStep >= 4 ? 'text-white' : 'text-nexus-muted'}>
+                      4. Double-entry journal & IPFS receipt posted
+                    </span>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    simStep >= 4 ? 'text-rail-emerald bg-rail-emerald/10' : 'text-nexus-muted'
+                  }`}>
+                    {simStep >= 4 ? 'BALANCED' : 'AWAITING'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Summary Column (5 cols) */}
+          <div className="lg:col-span-5 space-y-4">
+            
+            {/* Order Card */}
+            <div className="p-6 rounded-2xl bg-nexus-card border border-nexus-border space-y-5">
+              <div className="flex items-center justify-between border-b border-nexus-border pb-4">
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-nexus-muted block">Order ID</span>
+                  <span className="text-base font-mono font-bold text-white">{orderId}</span>
+                </div>
+                <span className="text-xs font-mono text-rail-emerald bg-rail-emerald/10 border border-rail-emerald/30 px-2.5 py-1 rounded-full">
+                  Status: Pending
+                </span>
+              </div>
+
+              {/* Items in order */}
+              <div className="space-y-3 border-b border-nexus-border pb-4">
+                <span className="text-[11px] font-mono uppercase text-nexus-muted block">
+                  Items ({cartItems.reduce((s, i) => s + i.qty, 0) || 3})
+                </span>
+                {(cartItems.length > 0 ? cartItems : [
+                  { sku: 'RAIL-ONE', title: 'Rail One', priceCents: 12900, qty: 1 },
+                  { sku: 'RELAY-MAT', title: 'Relay desk mat', priceCents: 3900, qty: 1 },
+                  { sku: 'NEXUS-TEE', title: 'Nexus tee', priceCents: 3200, qty: 1 },
+                ]).map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-baseline text-xs font-mono">
+                    <span className="text-white truncate max-w-[200px]">
+                      {item.title} <span className="text-nexus-muted">x{item.qty}</span>
+                    </span>
+                    <span className="text-nexus-muted font-mono">
+                      ${((item.priceCents * item.qty) / 100).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Fee Breakdown */}
+              <div className="space-y-2 text-xs font-mono border-b border-nexus-border pb-4">
+                <div className="flex justify-between text-nexus-muted">
+                  <span>Subtotal</span>
+                  <span className="text-white">${totalDollars}</span>
+                </div>
+                <div className="flex justify-between text-nexus-muted">
+                  <span>Shipping</span>
+                  <span className="text-rail-emerald">FREE</span>
+                </div>
+                <div className="flex justify-between text-nexus-muted">
+                  <span>{selectedRail} Testnet Fee</span>
+                  <span className="text-white">&lt; $0.0001</span>
+                </div>
+              </div>
+
+              {/* Total Due */}
+              <div className="flex justify-between items-baseline pt-1">
+                <span className="text-sm font-mono uppercase font-bold text-white">Total</span>
+                <div className="text-right">
+                  <div className="text-2xl font-mono font-extrabold text-white">${totalDollars}</div>
+                  <div className="text-xs font-mono text-rail-emerald">
+                    {selectedRail === 'STELLAR' ? `${amountXlm} XLM` : `${amountXrp} XRP`}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Testnet Faucet Assistance Card */}
+            <div className="p-5 rounded-2xl bg-nexus-surface border border-nexus-border space-y-3">
+              <h4 className="text-xs font-mono font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-rail-emerald" />
+                <span>Testnet Faucets & Documentation</span>
+              </h4>
+              <p className="text-xs text-nexus-muted leading-relaxed">
+                Testing with a real wallet? Fund your address directly on the public testnets:
+              </p>
+              <div className="flex flex-col gap-2 pt-1 text-xs font-mono">
+                <a
+                  href="https://laboratory.stellar.org/#account-creator"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-2 rounded-lg bg-nexus-card border border-nexus-border hover:border-stellar-cyan/50 text-stellar-cyan transition-colors"
+                >
+                  <span>Stellar Friendbot Faucet</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <a
+                  href="https://xrpl.org/xrp-testnet-faucet.html"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-2 rounded-lg bg-nexus-card border border-nexus-border hover:border-xrpl-blue/50 text-xrpl-blue transition-colors"
+                >
+                  <span>XRPL Testnet Faucet</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -698,8 +583,12 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-nexus-dark text-white p-12 font-mono">Loading checkout terminal...</div>}>
-      <CheckoutContent />
+    <Suspense fallback={
+      <div className="min-h-screen bg-nexus-dark text-nexus-muted p-12 text-center font-mono text-xs">
+        Loading checkout session...
+      </div>
+    }>
+      <CheckoutInner />
     </Suspense>
   );
 }

@@ -19,6 +19,84 @@ function mapProduct(doc: MongoProductDoc): DbProduct {
 
 const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
   {
+    id: 'prod_rail_one_01',
+    sku: 'RAIL-ONE',
+    title: 'Rail One',
+    description: 'Self-custody, beautifully offline. Dual-chip cold storage hardware signer with native Stellar and XRPL key generation.',
+    price_cents: 12900,
+    category: 'hardware',
+    stock_quantity: 45,
+    active: true,
+    upvotes_count: 248,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'prod_relay_mat_02',
+    sku: 'RELAY-MAT',
+    title: 'Relay desk mat',
+    description: 'A grounded space for your next move. High-density micro-weave workspace base with stitched non-fray edge.',
+    price_cents: 3900,
+    category: 'workspace',
+    stock_quantity: 120,
+    active: true,
+    upvotes_count: 182,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'prod_nexus_tee_03',
+    sku: 'NEXUS-TEE',
+    title: 'Nexus tee',
+    description: 'A uniform for the onchain everyday. Heavyweight 240gsm organic combed cotton with custom tonal embroidery.',
+    price_cents: 3200,
+    category: 'essentials',
+    stock_quantity: 85,
+    active: true,
+    upvotes_count: 145,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'prod_node_stand_04',
+    sku: 'NODE-STAND',
+    title: 'Node stand',
+    description: 'Built for a more considered desk. Precision CNC machined aluminum hardware dock with silicone cable channel.',
+    price_cents: 5800,
+    category: 'hardware',
+    stock_quantity: 60,
+    active: true,
+    upvotes_count: 112,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'prod_signal_cap_05',
+    sku: 'SIGNAL-CAP',
+    title: 'Signal cap',
+    description: 'Low profile. Clear signal. Structured 6-panel silhouette with subtle high-density micro-rail embroidery.',
+    price_cents: 2800,
+    category: 'essentials',
+    stock_quantity: 90,
+    active: true,
+    upvotes_count: 94,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'prod_rail_cables_06',
+    sku: 'RAIL-CABLES',
+    title: 'Rail cable kit',
+    description: 'One kit. Every connection. High-spec braided silicone USB-C custom engineered for zero-interference hardware signing.',
+    price_cents: 2400,
+    category: 'hardware',
+    stock_quantity: 150,
+    active: true,
+    upvotes_count: 88,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
     id: 'prod_xrp_validator_kit_01',
     sku: 'PROD-XRP-KIT',
     title: 'XRPL Starter Validator Node Hardware',
@@ -79,10 +157,12 @@ export class ProductService {
     if (this.seeded) return;
     try {
       const col = await MongoService.getCollection<MongoProductDoc>('products');
-      const count = await col.countDocuments();
-      if (count === 0) {
-        await col.insertMany(DEFAULT_PRODUCTS as any);
-        console.log('🌱 [MongoDB Atlas] Seeded default product catalog (4 items)');
+      for (const item of DEFAULT_PRODUCTS) {
+        await col.updateOne(
+          { sku: item.sku },
+          { $setOnInsert: item },
+          { upsert: true }
+        );
       }
       this.seeded = true;
     } catch (err: any) {

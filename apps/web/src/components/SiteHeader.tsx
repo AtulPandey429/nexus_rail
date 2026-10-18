@@ -3,19 +3,16 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingBag, ArrowRight, User } from 'lucide-react';
 import { CART_EVENT, clearSession, fetchCartLines, onSessionChange, readSession, SessionUser, verifySession } from '@/lib/shop';
 
-const links = [
-  { href: '/', label: 'Shop' },
-  { href: '/rwa', label: 'Gold' },
-  { href: '/app', label: 'Account' },
+const NAV_LINKS = [
+  { href: '/', label: 'Explore' },
+  { href: '/store', label: 'Store' },
+  { href: '/app/swap', label: 'Swap' },
+  { href: '/app/activity', label: 'Activity' },
+  { href: '/admin', label: 'Admin' },
 ];
-
-function isActive(pathname: string, href: string) {
-  if (href === '/') return pathname === '/';
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -54,78 +51,93 @@ export function SiteHeader() {
     if (pathname.startsWith('/admin')) router.push('/');
   };
 
-  return (
-    <header className="w-full border-b border-gray-800 bg-nexus-card/90 backdrop-blur-xl">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-rail-emerald to-stellar-cyan text-nexus-dark font-bold flex items-center justify-center">
-              NR
-            </span>
-            <span>
-              <span className="block text-lg font-bold text-white">NexusRail</span>
-              <span className="block text-[11px] text-gray-400">Catalog and checkout through the API</span>
-            </span>
-          </Link>
-        </div>
+  const isLinkActive = (href: string) => {
+    if (href === '/') return pathname === '/';
+    return pathname.startsWith(href);
+  };
 
-        <nav className="flex flex-wrap items-center gap-1">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`px-3 py-2 rounded-xl text-sm font-semibold ${
-                isActive(pathname, link.href)
-                  ? 'bg-rail-emerald/15 text-rail-emerald'
-                  : 'text-gray-300 hover:text-white'
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <Link
-            href="/app/cart"
-            className={`px-3 py-2 rounded-xl text-sm font-semibold inline-flex items-center gap-1.5 ${
-              pathname.startsWith('/app/cart')
-                ? 'bg-rail-emerald/15 text-rail-emerald'
-                : 'text-gray-300 hover:text-white'
-            }`}
-          >
-            <ShoppingCart className="w-4 h-4" />
-            Cart
-            <span className="px-1.5 py-0.5 rounded-full bg-rail-emerald text-nexus-dark text-[10px] font-bold">{cartCount}</span>
-          </Link>
-          {user?.role === 'admin' && (
-            <Link
-              href="/admin"
-              className={`px-3 py-2 rounded-xl text-sm font-semibold ${
-                pathname.startsWith('/admin') ? 'bg-amber-400/15 text-amber-300' : 'text-gray-300 hover:text-white'
-              }`}
-            >
-              Operator
-            </Link>
-          )}
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-nexus-border bg-nexus-dark/90 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-6 h-6 rounded-md bg-nexus-card border border-nexus-border flex items-center justify-center group-hover:border-rail-emerald/60 transition-colors">
+            <span className="w-2 h-2 rounded-sm bg-rail-emerald shadow-sm shadow-rail-emerald/50" />
+          </div>
+          <span className="text-base font-bold text-white tracking-tight lowercase">nexusrail</span>
+          <span className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-nexus-border/60 text-gray-400 uppercase tracking-widest">
+            TESTNET
+          </span>
+        </Link>
+
+        {/* Desktop Navigation Links */}
+        <nav className="hidden md:flex items-center gap-1">
+          {NAV_LINKS.map((link) => {
+            const active = isLinkActive(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  active
+                    ? 'text-white bg-nexus-card border border-nexus-border font-semibold'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-nexus-card/40'
+                }`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="flex items-center gap-2">
+        {/* Right Actions */}
+        <div className="flex items-center gap-3">
+          {/* Cart Icon Pill */}
+          <Link
+            href="/app/cart"
+            className="px-3 py-1.5 rounded-lg bg-nexus-card border border-nexus-border hover:border-nexus-border-focus flex items-center gap-2 text-xs text-gray-300 hover:text-white transition-all"
+          >
+            <ShoppingBag className="w-3.5 h-3.5 text-rail-emerald" />
+            <span className="hidden sm:inline">Bag</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-rail-emerald/20 text-rail-emerald text-[11px] font-mono font-bold">
+              {cartCount}
+            </span>
+          </Link>
+
+          {/* User / Sign in / Launch Demo */}
           {user ? (
-            <>
-              <span className="text-xs text-gray-300">{user.email || user.walletAddress || 'Signed in'}</span>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/app/activity"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nexus-card border border-nexus-border text-xs text-gray-300 font-mono"
+              >
+                <User className="w-3 h-3 text-rail-emerald" />
+                <span className="truncate max-w-[120px]">{user.email || user.walletAddress}</span>
+              </Link>
               <button
                 type="button"
                 onClick={signOut}
-                className="px-3 py-2 rounded-xl border border-gray-700 text-xs text-gray-200 hover:border-gray-500"
+                className="px-2.5 py-1.5 rounded-lg border border-nexus-border text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors"
               >
                 Sign out
               </button>
-            </>
+            </div>
           ) : (
-            <Link
-              href="/login"
-              className="px-3 py-2 rounded-xl bg-rail-emerald text-nexus-dark text-xs font-bold"
-            >
-              Sign in
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/login"
+                className="text-xs font-medium text-gray-300 hover:text-white transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/store"
+                className="px-3.5 py-1.5 rounded-lg bg-rail-emerald text-nexus-dark text-xs font-bold flex items-center gap-1.5 hover:bg-rail-mint transition-all shadow-sm shadow-rail-emerald/20"
+              >
+                <span>Launch demo</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           )}
         </div>
       </div>
