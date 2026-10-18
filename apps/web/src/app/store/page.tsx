@@ -2,25 +2,16 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ShoppingBag,
   Search,
-  Filter,
   Check,
-  Star,
-  Layers,
-  Cpu,
-  Monitor,
-  Shirt,
   ArrowRight,
-  Sparkles,
-  SlidersHorizontal,
-  Wallet,
-  Zap,
-  ShieldCheck,
-  Radio,
   ExternalLink,
   RefreshCw,
+  Box,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   FIGMA_CATALOG,
@@ -37,13 +28,24 @@ import {
 import { useLiveExchangeRates } from '@/lib/rates';
 
 type CategoryFilter = 'all' | 'hardware' | 'workspace' | 'essentials';
-type RailFilter = 'all' | 'stellar' | 'xrpl';
 type SortOption = 'featured' | 'price-asc' | 'price-desc' | 'rating';
+
+const PRODUCT_IMAGES: Record<string, string> = {
+  'RAIL-ONE': '/products/rail-one.png',
+  'RELAY-MAT': '/products/relay-mat.png',
+  'NEXUS-TEE': '/products/nexus-tee.png',
+  'NODE-STAND': '/products/node-stand.png',
+  'SIGNAL-CAP': '/products/signal-cap.png',
+  'RAIL-CABLES': '/products/rail-cables.png',
+  'PROD-XRP-KIT': '/products/node-stand.png',
+  'PROD-XLM-PASS': '/products/rail-one.png',
+  'PROD-AGENT-PRO': '/products/relay-mat.png',
+  'PROD-LEDGER-COLD': '/products/rail-cables.png',
+};
 
 export default function StoreCatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
-  const [userRail, setUserRail] = useState<'stellar' | 'xrpl' | null>(null);
-  const [activeRailPreference, setActiveRailPreference] = useState<RailFilter>('all');
+  const [maxPrice, setMaxPrice] = useState<number>(150);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('featured');
   const [addingSku, setAddingSku] = useState<string | null>(null);
@@ -59,25 +61,12 @@ export default function StoreCatalogPage() {
   const [catalogSource, setCatalogSource] = useState<'api' | 'cache' | 'fallback'>('cache');
 
   // Live Conversion Rates with 30-minute caching
-  const { xlmUsd, xrpUsd, source, fromCache, ttlMinutes, refreshRates, loading: ratesLoading } = useLiveExchangeRates();
+  const { xlmUsd, xrpUsd, refreshRates, loading: ratesLoading } = useLiveExchangeRates();
 
   useEffect(() => {
     const syncUser = () => {
       const sess = readSession();
       setUser(sess.user);
-      if (sess.user?.walletAddress) {
-        if (sess.user.walletAddress.startsWith('G')) {
-          setUserRail('stellar');
-        } else if (sess.user.walletAddress.startsWith('r')) {
-          setUserRail('xrpl');
-        }
-      } else if (sess.user?.email) {
-        if (sess.user.email.includes('stellar') || sess.user.email.includes('freighter')) {
-          setUserRail('stellar');
-        } else if (sess.user.email.includes('xrpl') || sess.user.email.includes('xrp') || sess.user.email.includes('xaman')) {
-          setUserRail('xrpl');
-        }
-      }
     };
 
     syncUser();
@@ -86,11 +75,13 @@ export default function StoreCatalogPage() {
 
   // Fetch product catalog from API (cached for 30m)
   useEffect(() => {
-    fetchCatalog().then((items) => {
-      setCatalog(items);
-      const updated = getCachedCatalog();
-      if (updated) setCatalogSource(updated.source);
-    }).catch(() => {});
+    fetchCatalog()
+      .then((items) => {
+        setCatalog(items);
+        const updated = getCachedCatalog();
+        if (updated) setCatalogSource(updated.source);
+      })
+      .catch(() => {});
 
     const onCatalogUpdate = (e: Event) => {
       const custom = e as CustomEvent;
@@ -112,20 +103,6 @@ export default function StoreCatalogPage() {
     return () => window.removeEventListener('nexus-cart', onCart);
   }, []);
 
-  const handleRefreshAll = async () => {
-    setCatalogLoading(true);
-    try {
-      await refreshRates();
-      const freshProducts = await fetchCatalog(true);
-      setCatalog(freshProducts);
-      setCatalogSource('api');
-    } catch {
-      // quiet fallback
-    } finally {
-      setCatalogLoading(false);
-    }
-  };
-
   const handleAdd = async (sku: string) => {
     setAddingSku(sku);
     try {
@@ -135,534 +112,350 @@ export default function StoreCatalogPage() {
     } catch {
       // quiet fallback
     } finally {
-      setTimeout(() => setAddingSku(null), 800);
+      setTimeout(() => setAddingSku(null), 600);
     }
   };
 
-  // Filter products by category and search (Dynamic API Products)
+  // 6 Primary Curated Products for Figma Screen 3
+  const primarySix = useMemo(() => {
+    const skus = ['RAIL-ONE', 'RELAY-MAT', 'NEXUS-TEE', 'NODE-STAND', 'SIGNAL-CAP', 'RAIL-CABLES'];
+    return skus.map((sku) => {
+      const found = catalog.find((p) => p.sku === sku);
+      if (found) return found;
+      return FIGMA_CATALOG.find((p) => p.sku === sku)!;
+    }).filter(Boolean);
+  }, [catalog]);
+
+  // Filtered Products
   const filteredProducts = useMemo(() => {
-    return catalog.filter((product) => {
+    return primarySix.filter((product) => {
       const matchesCategory =
         selectedCategory === 'all' || product.category === selectedCategory;
       const matchesSearch =
         product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.tag.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
+        product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPrice = (product.priceCents / 100) <= maxPrice;
+      return matchesCategory && matchesSearch && matchesPrice;
     }).sort((a, b) => {
       if (sortBy === 'price-asc') return a.priceCents - b.priceCents;
       if (sortBy === 'price-desc') return b.priceCents - a.priceCents;
       if (sortBy === 'rating') return b.rating - a.rating;
-      return b.upvotes - a.upvotes;
+      return 0;
     });
-  }, [catalog, selectedCategory, searchQuery, sortBy]);
-
-  // Section division
-  const stellarProducts = filteredProducts.filter((p) => p.rail === 'stellar');
-  const xrplProducts = filteredProducts.filter((p) => p.rail === 'xrpl');
-  const crossRailProducts = filteredProducts.filter((p) => p.rail === 'multi');
+  }, [primarySix, selectedCategory, searchQuery, maxPrice, sortBy]);
 
   const cartTotalCents = cartLines.reduce((sum, item) => sum + item.priceCents * item.qty, 0);
   const cartTotalItems = cartLines.reduce((sum, item) => sum + item.qty, 0);
 
-  const getProductIcon = (sku: string) => {
-    switch (sku) {
-      case 'RAIL-ONE':
-      case 'PROD-LEDGER-COLD':
-        return <Cpu className="w-10 h-10 text-rail-emerald" />;
-      case 'PROD-XRP-KIT':
-        return <Zap className="w-10 h-10 text-xrpl-blue" />;
-      case 'PROD-XLM-PASS':
-        return <Layers className="w-10 h-10 text-stellar-cyan" />;
-      case 'PROD-AGENT-PRO':
-        return <Sparkles className="w-10 h-10 text-cyber-purple" />;
-      case 'RELAY-MAT':
-        return <Monitor className="w-10 h-10 text-xrpl-blue" />;
-      case 'NEXUS-TEE':
-        return <Shirt className="w-10 h-10 text-white" />;
-      case 'NODE-STAND':
-        return <Layers className="w-10 h-10 text-stellar-cyan" />;
-      case 'SIGNAL-CAP':
-        return <Sparkles className="w-10 h-10 text-amber-400" />;
-      case 'RAIL-CABLES':
-        return <Cpu className="w-10 h-10 text-emerald-400" />;
-      default:
-        return <Cpu className="w-10 h-10 text-gray-400" />;
-    }
+  // Category counts
+  const categoryCounts = useMemo(() => {
+    return {
+      all: primarySix.length,
+      hardware: primarySix.filter((p) => p.category === 'hardware').length,
+      workspace: primarySix.filter((p) => p.category === 'workspace').length,
+      essentials: primarySix.filter((p) => p.category === 'essentials').length,
+    };
+  }, [primarySix]);
+
+  const getItemCartQty = (sku: string) => {
+    const line = cartLines.find((c) => c.sku === sku);
+    return line ? line.qty : 0;
   };
-
-  // Helper to render product card
-  const renderProductCard = (product: CatalogItem) => {
-    const isAdding = addingSku === product.sku;
-    const usdPrice = (product.priceCents / 100).toFixed(2);
-    const xlmEquivalent = (Number(usdPrice) / (xlmUsd || 0.1778)).toFixed(2);
-    const xrpEquivalent = (Number(usdPrice) / (xrpUsd || 1.2972)).toFixed(2);
-
-    return (
-      <div
-        key={product.sku}
-        className="group relative flex flex-col justify-between rounded-2xl bg-nexus-card/90 border border-nexus-border hover:border-nexus-border/80 transition-all duration-300 hover:shadow-xl hover:shadow-rail-emerald/5 overflow-hidden"
-      >
-        {/* Top Media / Thumbnail Block */}
-        <div className="relative p-7 flex items-center justify-center bg-gradient-to-b from-nexus-surface/80 to-nexus-card min-h-[190px] border-b border-nexus-border/60">
-          <div className="absolute inset-0 bg-radial from-white/[0.03] to-transparent pointer-events-none" />
-          
-          {/* Tag */}
-          <div className="absolute top-4 left-4">
-            <span className={`px-2.5 py-1 rounded-md border text-[10px] font-mono font-bold tracking-wider uppercase ${
-              product.rail === 'stellar'
-                ? 'bg-stellar-cyan/10 border-stellar-cyan/30 text-stellar-cyan'
-                : product.rail === 'xrpl'
-                ? 'bg-xrpl-blue/10 border-xrpl-blue/30 text-xrpl-blue'
-                : 'bg-nexus-dark/80 border-nexus-border text-nexus-muted'
-            }`}>
-              {product.rail === 'stellar' ? '* Stellar' : product.rail === 'xrpl' ? 'X XRPL' : 'Multi-Rail'}
-            </span>
-          </div>
-
-          {/* Rating Badge */}
-          <div className="absolute top-4 right-4 flex items-center gap-1 px-2 py-0.5 rounded bg-nexus-dark/60 text-[11px] font-mono text-amber-400 border border-nexus-border/40">
-            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-            <span>{product.rating}</span>
-          </div>
-
-          {/* Icon Avatar */}
-          <div className="transform transition-transform duration-300 group-hover:scale-110">
-            {getProductIcon(product.sku)}
-          </div>
-        </div>
-
-        {/* Body Content */}
-        <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-          <div>
-            <div className="flex items-baseline justify-between gap-2">
-              <h3 className="text-base font-bold text-white group-hover:text-rail-emerald transition-colors">
-                {product.title}
-              </h3>
-              <span className="text-[11px] font-mono text-nexus-muted">
-                {product.sku}
-              </span>
-            </div>
-
-            <p className="mt-2 text-xs text-nexus-muted leading-relaxed line-clamp-2">
-              {product.description}
-            </p>
-          </div>
-
-          {/* Price & Action Row */}
-          <div className="pt-3 border-t border-nexus-border/60 flex items-center justify-between gap-3">
-            <div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-lg font-mono font-extrabold text-white">
-                  ${usdPrice}
-                </span>
-                <span className="text-[10px] font-mono text-nexus-muted">USD</span>
-              </div>
-              <span className="text-[10px] font-mono block text-nexus-muted">
-                {product.rail === 'stellar' || activeRailPreference === 'stellar'
-                  ? `~${xlmEquivalent} XLM`
-                  : product.rail === 'xrpl' || activeRailPreference === 'xrpl'
-                  ? `~${xrpEquivalent} XRP`
-                  : `~${xlmEquivalent} XLM / ~${xrpEquivalent} XRP`}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleAdd(product.sku)}
-              disabled={isAdding}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                isAdding
-                  ? 'bg-rail-emerald text-nexus-dark'
-                  : 'bg-white text-nexus-dark hover:bg-rail-emerald hover:text-nexus-dark shadow-sm'
-              }`}
-            >
-              {isAdding ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Added</span>
-                </>
-              ) : (
-                <>
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>Add to bag</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderStellarSection = () => (
-    <section key="sec-stellar" className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stellar-cyan/30 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-stellar-cyan/20 border border-stellar-cyan/40 flex items-center justify-center text-stellar-cyan font-bold text-xs">
-            *
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <span>Stellar Soroban Ecosystem</span>
-              <span className="text-xs font-mono text-stellar-cyan bg-stellar-cyan/10 px-2 py-0.5 rounded border border-stellar-cyan/30">
-                {stellarProducts.length} items
-              </span>
-            </h2>
-            <p className="text-xs font-mono text-nexus-muted">
-              Hardware signers, Soroban smart contract deploy passes, and AI telemetry keys &bull; ~3.2s finality
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs font-mono text-stellar-cyan self-start sm:self-auto">
-          <span>Live Rate: 1 XLM &asymp; ${xlmUsd.toFixed(4)} USD</span>
-          <span className="text-[10px] text-nexus-muted bg-stellar-cyan/10 px-1.5 py-0.5 rounded border border-stellar-cyan/20">
-            {fromCache ? `cached (${ttlMinutes}m)` : source}
-          </span>
-        </div>
-      </div>
-
-      {stellarProducts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stellarProducts.map(renderProductCard)}
-        </div>
-      ) : (
-        <div className="p-8 rounded-2xl bg-nexus-surface/50 border border-nexus-border text-center text-xs font-mono text-nexus-muted">
-          No Stellar products match your current search criteria.
-        </div>
-      )}
-    </section>
-  );
-
-  const renderXrplSection = () => (
-    <section key="sec-xrpl" className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-xrpl-blue/30 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-xrpl-blue/20 border border-xrpl-blue/40 flex items-center justify-center text-xrpl-blue font-bold text-xs">
-            X
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <span>XRPL Consensus Ecosystem</span>
-              <span className="text-xs font-mono text-xrpl-blue bg-xrpl-blue/10 px-2 py-0.5 rounded border border-xrpl-blue/30">
-                {xrplProducts.length} items
-              </span>
-            </h2>
-            <p className="text-xs font-mono text-nexus-muted">
-              Turnkey validator nodes, cold HSM hardware modules, and micro-weave ripple mats &bull; ~3.5s consensus
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs font-mono text-xrpl-blue self-start sm:self-auto">
-          <span>Live Rate: 1 XRP &asymp; ${xrpUsd.toFixed(4)} USD</span>
-          <span className="text-[10px] text-nexus-muted bg-xrpl-blue/10 px-1.5 py-0.5 rounded border border-xrpl-blue/20">
-            {fromCache ? `cached (${ttlMinutes}m)` : source}
-          </span>
-        </div>
-      </div>
-
-      {xrplProducts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {xrplProducts.map(renderProductCard)}
-        </div>
-      ) : (
-        <div className="p-8 rounded-2xl bg-nexus-surface/50 border border-nexus-border text-center text-xs font-mono text-nexus-muted">
-          No XRPL products match your current search criteria.
-        </div>
-      )}
-    </section>
-  );
-
-  const renderCrossRailSection = () => (
-    <section key="sec-multi" className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-nexus-border pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-white/10 border border-white/20 flex items-center justify-center text-white font-bold text-xs">
-            &infin;
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <span>Cross-Rail Essentials & Apparel</span>
-              <span className="text-xs font-mono text-white/70 bg-white/10 px-2 py-0.5 rounded border border-white/20">
-                {crossRailProducts.length} items
-              </span>
-            </h2>
-            <p className="text-xs font-mono text-nexus-muted">
-              Everyday heavyweight apparel and low-profile gear built for multi-chain living
-            </p>
-          </div>
-        </div>
-
-        <div className="text-xs font-mono text-nexus-muted self-start sm:self-auto">
-          Accepts XLM &bull; XRP &bull; Stripe Card
-        </div>
-      </div>
-
-      {crossRailProducts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {crossRailProducts.map(renderProductCard)}
-        </div>
-      ) : (
-        <div className="p-8 rounded-2xl bg-nexus-surface/50 border border-nexus-border text-center text-xs font-mono text-nexus-muted">
-          No everyday essentials match your search criteria.
-        </div>
-      )}
-    </section>
-  );
 
   return (
-    <div className="relative min-h-screen bg-nexus-dark text-nexus-text">
-      <div className="figma-grid pointer-events-none absolute inset-0 opacity-40" />
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 space-y-10">
+    <div className="min-h-screen bg-[#07090E] text-white flex flex-col justify-between selection:bg-rail-emerald/30">
+      
+      {/* Main Page Container */}
+      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8 flex-1">
         
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-nexus-border pb-8">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-nexus-surface border border-nexus-border text-[11px] font-mono uppercase tracking-widest text-rail-emerald mb-4">
-              <span className="w-2 h-2 rounded-full bg-rail-emerald animate-pulse" />
-              Onchain Storefront &bull; Multi-Rail Sectional Catalog
-            </div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white">
+        {/* Header Hero Section (Exact Figma Screen 3) */}
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono tracking-widest uppercase text-[#8A93A6] font-semibold">
+              THE NEXUSRAIL COLLECTION
+            </span>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white">
               The onchain everyday.
             </h1>
-            <p className="mt-2 text-sm sm:text-base text-nexus-muted max-w-2xl leading-relaxed">
-              Section-wise discovery across Stellar Soroban, XRPL Consensus, and cross-rail hardware objects.
+            <p className="text-xs sm:text-sm text-[#8A93A6]">
+              Considered essentials for a connected world. Explore the demo, from shelf to settlement.
             </p>
+          </div>
+
+          {/* Notice Container Card */}
+          <div className="p-4 rounded-xl bg-[#0B0F17] border border-[#161D2B] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-xs text-[#C5CEE0]">
+              <div className="w-5 h-5 rounded-md bg-[#101724] border border-[#1C2638] flex items-center justify-center text-rail-emerald">
+                <Box className="w-3 h-3" />
+              </div>
+              <span>Real design. Illustrative products. Testnet checkout.</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-md bg-[#00E5A3]/10 border border-[#00E5A3]/30 text-[10px] font-mono font-bold tracking-wider text-[#00E5A3]">
+                STELLAR TESTNET
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[10px] font-mono font-bold tracking-wider text-[#38BDF8]">
+                XRPL TESTNET
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter and Search Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+          <div className="text-xs font-mono text-[#8A93A6]">
+            Collection / <span className="text-white font-medium">All products</span>
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/app/cart"
-              className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-nexus-card border border-nexus-border hover:border-rail-emerald/50 text-white text-xs font-mono font-medium transition-colors"
-            >
-              <ShoppingBag className="w-4 h-4 text-rail-emerald" />
-              <span>Bag ({cartTotalItems})</span>
-              <span className="text-nexus-muted">|</span>
-              <span className="text-rail-emerald font-semibold">${(cartTotalCents / 100).toFixed(2)}</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* User Connected Asset Banner (Dynamic by Login) */}
-        {(() => {
-          const displayRail = activeRailPreference !== 'all' ? activeRailPreference : (userRail || 'all');
-          return (
-            <div className="p-4 sm:p-5 rounded-2xl bg-nexus-card border border-nexus-border flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
-                  displayRail === 'stellar'
-                    ? 'bg-stellar-cyan/15 text-stellar-cyan border border-stellar-cyan/40'
-                    : displayRail === 'xrpl'
-                    ? 'bg-xrpl-blue/15 text-xrpl-blue border border-xrpl-blue/40'
-                    : 'bg-rail-emerald/15 text-rail-emerald border border-rail-emerald/40'
-                }`}>
-                  {displayRail === 'stellar' ? '*' : displayRail === 'xrpl' ? 'X' : <Wallet className="w-5 h-5" />}
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono uppercase font-bold text-white">
-                      {displayRail === 'stellar'
-                        ? 'Connected Asset: Stellar Testnet (XLM)'
-                        : displayRail === 'xrpl'
-                        ? 'Connected Asset: XRPL Testnet (XRP)'
-                        : 'Universal Multi-Rail View (All Ecosystems)'}
-                    </span>
-                    <span className="w-2 h-2 rounded-full bg-rail-emerald animate-pulse" />
-                  </div>
-
-                  <p className="text-xs font-mono text-nexus-muted mt-0.5">
-                    {user?.walletAddress ? (
-                      <span>Wallet: <code className="text-white">{user.walletAddress.slice(0, 8)}...{user.walletAddress.slice(-6)}</code></span>
-                    ) : user?.email ? (
-                      <span>Account: <span className="text-white">{user.email}</span></span>
-                    ) : (
-                      <span>Browsing as Guest &bull; Switch below to preview network pricing</span>
-                    )}
-                    <span className="mx-2 text-nexus-border">&bull;</span>
-                    <span className="text-rail-emerald font-bold">
-                      {displayRail === 'stellar'
-                        ? `1,420.00 XLM Available (~$${(1420 * xlmUsd).toFixed(2)} USD)`
-                        : displayRail === 'xrpl'
-                        ? `850.00 XRP Available (~$${(850 * xrpUsd).toFixed(2)} USD)`
-                        : `Dual-Rail Active • XLM: $${xlmUsd.toFixed(4)} | XRP: $${xrpUsd.toFixed(4)}`}
-                    </span>
-                    <span className="mx-2 text-nexus-border">&bull;</span>
-                    <span className="text-[11px] font-mono text-nexus-muted">
-                      Catalog: <span className="text-rail-emerald uppercase">{catalogSource}</span> (30m cache)
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Quick Ecosystem Switcher Pills */}
-              <div className="flex items-center gap-2 self-stretch md:self-auto overflow-x-auto pb-1 md:pb-0">
-                <span className="text-[11px] font-mono text-nexus-muted uppercase mr-1">Switch View:</span>
-                <button
-                  type="button"
-                  onClick={() => setActiveRailPreference('all')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all border ${
-                    activeRailPreference === 'all'
-                      ? 'bg-nexus-surface text-white border-rail-emerald font-bold'
-                      : 'bg-nexus-surface/50 text-nexus-muted border-nexus-border hover:text-white'
-                  }`}
-                >
-                  All ({catalog.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveRailPreference('stellar')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all border ${
-                    activeRailPreference === 'stellar'
-                      ? 'bg-stellar-cyan/15 text-stellar-cyan border-stellar-cyan font-bold'
-                      : 'bg-nexus-surface/50 text-nexus-muted border-nexus-border hover:text-white'
-                  }`}
-                >
-                  * Stellar ({catalog.filter((p) => p.rail === 'stellar').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveRailPreference('xrpl')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all border ${
-                    activeRailPreference === 'xrpl'
-                      ? 'bg-xrpl-blue/15 text-xrpl-blue border-xrpl-blue font-bold'
-                      : 'bg-nexus-surface/50 text-nexus-muted border-nexus-border hover:text-white'
-                  }`}
-                >
-                  X XRPL ({catalog.filter((p) => p.rail === 'xrpl').length})
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleRefreshAll}
-                  title="Force refresh live rates & catalog from API"
-                  className="px-2.5 py-1.5 rounded-xl bg-nexus-surface/50 border border-nexus-border hover:border-rail-emerald/60 text-nexus-muted hover:text-white transition-all ml-1 flex items-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${ratesLoading || catalogLoading ? 'animate-spin text-rail-emerald' : ''}`} />
-                  <span className="text-[10px] font-mono hidden sm:inline">Refresh API</span>
-                </button>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Central Search Bar & Category Controls */}
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="w-5 h-5 text-nexus-muted absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search across Stellar Soroban passes, XRPL validator kits, hardware signers..."
-              className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-nexus-card border border-nexus-border text-sm text-white placeholder-nexus-muted focus:outline-none focus:border-rail-emerald/70 font-mono shadow-inner transition-colors"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-nexus-muted hover:text-white"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Sub-Filters: Categories & Sort */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-              {[
-                { id: 'all', label: 'All types' },
-                { id: 'hardware', label: 'Hardware' },
-                { id: 'workspace', label: 'Workspace & Passes' },
-                { id: 'essentials', label: 'Everyday Essentials' },
-              ].map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id as CategoryFilter)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-mono whitespace-nowrap transition-all border ${
-                    selectedCategory === cat.id
-                      ? 'bg-nexus-card text-rail-emerald border-rail-emerald/60 shadow-sm font-bold'
-                      : 'bg-nexus-surface/60 text-nexus-muted border-nexus-border hover:text-white'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-[#5A6478] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search the collection"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#0B0F17] border border-[#1C2638] text-xs font-mono text-white placeholder-[#5A6478] focus:outline-none focus:border-rail-emerald transition-colors"
+              />
             </div>
 
             {/* Sort Dropdown */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nexus-surface border border-nexus-border text-xs font-mono text-nexus-muted self-end sm:self-auto">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-rail-emerald" />
+            <div className="relative">
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
-                aria-label="Sort catalog by"
-                className="bg-transparent text-white focus:outline-none cursor-pointer pr-1"
+                aria-label="Sort products"
+                className="px-3 py-1.5 rounded-lg bg-[#0B0F17] border border-[#1C2638] text-xs font-mono text-white focus:outline-none cursor-pointer appearance-none pr-7"
               >
-                <option value="featured" className="bg-nexus-card text-white">Featured</option>
-                <option value="price-asc" className="bg-nexus-card text-white">Price: Low to High</option>
-                <option value="price-desc" className="bg-nexus-card text-white">Price: High to Low</option>
-                <option value="rating" className="bg-nexus-card text-white">Highest Rated</option>
+                <option value="featured" className="bg-[#0B0F17]">Featured</option>
+                <option value="price-asc" className="bg-[#0B0F17]">Price: Low to High</option>
+                <option value="price-desc" className="bg-[#0B0F17]">Price: High to Low</option>
+                <option value="rating" className="bg-[#0B0F17]">Highest Rated</option>
               </select>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-xs text-[#5A6478]">
+                ▾
+              </div>
             </div>
           </div>
         </div>
 
-        {/* SECTION-WISE PRODUCT DISPLAY (Dynamic Rail Prioritization) */}
-        <div className="space-y-12">
-          {activeRailPreference === 'stellar' ? (
-            renderStellarSection()
-          ) : activeRailPreference === 'xrpl' ? (
-            renderXrplSection()
-          ) : userRail === 'xrpl' ? (
-            <>
-              {renderXrplSection()}
-              {renderStellarSection()}
-              {renderCrossRailSection()}
-            </>
-          ) : (
-            <>
-              {renderStellarSection()}
-              {renderXrplSection()}
-              {renderCrossRailSection()}
-            </>
-          )}
-        </div>
-
-        {/* Floating Bottom Cart Bar */}
-        {cartTotalItems > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-xl">
-            <div className="flex items-center justify-between px-5 py-3.5 rounded-2xl bg-nexus-dark/95 border border-rail-emerald/60 shadow-2xl backdrop-blur-md">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-rail-emerald/10 border border-rail-emerald/30 flex items-center justify-center text-rail-emerald">
-                  <ShoppingBag className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-mono font-medium text-white">
-                    Your next move is in the bag.
-                  </p>
-                  <p className="text-[11px] font-mono text-nexus-muted">
-                    {cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'} &bull; ${(cartTotalCents / 100).toFixed(2)} total
-                  </p>
-                </div>
+        {/* Two-Column Layout (Sidebar + 3x2 Grid) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Sidebar (Categories & Price Range) */}
+          <div className="lg:col-span-3 space-y-6">
+            
+            {/* Categories */}
+            <div className="space-y-2">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[#5A6478] font-bold">
+                CATEGORIES
               </div>
 
+              <div className="space-y-1">
+                {[
+                  { id: 'all', label: 'All products', count: categoryCounts.all },
+                  { id: 'hardware', label: 'Hardware', count: categoryCounts.hardware },
+                  { id: 'workspace', label: 'Workspace', count: categoryCounts.workspace },
+                  { id: 'essentials', label: 'Essentials', count: categoryCounts.essentials },
+                ].map((cat) => {
+                  const isActive = selectedCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat.id as CategoryFilter)}
+                      className={`w-full px-3 py-2 rounded-xl text-xs font-mono flex items-center justify-between transition-all ${
+                        isActive
+                          ? 'bg-[#00E5A3]/10 border border-[#00E5A3]/30 text-white font-semibold'
+                          : 'text-[#8A93A6] hover:text-white hover:bg-[#0E131E]'
+                      }`}
+                    >
+                      <span>{cat.label}</span>
+                      <span className="text-[11px] opacity-70">0{cat.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Price Range */}
+            <div className="space-y-3 pt-2 border-t border-[#161D2B]">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[#5A6478] font-bold">
+                Price range
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="150"
+                  step="5"
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(Number(e.target.value))}
+                  className="w-full h-1 bg-[#161D2B] rounded-lg appearance-none cursor-pointer accent-rail-emerald"
+                />
+                <div className="flex justify-between text-xs font-mono text-[#8A93A6]">
+                  <span>$0</span>
+                  <span className="text-white">${maxPrice}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Info notice */}
+            <div className="space-y-2 pt-2 border-t border-[#161D2B]">
+              <p className="text-xs text-[#8A93A6] leading-relaxed">
+                All prices in USD. Pay with test XLM or XRP at checkout.
+              </p>
               <Link
-                href="/app/cart"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rail-emerald text-nexus-dark text-xs font-mono font-bold hover:brightness-110 transition-all shadow-md"
+                href="/app/guide"
+                className="inline-flex items-center gap-1 text-xs text-rail-emerald hover:underline font-mono"
               >
-                <span>View cart</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <span>How testnet payments work</span>
+                <span>↗</span>
               </Link>
             </div>
           </div>
-        )}
+
+          {/* Right Area: 6 Products in a 3x2 Grid */}
+          <div className="lg:col-span-9 space-y-4">
+            
+            {/* Header info */}
+            <div className="flex items-center justify-between text-[11px] font-mono text-[#5A6478]">
+              <span>0{filteredProducts.length} PRODUCTS</span>
+              <span>Demo collection / 2026</span>
+            </div>
+
+            {/* 3x2 Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {filteredProducts.map((product) => {
+                const qty = getItemCartQty(product.sku);
+                const inCart = qty > 0;
+                const isAdding = addingSku === product.sku;
+                const imgSrc = PRODUCT_IMAGES[product.sku] || '/products/rail-one.png';
+
+                return (
+                  <div
+                    key={product.sku}
+                    className="flex flex-col justify-between rounded-2xl bg-[#090D14] border border-[#161D2B] hover:border-[#222C3E] transition-all overflow-hidden group shadow-md"
+                  >
+                    {/* Media Thumbnail with exact Figma badge */}
+                    <div className="relative aspect-[16/10] w-full bg-[#05070A] overflow-hidden">
+                      <Image
+                        src={imgSrc}
+                        alt={product.title}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      />
+
+                      {/* Top-Left In-Cart Badge (Matching Figma Screen 3) */}
+                      {inCart && (
+                        <div className="absolute top-3 left-3 z-10">
+                          <span className="px-2.5 py-1 rounded-md bg-[#00E5A3]/15 border border-[#00E5A3]/40 text-[10px] font-mono font-bold tracking-wider text-[#00E5A3]">
+                            IN YOUR CART &bull; {qty}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Content Section */}
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                      <div>
+                        {/* Category Label */}
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-[#5A6478] font-bold">
+                          {product.category}
+                        </span>
+
+                        {/* Title and Price */}
+                        <div className="flex items-baseline justify-between gap-2 mt-1">
+                          <h3 className="text-sm font-bold text-white group-hover:text-rail-emerald transition-colors">
+                            {product.title}
+                          </h3>
+                          <span className="text-sm font-mono font-bold text-white shrink-0">
+                            ${(product.priceCents / 100).toFixed(2)}
+                          </span>
+                        </div>
+
+                        {/* Description */}
+                        <p className="mt-1 text-xs text-[#8A93A6] line-clamp-2 leading-relaxed">
+                          {product.description}
+                        </p>
+                      </div>
+
+                      {/* Add Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleAdd(product.sku)}
+                        disabled={isAdding}
+                        className={`w-full py-2.5 px-4 rounded-xl text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all ${
+                          isAdding
+                            ? 'bg-rail-emerald text-[#05070A] font-bold'
+                            : inCart
+                            ? 'bg-[#0E131E] hover:bg-[#141B2B] border border-[#1C2638] text-white hover:border-rail-emerald/50'
+                            : 'bg-[#0E131E] hover:bg-[#141B2B] border border-[#1C2638] text-white hover:border-rail-emerald/50'
+                        }`}
+                      >
+                        {isAdding ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Added</span>
+                          </>
+                        ) : inCart ? (
+                          <span>Add another +</span>
+                        ) : (
+                          <span>Add to cart +</span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Floating Bottom Cart Bar (Exact Figma Screen 3) */}
+      {cartTotalItems > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-xl animate-in slide-in-from-bottom duration-300">
+          <div className="flex items-center justify-between px-5 py-3 rounded-2xl bg-[#090D14]/95 border border-[#161D2B] shadow-2xl backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#00E5A3]/10 border border-[#00E5A3]/30 flex items-center justify-center text-rail-emerald">
+                <ShoppingBag className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-mono font-medium text-white">
+                  Your next move is in the bag.
+                </p>
+                <p className="text-[11px] font-mono text-[#8A93A6]">
+                  {cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'} &bull; Subtotal ${(cartTotalCents / 100).toFixed(2)} &bull; Network fee at checkout
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/app/cart"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rail-emerald text-[#05070A] text-xs font-mono font-bold hover:bg-rail-mint transition-all shadow-md"
+            >
+              <span>View cart</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Status Bar */}
+      <footer className="h-12 border-t border-[#151921] px-6 sm:px-12 flex flex-col sm:flex-row items-center justify-between text-[11px] font-mono text-[#5A6478] bg-[#05070A] mt-12">
+        <div>&copy; 2026 NexusRail &bull; Demo environment</div>
+        <div className="hidden md:block">Test assets only. No real funds or fulfillment.</div>
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-rail-emerald animate-pulse" />
+          <span>Systems operational</span>
+        </div>
+      </footer>
     </div>
   );
 }
