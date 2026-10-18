@@ -1,56 +1,85 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Wallet, Database, ShieldCheck, ArrowUpRight, RefreshCw, Activity, Terminal } from 'lucide-react';
+import { BarChart3, Wallet, Database, ShieldCheck, RefreshCw, Activity, Terminal } from 'lucide-react';
+
+interface LedgerEntry {
+  id: string;
+  asset: string;
+  amount: number;
+  entryType: 'CREDIT' | 'DEBIT';
+  referenceType?: string;
+  referenceId?: string;
+  createdAt?: string;
+}
+
+interface MongoAuditTrace {
+  id?: string;
+  agentName?: string;
+  action?: string;
+  latencyMs?: number;
+  timestamp?: string;
+}
 
 export function AnalyticsLedgerDashboard() {
-  const [walletBalance, setWalletBalance] = useState(125000); // $1,250.00
-  const [totalOrders, setTotalOrders] = useState(14);
+  const [totalRevenueCents, setTotalRevenueCents] = useState<number | null>(null);
+  const [totalOrders, setTotalOrders] = useState<number | null>(null);
+  const [productsCount, setProductsCount] = useState<number | null>(null);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [auditTraces, setAuditTraces] = useState<MongoAuditTrace[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    async function fetchAnalytics() {
-      try {
-        const res = await fetch('/api/v1/analytics/summary');
-        const data = await res.json();
-        if (data.success && data.data) {
-          if (data.data.totalRevenueCents) setWalletBalance(data.data.totalRevenueCents);
-          if (data.data.totalOrders) setTotalOrders(data.data.totalOrders);
-        }
-      } catch (err) {
-        console.error('Analytics fetch fallback');
-      }
-    }
-    fetchAnalytics();
-  }, []);
-
-  const mockTransactions = [
-    { id: 'tx_8f91a2', rail: 'XRPL Testnet', amount: '$499.00', status: 'SETTLED', memo: 'Tag #948102', time: '2 mins ago' },
-    { id: 'tx_3c4b11', rail: 'Stripe Fiat', amount: '$1,299.00', status: 'SETTLED', memo: 'pi_3Pohp...', time: '8 mins ago' },
-    { id: 'tx_7e2a90', rail: 'Stellar Horizon', amount: '$150.00', status: 'SETTLED', memo: 'MEMO_9104', time: '14 mins ago' },
-    { id: 'tx_1a55d4', rail: 'Soroban Contract', amount: '$750.00', status: 'VERIFIED', memo: 'Contract Call', time: '22 mins ago' },
-  ];
-
-  const mockMongoLogs = [
-    { id: '6ac7d43d', prompt: 'Check XRPL validator status for order #948', latency: '184ms', db: 'nexusrail.agent_audit_traces' },
-    { id: '6ac7e891', prompt: 'Lock product inventory for showdown #12', latency: '210ms', db: 'nexusrail.agent_audit_traces' },
-    { id: '6ac7f102', prompt: 'Generate IPFS receipt CID via Pinata', latency: '295ms', db: 'nexusrail.agent_audit_traces' },
-  ];
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
+  const fetchAllData = async () => {
     try {
       const res = await fetch('/api/v1/analytics/summary');
       const data = await res.json();
-      if (data.success && data.data) {
-        if (data.data.totalRevenueCents) setWalletBalance(data.data.totalRevenueCents);
-        if (data.data.totalOrders) setTotalOrders(data.data.totalOrders);
+      if (res.ok && data.success && data.data) {
+        setTotalRevenueCents(data.data.totalRevenueCents ?? 0);
+        setTotalOrders(data.data.totalOrders ?? 0);
+        setProductsCount(data.data.productsCount ?? 0);
       }
-    } catch (err) {
-      setWalletBalance((prev) => prev + 49900);
-    } finally {
-      setIsRefreshing(false);
+    } catch {
+      // fallback
     }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (token) {
+      // Fetch wallet ledger history
+      try {
+        const res = await fetch('/api/v1/wallet/transactions', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (res.ok && data.success && Array.isArray(data.data)) {
+          setLedgerEntries(data.data.slice(0, 10));
+        }
+      } catch {
+        // user not authenticated for ledger
+      }
+
+      // Fetch audit traces (if admin) or recent orders
+      try {
+        const res = await fetch('/api/v1/admin/traces', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (res.ok && data.success && Array.isArray(data.data)) {
+          setAuditTraces(data.data.slice(0, 8));
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAllData();
+    setIsRefreshing(false);
   };
 
   return (
@@ -62,7 +91,7 @@ export function AnalyticsLedgerDashboard() {
             <BarChart3 className="w-5 h-5 text-rail-emerald" />
             <span>Multi-Rail Revenue & Double-Entry Ledger</span>
           </h3>
-          <p className="text-xs text-gray-400 font-mono">Phase 1 & Phase 4 Telemetry Engine</p>
+          <p className="text-xs text-gray-400 font-mono">Live telemetry from MongoDB Atlas and blockchain vaults</p>
         </div>
         <button
           onClick={handleRefresh}
@@ -78,15 +107,13 @@ export function AnalyticsLedgerDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-2xl bg-gray-900/60 border border-gray-800 flex flex-col justify-between">
           <div className="flex justify-between items-center text-xs text-gray-400 font-mono">
-            <span>Double-Entry Wallet</span>
+            <span>Settled Revenue</span>
             <Wallet className="w-4 h-4 text-rail-emerald" />
           </div>
           <div className="text-2xl font-bold text-white mt-2">
-            ${(walletBalance / 100).toFixed(2)} <span className="text-xs font-mono text-gray-400">USD</span>
+            {totalRevenueCents == null ? '—' : `$${(totalRevenueCents / 100).toFixed(2)}`} <span className="text-xs font-mono text-gray-400">USD</span>
           </div>
-          <div className="text-[11px] text-rail-emerald flex items-center gap-1 mt-1">
-            <ArrowUpRight className="w-3 h-3" /> +18.4% this week
-          </div>
+          <div className="text-[11px] text-gray-400 mt-1">Paid orders across all rails</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gray-900/60 border border-gray-800 flex flex-col justify-between">
@@ -95,19 +122,21 @@ export function AnalyticsLedgerDashboard() {
             <ShieldCheck className="w-4 h-4 text-stellar-cyan" />
           </div>
           <div className="text-2xl font-bold text-white mt-2">4 Rails Active</div>
-          <div className="text-[11px] text-stellar-cyan flex items-center gap-1 mt-1">
-            Stripe • XRPL • Stellar • Ledger
+          <div className="text-[11px] text-stellar-cyan flex items-center gap-1 mt-1 font-mono">
+            Stripe • XRPL • Stellar • Internal
           </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gray-900/60 border border-gray-800 flex flex-col justify-between">
           <div className="flex justify-between items-center text-xs text-gray-400 font-mono">
-            <span>MongoDB Atlas Telemetry</span>
+            <span>Database Records</span>
             <Database className="w-4 h-4 text-cyber-purple" />
           </div>
-          <div className="text-2xl font-bold text-white mt-2">1,492 Traces</div>
-          <div className="text-[11px] text-cyber-purple flex items-center gap-1 mt-1">
-            <Activity className="w-3 h-3" /> Sub-300ms Async Logger
+          <div className="text-2xl font-bold text-white mt-2">
+            {totalOrders != null ? `${totalOrders} Orders` : 'Connected'}
+          </div>
+          <div className="text-[11px] text-cyber-purple flex items-center gap-1 mt-1 font-mono">
+            <Activity className="w-3 h-3" /> {productsCount != null ? `${productsCount} Catalog SKUs` : 'MongoDB Atlas'}
           </div>
         </div>
       </div>
@@ -120,26 +149,45 @@ export function AnalyticsLedgerDashboard() {
             <Activity className="w-3.5 h-3.5 text-rail-emerald" /> Double-Entry Settlement History
           </h4>
           <div className="space-y-2">
-            {mockTransactions.map((tx) => (
-              <div
-                key={tx.id}
-                className="p-3 rounded-xl bg-gray-900/80 border border-gray-800/80 flex items-center justify-between text-xs hover:border-gray-700 transition-colors"
-              >
-                <div>
-                  <div className="font-semibold text-white flex items-center gap-2">
-                    <span>{tx.rail}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rail-emerald/10 text-rail-emerald border border-rail-emerald/20">
-                      {tx.status}
-                    </span>
+            {ledgerEntries.length > 0 ? (
+              ledgerEntries.map((entry, idx) => (
+                <div
+                  key={entry.id || idx}
+                  className="p-3 rounded-xl bg-gray-900/80 border border-gray-800/80 flex items-center justify-between text-xs hover:border-gray-700 transition-colors"
+                >
+                  <div>
+                    <div className="font-semibold text-white flex items-center gap-2">
+                      <span>{entry.asset}</span>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          entry.entryType === 'CREDIT'
+                            ? 'bg-rail-emerald/10 text-rail-emerald border-rail-emerald/20'
+                            : 'bg-amber-400/10 text-amber-300 border-amber-400/20'
+                        }`}
+                      >
+                        {entry.entryType}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                      Ref: {entry.referenceId || entry.referenceType || 'Internal settlement'}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-gray-400 font-mono mt-0.5">{tx.memo}</div>
+                  <div className="text-right">
+                    <div className={`font-bold ${entry.entryType === 'CREDIT' ? 'text-rail-emerald' : 'text-amber-300'}`}>
+                      {entry.entryType === 'CREDIT' ? '+' : '-'}{entry.amount} {entry.asset}
+                    </div>
+                    <div className="text-[10px] text-gray-500">
+                      {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-bold text-white">{tx.amount}</div>
-                  <div className="text-[10px] text-gray-500">{tx.time}</div>
-                </div>
+              ))
+            ) : (
+              <div className="p-6 rounded-2xl bg-nexus-dark border border-gray-800/80 text-center font-mono text-xs text-gray-400 space-y-1">
+                <p>No ledger transactions for this account yet.</p>
+                <p className="text-[11px] text-gray-500">Complete a checkout or credit your wallet to see double-entry records.</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -149,19 +197,30 @@ export function AnalyticsLedgerDashboard() {
             <Terminal className="w-3.5 h-3.5 text-cyber-purple" /> MongoDB Atlas Live Audit Feed
           </h4>
           <div className="space-y-2">
-            {mockMongoLogs.map((log) => (
-              <div
-                key={log.id}
-                className="p-3 rounded-xl bg-nexus-dark border border-gray-800/90 flex flex-col justify-between text-xs font-mono"
-              >
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-cyber-purple font-bold">ID: {log.id}</span>
-                  <span className="text-rail-emerald">{log.latency}</span>
+            {auditTraces.length > 0 ? (
+              auditTraces.map((trace, idx) => (
+                <div
+                  key={trace.id || idx}
+                  className="p-3 rounded-xl bg-nexus-dark border border-gray-800/90 flex flex-col justify-between text-xs font-mono"
+                >
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-cyber-purple font-bold">Agent: {trace.agentName || 'NexusRail AI'}</span>
+                    <span className="text-rail-emerald">{trace.latencyMs ? `${trace.latencyMs}ms` : '<120ms'}</span>
+                  </div>
+                  <div className="text-gray-300 text-[11px] my-1 truncate">
+                    Action: "{trace.action || 'Ledger verification'}"
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    {trace.timestamp ? new Date(trace.timestamp).toLocaleTimeString() : 'Logged in MongoDB Atlas'}
+                  </div>
                 </div>
-                <div className="text-gray-300 text-[11px] my-1 truncate">"{log.prompt}"</div>
-                <div className="text-[10px] text-gray-500">{log.db}</div>
+              ))
+            ) : (
+              <div className="p-6 rounded-2xl bg-nexus-dark border border-gray-800/80 text-center font-mono text-xs text-gray-400 space-y-1">
+                <p>MongoDB Audit Feed Active.</p>
+                <p className="text-[11px] text-gray-500">Traces from AI Desk proposals and multi-rail settlements are recorded here.</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

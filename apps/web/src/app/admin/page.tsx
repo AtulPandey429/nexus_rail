@@ -8,6 +8,7 @@ import { LayoutDashboard, Package, ShoppingCart, Users, ArrowRight, ShieldAlert,
 export default function AdminDashboardOverview() {
   const router = useRouter();
   const [stats, setStats] = useState<any | null>(null);
+  const [statsError, setStatsError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [userEmail, setUserEmail] = useState('admin@nexusrail.dev');
 
@@ -38,20 +39,12 @@ export default function AdminDashboardOverview() {
         if (data.status === 'success') {
           setStats(data.data);
         } else {
-          setStats({
-            totalVolumeCents: 6600,
-            totalOrdersCount: 2,
-            productsCount: 3,
-            usersCount: 2,
-          });
+          setStats(null);
+          setStatsError(data.error?.message || 'Could not load operator stats.');
         }
-      } catch (err) {
-        setStats({
-          totalVolumeCents: 6600,
-          totalOrdersCount: 2,
-          productsCount: 3,
-          usersCount: 2,
-        });
+      } catch {
+        setStats(null);
+        setStatsError('Could not load operator stats.');
       } finally {
         setIsLoading(false);
       }
@@ -67,7 +60,7 @@ export default function AdminDashboardOverview() {
         <div className="p-3 rounded-xl bg-cyber-purple/10 border border-cyber-purple/30 text-cyber-purple text-xs font-mono flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4" />
-            <span>NexusRail Operator Admin Desk • Server Authorization Protected (role: admin)</span>
+            <span>Operator desk. Demo totals only. Hidden until you sign in as an admin.</span>
           </div>
           <span className="text-[10px] bg-rail-emerald/20 text-rail-emerald px-2 py-0.5 rounded font-bold">
             JWT Enforced
@@ -91,30 +84,33 @@ export default function AdminDashboardOverview() {
           </div>
         </div>
 
+        {statsError && <p className="text-sm text-rose-300">{statsError}</p>}
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Test Mode Volume</div>
             <div className="text-2xl font-bold text-rail-emerald mt-2">
-              ${((stats?.totalVolumeCents || 6600) / 100).toFixed(2)} USD
+              {stats ? `$${(stats.totalVolumeCents / 100).toFixed(2)}` : '—'}
             </div>
+            <div className="text-[11px] text-gray-500 mt-1">Sum of paid orders in the database</div>
           </div>
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Total Orders</div>
             <div className="text-2xl font-bold text-white mt-2">
-              {stats?.totalOrdersCount ?? 2} Orders
+              {stats ? stats.totalOrdersCount : '—'} orders
             </div>
           </div>
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Active Products</div>
             <div className="text-2xl font-bold text-stellar-cyan mt-2">
-              {stats?.productsCount ?? 3} SKUs
+              {stats ? stats.productsCount : '—'} products
             </div>
           </div>
           <div className="p-5 rounded-2xl bg-gray-900/80 border border-gray-800">
             <div className="text-xs text-gray-400 font-mono">Users Registered</div>
             <div className="text-2xl font-bold text-cyber-purple mt-2">
-              {stats?.usersCount ?? 2} Users
+              {stats ? stats.usersCount : '—'} people
             </div>
           </div>
         </div>
@@ -135,7 +131,6 @@ export default function AdminDashboardOverview() {
           <div className="p-6 rounded-2xl bg-gray-900/80 border border-gray-800 opacity-90 space-y-4">
             <div className="flex justify-between items-center text-stellar-cyan">
               <Package className="w-6 h-6" />
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-stellar-cyan/10 border border-stellar-cyan/20">3 ACTIVE</span>
             </div>
             <div>
               <h3 className="text-lg font-bold">Product Catalog</h3>

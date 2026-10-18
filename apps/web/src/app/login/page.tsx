@@ -3,14 +3,13 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Mail, Wallet, ArrowRight, UserCheck, Key, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Mail, Wallet, ArrowRight, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const [authTab, setAuthTab] = useState<'email' | 'web3'>('email');
-  const [email, setEmail] = useState('buyer@nexusrail.io');
-  const [password, setPassword] = useState('password123');
-  const [walletAddress, setWalletAddress] = useState('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -52,44 +51,47 @@ export default function LoginPage() {
   const handleWeb3Connect = async () => {
     setIsLoading(true);
     setErrorMsg('');
-
     try {
+      const ethereum = (window as Window & { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+      if (!ethereum) {
+        setErrorMsg('No wallet was found in this browser.');
+        return;
+      }
+      const accounts = (await ethereum.request({ method: 'eth_requestAccounts' })) as string[];
+      const walletAddress = accounts[0];
+      if (!walletAddress) {
+        setErrorMsg('The wallet did not return an address.');
+        return;
+      }
       const nonceRes = await fetch('/api/v1/auth/nonce', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ walletAddress }),
       });
       const nonceData = await nonceRes.json();
-
-      if (nonceData.success) {
-        const verifyRes = await fetch('/api/v1/auth/verify-signature', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            walletAddress,
-            signature: `0x_sig_verified_${Date.now()}`,
-            nonce: nonceData.nonce,
-          }),
-        });
-        const verifyData = await verifyRes.json();
-        if (verifyData.success) {
-          handleSuccess(verifyData.user, verifyData.token);
-          return;
-        }
+      if (!nonceRes.ok || !nonceData.nonce) {
+        setErrorMsg(nonceData.error || 'Could not start wallet sign-in.');
+        return;
       }
-      setErrorMsg('Web3 verification failed');
+      const signature = (await ethereum.request({
+        method: 'personal_sign',
+        params: [nonceData.nonce, walletAddress],
+      })) as string;
+      const verifyRes = await fetch('/api/v1/auth/verify-signature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress, signature, nonce: nonceData.nonce }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.success) {
+        setErrorMsg(verifyData.error || 'The wallet signature was rejected.');
+        return;
+      }
+      handleSuccess(verifyData.user, verifyData.token);
     } catch (err) {
-      setErrorMsg('Failed to connect to authentication server');
+      setErrorMsg(err instanceof Error ? err.message : 'Wallet sign-in failed.');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleQuickDemoRole = (role: 'user' | 'admin') => {
-    if (role === 'admin') {
-      handleSuccess({ id: 'usr_admin_999', email: 'admin@nexusrail.io', role: 'admin' }, 'demo_admin_jwt');
-    } else {
-      handleSuccess({ id: 'usr_buyer_101', email: 'buyer@nexusrail.io', role: 'user' }, 'demo_buyer_jwt');
     }
   };
 
@@ -174,15 +176,7 @@ export default function LoginPage() {
           </form>
         ) : (
           <div className="space-y-4">
-            <div>
-              <label className="text-xs text-gray-400 font-mono block mb-1.5">Web3 Wallet Address</label>
-              <input
-                type="text"
-                value={walletAddress}
-                onChange={(e) => setWalletAddress(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-900 border border-gray-800 text-sm text-white focus:outline-none focus:border-cyber-purple transition-all font-mono"
-              />
-            </div>
+            <p className="text-sm text-gray-300">Your wallet must sign a challenge. A signature that does not recover to the address is rejected.</p>
             <button
               onClick={handleWeb3Connect}
               disabled={isLoading}
@@ -199,29 +193,6 @@ export default function LoginPage() {
           <Link href="/register" className="text-rail-emerald underline hover:text-emerald-300">
             Create Account
           </Link>
-        </div>
-
-        {/* Quick Demo Switcher */}
-        <div className="pt-4 border-t border-gray-800/80 space-y-2">
-          <p className="text-[11px] text-gray-500 font-mono text-center">Instant Demo Role Switcher</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickDemoRole('user')}
-              className="px-3 py-2 rounded-xl bg-gray-900/90 border border-gray-800 hover:border-gray-700 text-gray-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-all"
-            >
-              <UserCheck className="w-3.5 h-3.5 text-rail-emerald" />
-              <span>Demo Buyer</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemoRole('admin')}
-              className="px-3 py-2 rounded-xl bg-gray-900/90 border border-gray-800 hover:border-gray-700 text-gray-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-all"
-            >
-              <Key className="w-3.5 h-3.5 text-amber-400" />
-              <span>Demo Admin</span>
-            </button>
-          </div>
         </div>
 
         <div className="text-center pt-2">

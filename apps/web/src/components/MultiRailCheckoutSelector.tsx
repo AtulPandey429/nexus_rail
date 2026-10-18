@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreditCard, Wallet, Zap, Rocket, CheckCircle, RefreshCw, ExternalLink } from 'lucide-react';
+import { CreditCard, Wallet, Zap, Rocket, CheckCircle, RefreshCw, ExternalLink, Copy, Check, AlertCircle } from 'lucide-react';
 import { StripeCheckoutModal } from './StripeCheckoutModal';
 
 export type PaymentRailChoice = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR';
@@ -9,6 +9,8 @@ export type PaymentRailChoice = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR';
 interface MultiRailCheckoutProps {
   priceCents: number;
   productTitle: string;
+  orderId?: string;
+  sku?: string;
   onSelectRail?: (rail: PaymentRailChoice) => void;
   onPaymentSuccess?: (receipt: any) => void;
 }
@@ -16,6 +18,8 @@ interface MultiRailCheckoutProps {
 export function MultiRailCheckoutSelector({
   priceCents,
   productTitle,
+  orderId: initialOrderId,
+  sku,
   onSelectRail,
   onPaymentSuccess,
 }: MultiRailCheckoutProps) {
@@ -23,87 +27,125 @@ export function MultiRailCheckoutSelector({
   const [isLoading, setIsLoading] = useState(false);
   const [invoiceData, setInvoiceData] = useState<any | null>(null);
   const [isStripeModalOpen, setIsStripeModalOpen] = useState(false);
+  const [activeOrderId, setActiveOrderId] = useState<string>(initialOrderId || '');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [txHashInput, setTxHashInput] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<string | null>(null);
 
   const usdPrice = (priceCents / 100).toFixed(2);
-  const xrpEstimate = ((priceCents / 100) * 2.15).toFixed(2);
-  const xlmEstimate = ((priceCents / 100) * 4.8).toFixed(2);
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   const handleSelect = async (rail: PaymentRailChoice) => {
     setSelectedRail(rail);
     onSelectRail?.(rail);
     setInvoiceData(null);
     setIsLoading(true);
+    setIsStripeModalOpen(false);
+    setVerificationResult(null);
 
-    const token = localStorage.getItem('nexus_token') || 'demo_token';
-    const orderId = `ord_${Date.now()}`;
+    const token = localStorage.getItem('nexus_token');
+    if (!token) {
+      setInvoiceData({ error: 'Please sign in before initiating checkout.' });
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      if (rail === 'XRPL') {
-        const res = await fetch('/api/v1/checkout/xrpl/create-invoice', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ orderId, amountXrp: parseFloat(xrpEstimate) }),
-        });
-        const data = await res.json();
-        setInvoiceData(data.invoice || { orderId, amountXrp: xrpEstimate, destinationTag: 948102, address: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh' });
-      } else if (rail === 'STELLAR') {
-        const res = await fetch('/api/v1/checkout/stellar/create-invoice', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ orderId, amountXlm: parseFloat(xlmEstimate) }),
-        });
-        const data = await res.json();
-        setInvoiceData(data.invoice || { orderId, amountXlm: xlmEstimate, memoText: `MEMO_${orderId}`, address: 'GBRPYHIL2CI3FNQ4BXLFMNDLF2C' });
-      } else if (rail === 'STRIPE') {
-        const res = await fetch('/api/v1/checkout/stripe/create-session', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ sku: 'PROD-KIT', quantity: 1 }),
-        });
-        const data = await res.json();
-        setInvoiceData(data.data || { url: 'https://checkout.stripe.com/pay/demo_session' });
+      if (rail === 'STRIPE') {
         setIsStripeModalOpen(true);
-      } else {
-        setInvoiceData({ orderId, status: 'PAID', message: 'Internal USD Wallet debited successfully' });
+        setIsLoading(false);
+        return;
       }
+      if (rail === 'WALLET') {
+        setInvoiceData({ message: 'Internal USD Wallet settles through AI Agent Desk or confirmed proposals.' });
+        setIsLoading(false);
+        return;
+      }
+
+      let currentOrderId = activeOrderId;
+      // If no orderId is present, create one in the database
+      if (!currentOrderId) {
+        const orderRes = await fetch('/api/v1/orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            rail,
+            items: [{ sku: sku || 'HARDWARE-WALLET-01', qty: 1, unitPriceCents: priceCents }],
+          }),
+        });
+        const orderData = await orderRes.json();
+        if (!orderRes.ok || !orderData?.data?.order?.id) {
+          setInvoiceData({ error: orderData.error || 'Failed to create order.' });
+          setIsLoading(false);
+          return;
+        }
+        currentOrderId = orderData.data.order.id;
+        setActiveOrderId(currentOrderId);
+      }
+
+      const path = rail === 'XRPL' ? 'xrpl' : 'stellar';
+      const res = await fetch(`/api/v1/checkout/${path}/create-invoice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderId: currentOrderId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.invoice) {
+        setInvoiceData({ error: data.error || 'The network did not return an invoice.' });
+        return;
+      }
+      setInvoiceData(data.invoice);
     } catch (err) {
-      setInvoiceData({ orderId, status: 'READY', message: 'Offline mode invoice generated' });
+      setInvoiceData({ error: err instanceof Error ? err.message : 'Checkout failed.' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleStripeSuccess = async (session: any) => {
-    setIsLoading(true);
+  const handleVerify = async () => {
+    if (!activeOrderId || !txHashInput.trim()) return;
+    setVerifying(true);
+    setVerificationResult(null);
+    const token = localStorage.getItem('nexus_token');
+    const path = selectedRail === 'XRPL' ? 'xrpl' : 'stellar';
     try {
-      const orderId = invoiceData?.orderId || `ord_${Date.now()}`;
-      const res = await fetch(`/api/v1/checkout/orders/${orderId}/ipfs-receipt`);
-      const receiptData = await res.json();
-      setInvoiceData({
-        ...invoiceData,
-        status: 'PAID',
-        receipt: receiptData.receipt,
-        sessionId: session.sessionId,
+      const res = await fetch(`/api/v1/checkout/${path}/verify-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderId: activeOrderId, txHash: txHashInput.trim() }),
       });
-      onPaymentSuccess?.(receiptData.receipt);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setVerificationResult('Payment confirmed on-chain! Order marked PAID.');
+        onPaymentSuccess?.(data);
+      } else {
+        setVerificationResult(data.error || 'Verification not confirmed on ledger yet.');
+      }
     } catch (err) {
-      setInvoiceData({
-        ...invoiceData,
-        status: 'PAID',
-        sessionId: session.sessionId,
-      });
+      setVerificationResult(err instanceof Error ? err.message : 'Verification failed.');
     } finally {
-      setIsLoading(false);
+      setVerifying(false);
     }
+  };
+
+  const handleStripeSuccess = () => {
+    setIsStripeModalOpen(false);
+    onPaymentSuccess?.({ rail: 'STRIPE', status: 'PAID' });
   };
 
   return (
@@ -155,7 +197,7 @@ export function MultiRailCheckoutSelector({
             <Wallet className="w-5 h-5 text-cyber-purple" />
             <div className="text-left">
               <div className="text-sm font-semibold text-white">Internal Wallet</div>
-              <div className="text-xs text-gray-400">$0.00 Fee</div>
+              <div className="text-xs text-gray-400">Double-Entry USD</div>
             </div>
           </button>
 
@@ -171,7 +213,7 @@ export function MultiRailCheckoutSelector({
             <Zap className="w-5 h-5 text-xrpl-blue" />
             <div className="text-left">
               <div className="text-sm font-semibold text-white">XRPL (XRP)</div>
-              <div className="text-xs text-gray-400">≈ {xrpEstimate} XRP</div>
+              <div className="text-xs text-gray-400">Testnet Altnet</div>
             </div>
           </button>
 
@@ -187,7 +229,7 @@ export function MultiRailCheckoutSelector({
             <Rocket className="w-5 h-5 text-stellar-cyan" />
             <div className="text-left">
               <div className="text-sm font-semibold text-white">Stellar (XLM)</div>
-              <div className="text-xs text-gray-400">≈ {xlmEstimate} XLM</div>
+              <div className="text-xs text-gray-400">Horizon Testnet</div>
             </div>
           </button>
         </div>
@@ -196,57 +238,163 @@ export function MultiRailCheckoutSelector({
       {isLoading && (
         <div className="p-4 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center gap-2 text-xs font-mono text-gray-400">
           <RefreshCw className="w-4 h-4 animate-spin text-rail-emerald" />
-          <span>Generating {selectedRail} payment invoice...</span>
+          <span>Generating {selectedRail} payment invoice from live testnet…</span>
         </div>
       )}
 
       {invoiceData && !isLoading && (
-        <div className="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-2 text-xs font-mono">
+        <div className="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-3 text-xs font-mono">
           <div className="flex justify-between items-center text-rail-emerald font-bold">
             <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Invoice Ready</span>
-            <span>{selectedRail}</span>
+            <span className="uppercase text-[11px] px-2 py-0.5 rounded bg-rail-emerald/10 border border-rail-emerald/30">
+              {selectedRail} TESTNET
+            </span>
           </div>
-          {selectedRail === 'XRPL' && (
-            <div className="space-y-1 text-gray-300">
-              <div>Send: <strong className="text-white">{invoiceData.amountXrp || xrpEstimate} XRP</strong></div>
-              <div>Address: <span className="text-xs text-gray-400">{invoiceData.address || 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh'}</span></div>
-              <div>Destination Tag: <strong className="text-xrpl-blue">{invoiceData.destinationTag || 948102}</strong></div>
+
+          {invoiceData.error && (
+            <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              <span>{String(invoiceData.error)}</span>
             </div>
           )}
-          {selectedRail === 'STELLAR' && (
-            <div className="space-y-1 text-gray-300">
-              <div>Send: <strong className="text-white">{invoiceData.amountXlm || xlmEstimate} XLM</strong></div>
-              <div>Address: <span className="text-xs text-gray-400">{invoiceData.address || 'GBRPYHIL2CI3FNQ4BXLFMNDLF2C'}</span></div>
-              <div>Memo Text: <strong className="text-stellar-cyan">{invoiceData.memoText || 'MEMO_1001'}</strong></div>
-            </div>
-          )}
-          {selectedRail === 'STRIPE' && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-gray-800/90 border border-gray-700 text-xs text-gray-300 space-y-1">
-                <div className="flex justify-between">
-                  <span>Stripe Hosted Checkout:</span>
-                  <span className="font-mono text-rail-emerald font-bold">Test Mode</span>
+
+          {selectedRail === 'XRPL' && (invoiceData.amountXrp != null || invoiceData.amount != null) && (
+            <div className="space-y-2 text-gray-300">
+              <div className="flex justify-between items-center">
+                <span>Send Exactly:</span>
+                <strong className="text-white text-sm">{String(invoiceData.amountXrp || invoiceData.amount)} XRP</strong>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-gray-400">
+                  <span>Merchant Vault:</span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(invoiceData.destination, 'dest')}
+                    className="text-rail-emerald hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    {copiedKey === 'dest' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'dest' ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
-                <div className="text-[11px] text-gray-400">
-                  Click below to launch interactive Stripe payment portal with card input.
+                <div className="p-2 rounded bg-nexus-dark border border-gray-800 text-[11px] text-gray-300 break-all select-all">
+                  {invoiceData.destination}
                 </div>
               </div>
-              {invoiceData.status === 'PAID' ? (
-                <div className="p-2.5 rounded-lg bg-rail-emerald/20 border border-rail-emerald/50 text-rail-emerald text-xs font-bold flex items-center justify-center gap-1.5">
-                  <CheckCircle className="w-4 h-4" /> Stripe Test Payment Verified & IPFS Receipt Pinned!
+              {invoiceData.destinationTag != null && (
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-gray-400">
+                    <span className="text-amber-400 font-bold">Required Destination Tag:</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(String(invoiceData.destinationTag), 'tag')}
+                      className="text-xrpl-blue hover:underline flex items-center gap-1 text-[11px] font-bold"
+                    >
+                      {copiedKey === 'tag' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === 'tag' ? 'Copied' : 'Copy Tag'}</span>
+                    </button>
+                  </div>
+                  <div className="p-2 rounded bg-xrpl-blue/10 border border-xrpl-blue/30 text-xrpl-blue font-bold text-sm">
+                    {invoiceData.destinationTag}
+                  </div>
                 </div>
-              ) : (
+              )}
+              <div className="pt-1">
+                <a
+                  href={`https://testnet.xrpl.org/accounts/${invoiceData.destination}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xrpl-blue hover:underline flex items-center gap-1 text-[11px]"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View Vault on XRPL Testnet Explorer
+                </a>
+              </div>
+            </div>
+          )}
+
+          {selectedRail === 'STELLAR' && (invoiceData.amountXlm != null || invoiceData.amount != null) && (
+            <div className="space-y-2 text-gray-300">
+              <div className="flex justify-between items-center">
+                <span>Send Exactly:</span>
+                <strong className="text-white text-sm">{String(invoiceData.amountXlm || invoiceData.amount)} XLM</strong>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-gray-400">
+                  <span>Merchant Vault:</span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(invoiceData.destination, 'dest')}
+                    className="text-rail-emerald hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    {copiedKey === 'dest' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'dest' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <div className="p-2 rounded bg-nexus-dark border border-gray-800 text-[11px] text-gray-300 break-all select-all">
+                  {invoiceData.destination}
+                </div>
+              </div>
+              {invoiceData.memo && (
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-gray-400">
+                    <span className="text-amber-400 font-bold">Required Memo (text):</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(String(invoiceData.memo), 'memo')}
+                      className="text-stellar-cyan hover:underline flex items-center gap-1 text-[11px] font-bold"
+                    >
+                      {copiedKey === 'memo' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === 'memo' ? 'Copied' : 'Copy Memo'}</span>
+                    </button>
+                  </div>
+                  <div className="p-2 rounded bg-stellar-cyan/10 border border-stellar-cyan/30 text-stellar-cyan font-bold text-sm">
+                    {invoiceData.memo}
+                  </div>
+                </div>
+              )}
+              <div className="pt-1">
+                <a
+                  href={`https://stellar.expert/explorer/testnet/account/${invoiceData.destination}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-stellar-cyan hover:underline flex items-center gap-1 text-[11px]"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View Vault on StellarExpert Explorer
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Verification section */}
+          {(selectedRail === 'XRPL' || selectedRail === 'STELLAR') && (
+            <div className="pt-2 border-t border-gray-800 space-y-2">
+              <div className="text-[11px] text-gray-400">Verify Payment Hash:</div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="TxHash / Ledger Hash"
+                  value={txHashInput}
+                  onChange={(e) => setTxHashInput(e.target.value)}
+                  className="flex-1 px-2.5 py-1.5 rounded bg-nexus-dark border border-gray-700 text-xs text-white placeholder-gray-500 focus:outline-none"
+                />
                 <button
                   type="button"
-                  onClick={() => setIsStripeModalOpen(true)}
-                  className="w-full py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-rail-emerald text-white font-extrabold text-xs shadow-md shadow-indigo-600/20 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                  onClick={handleVerify}
+                  disabled={verifying || !txHashInput.trim()}
+                  className="px-3 py-1.5 rounded bg-rail-emerald text-nexus-dark font-bold text-xs disabled:opacity-50"
                 >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Open Stripe Checkout Modal (${usdPrice})</span>
+                  {verifying ? 'Verifying…' : 'Verify'}
                 </button>
+              </div>
+              {verificationResult && (
+                <div className={`p-2 rounded text-xs ${verificationResult.includes('PAID') ? 'bg-rail-emerald/20 text-rail-emerald' : 'bg-rose-500/10 text-rose-300'}`}>
+                  {verificationResult}
+                </div>
               )}
             </div>
           )}
+
           {selectedRail === 'WALLET' && (
             <p className="text-rail-emerald">{invoiceData.message || 'Payment confirmed via Internal Wallet'}</p>
           )}
@@ -255,4 +403,3 @@ export function MultiRailCheckoutSelector({
     </div>
   );
 }
-

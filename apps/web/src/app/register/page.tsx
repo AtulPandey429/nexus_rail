@@ -9,7 +9,6 @@ export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'user' | 'admin'>('user');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -22,7 +21,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
 
@@ -88,18 +87,6 @@ export default function RegisterPage() {
               placeholder="••••••••"
               className="w-full px-4 py-2.5 rounded-xl bg-gray-900 border border-gray-800 text-sm text-white focus:outline-none focus:border-cyber-purple transition-all font-mono"
             />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-400 font-mono block mb-1.5">Account Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as 'user' | 'admin')}
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-900 border border-gray-800 text-sm text-white focus:outline-none focus:border-cyber-purple transition-all font-mono"
-            >
-              <option value="user">Buyer / Regular User</option>
-              <option value="admin">Operator / Admin</option>
-            </select>
           </div>
 
           <button

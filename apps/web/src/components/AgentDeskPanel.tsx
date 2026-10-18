@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Bot, Send, Sparkles, CheckCircle2, Clock, X } from 'lucide-react';
 
 export interface ChatMessage {
@@ -13,6 +13,7 @@ export interface ChatMessage {
     priceCents: number;
     executed?: boolean;
     txHash?: string;
+    error?: string;
   };
 }
 
@@ -26,6 +27,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
     },
   ]);
   const [loading, setLoading] = useState(false);
+  const confirmedIds = useRef(new Set<string>());
 
   if (!isOpen) return null;
 
@@ -38,7 +40,15 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
     setInput('');
     setLoading(true);
 
-    const token = localStorage.getItem('nexus_token') || 'demo_jwt_token_123';
+    const token = localStorage.getItem('nexus_token');
+    if (!token) {
+      setMessages((prev) => [
+        ...prev,
+        { id: `a_${Date.now()}`, sender: 'agent', text: 'Sign in before asking the assistant to do anything.' },
+      ]);
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/v1/agent/chat', {
@@ -61,8 +71,8 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
             proposal: data.proposal
               ? {
                   proposalId: data.proposal.proposalId,
-                  title: data.proposal.payload.title || 'XRPL Starter Validator Node Hardware',
-                  priceCents: data.proposal.payload.priceCents || 49900,
+                  title: data.proposal.payload?.title || 'Proposed purchase',
+                  priceCents: data.proposal.payload?.priceCents || 0,
                 }
               : undefined,
           },
@@ -77,31 +87,15 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
           },
         ]);
       }
-    } catch (err) {
-      if (query.toLowerCase().includes('buy') || query.toLowerCase().includes('order')) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a_${Date.now()}`,
-            sender: 'agent',
-            text: 'I have generated a proposal lock for your order. Confirm below to execute atomic settlement.',
-            proposal: {
-              proposalId: `prop_${Math.random().toString(36).substring(2, 8)}`,
-              title: 'XRPL Starter Validator Node Hardware',
-              priceCents: 49900,
-            },
-          },
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a_${Date.now()}`,
-            sender: 'agent',
-            text: 'NexusRail multi-rail desk is ready. You can query live exchange rates, check internal USD wallet balance, or execute payments.',
-          },
-        ]);
-      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a_${Date.now()}`,
+          sender: 'agent',
+          text: 'The assistant is unreachable. Nothing was proposed.',
+        },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -117,10 +111,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
           </div>
           <div>
             <h3 className="font-bold text-sm text-white">AI Agent Desk</h3>
-            <span className="text-[10px] text-rail-emerald flex items-center gap-1 font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-rail-emerald animate-pulse" />
-              Sub-300ms Ready
-            </span>
+            <span className="text-[10px] text-gray-400">Proposes first. You confirm before it runs.</span>
           </div>
         </div>
         <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">
@@ -158,48 +149,69 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                     <div className="flex items-center gap-1.5 font-bold">
                       <CheckCircle2 className="w-4 h-4" /> Proposal Executed & Settled
                     </div>
-                    <div className="text-[10px] text-gray-400">Tx: {m.proposal.txHash || 'tx_stl_testnet_confirmed'}</div>
+                    <div className="text-[10px] text-gray-400">{m.proposal.txHash ? `Reference: ${m.proposal.txHash}` : 'Confirmed by the API.'}</div>
                   </div>
                 ) : (
-                  <button
+                  <div className="space-y-2">
+                    {m.proposal.error && <p className="text-xs text-rose-300">{m.proposal.error}</p>}
+                    <button
                     type="button"
+                    disabled={loading}
                     onClick={async () => {
+                      const proposalId = m.proposal?.proposalId;
+                      if (!proposalId || confirmedIds.current.has(proposalId) || m.proposal?.executed) return;
+                      confirmedIds.current.add(proposalId);
                       setLoading(true);
                       try {
-                        const token = localStorage.getItem('nexus_token') || 'demo_jwt_token_123';
+                        const token = localStorage.getItem('nexus_token');
+                        if (!token) return;
                         const res = await fetch('/api/v1/agent/confirm', {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
                             Authorization: `Bearer ${token}`,
                           },
-                          body: JSON.stringify({ proposalId: m.proposal?.proposalId }),
+                          body: JSON.stringify({ proposalId }),
                         });
                         const data = await res.json();
+                        if (!res.ok || data.success === false) {
+                          confirmedIds.current.delete(proposalId);
+                          const message = data.error || 'Confirmation did not run.';
+                          setMessages((prev) =>
+                            prev.map((msg) =>
+                              msg.proposal?.proposalId === proposalId
+                                ? { ...msg, proposal: { ...msg.proposal!, error: message } }
+                                : msg
+                            )
+                          );
+                          return;
+                        }
+                        const txHash = data.txHash || data.transaction?.id;
                         setMessages((prev) =>
                           prev.map((msg) =>
-                            msg.proposal?.proposalId === m.proposal?.proposalId
+                            msg.proposal?.proposalId === proposalId
                               ? {
                                   ...msg,
                                   proposal: {
                                     ...msg.proposal!,
                                     executed: true,
-                                    txHash: data.txHash || `tx_stl_testnet_${Date.now()}`,
+                                    txHash,
+                                    error: undefined,
                                   },
                                 }
                               : msg
                           )
                         );
-                      } catch (err) {
+                      } catch {
+                        confirmedIds.current.delete(proposalId);
                         setMessages((prev) =>
                           prev.map((msg) =>
-                            msg.proposal?.proposalId === m.proposal?.proposalId
+                            msg.proposal?.proposalId === proposalId
                               ? {
                                   ...msg,
                                   proposal: {
                                     ...msg.proposal!,
-                                    executed: true,
-                                    txHash: `tx_stl_testnet_${Date.now()}_confirmed`,
+                                    error: 'Confirmation did not reach the API. Nothing ran.',
                                   },
                                 }
                               : msg
@@ -212,8 +224,9 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                     className="w-full py-2 rounded-lg bg-rail-emerald text-nexus-dark font-bold text-xs hover:bg-rail-emerald/90 flex items-center justify-center gap-1.5 shadow-md shadow-rail-emerald/10"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Confirm & Authorize Order
+                    Confirm and run once
                   </button>
+                  </div>
                 )}
               </div>
             )}

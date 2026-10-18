@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Cpu, Zap, Key, Image as ImageIcon, CheckCircle2, ChevronRight, ShieldAlert } from 'lucide-react';
 
 export function PluginsShowcase() {
-  const [apiKey, setApiKey] = useState('nr_live_8f91a24b9012c85e');
+  const [apiKey, setApiKey] = useState('');
   const [copied, setCopied] = useState(false);
   const [falPrompt, setFalPrompt] = useState('Futuristic Web3 Hardware Node with Neon Emerald Lights');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -17,11 +17,8 @@ export function PluginsShowcase() {
   };
 
   const handleGenerateFalAsset = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      setGenImage('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80');
-      setIsGenerating(false);
-    }, 1200);
+    setGenImage(null);
+    setIsGenerating(false);
   };
 
   return (

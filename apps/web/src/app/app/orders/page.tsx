@@ -1,95 +1,55 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { PackageCheck, ArrowLeft, Clock, CheckCircle2, ChevronRight, ExternalLink, ShieldCheck, Bell } from 'lucide-react';
-import { EndToEndFlowMonitor } from '@/components/EndToEndFlowMonitor';
+import { PackageCheck, CheckCircle2, ExternalLink } from 'lucide-react';
+import { fetchOrders } from '@/lib/shop';
 
 function OrdersContent() {
   const searchParams = useSearchParams();
   const highlightOrderId = searchParams.get('orderId');
-  const isSuccess = searchParams.get('success') === 'true';
 
-  const [orders, setOrders] = useState<any[]>([
-    {
-      id: highlightOrderId || 'ord_1003',
-      orderNumber: highlightOrderId ? `NR-${highlightOrderId.substring(4, 8)}` : 'NR-1003',
-      status: 'PAID',
-      totalCents: 4200,
-      rail: 'STRIPE',
-      items: [{ sku: 'NL-NOTE-A5', title: 'Nexus A5 Hardcover Notebook + Gel Pen Set', qty: 1 }],
-      createdAt: new Date().toISOString(),
-      ipfsHash: 'QmX7b82fK99aZp1104',
-      webhookVerified: true,
-    },
-    {
-      id: 'ord_1001',
-      orderNumber: 'NR-1001',
-      status: 'PAID',
-      totalCents: 2400,
-      rail: 'STRIPE',
-      items: [{ sku: 'NL-NOTE-A5', title: 'Nexus A5 Hardcover Notebook Set', qty: 1 }],
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      ipfsHash: 'QmY9c71aJ99bZp2201',
-      webhookVerified: true,
-    },
-    {
-      id: 'ord_1002',
-      orderNumber: 'NR-1002',
-      status: 'FULFILLED',
-      totalCents: 4200,
-      rail: 'STRIPE',
-      items: [{ sku: 'NL-LAMP', title: 'Nexus Minimalist LED Desk Lamp', qty: 1 }],
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      ipfsHash: 'QmZ1d55bK88cZp3302',
-      webhookVerified: true,
-    },
-  ]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch live orders from backend
-    fetch('/api/v1/orders')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.data?.orders?.length) {
-          setOrders(data.data.orders);
-        }
+    fetchOrders()
+      .then((rows) => {
+        setOrders(rows);
+        setLoadError('');
       })
-      .catch(() => {});
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoading(false));
   }, []);
+
+  const highlight = orders.find((order) => order.id === highlightOrderId);
+  const paid = highlight?.status === 'PAID' || highlight?.status === 'FULFILLING' || highlight?.status === 'FULFILLED';
 
   return (
     <div className="min-h-screen bg-nexus-dark text-white p-6 md:p-12">
       <div className="max-w-4xl mx-auto space-y-8">
-        <Link href="/app" className="inline-flex items-center gap-2 text-xs font-mono text-gray-400 hover:text-white transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Back to Buyer Dashboard
-        </Link>
-
-        {/* Pipeline Monitor */}
-        <EndToEndFlowMonitor currentStage={5} orderId={highlightOrderId || 'ord_1003'} selectedRail="STRIPE" />
-
-        {isSuccess && (
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/40 font-mono text-xs text-emerald-400 flex items-center justify-between shadow-lg shadow-emerald-500/10">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              <span>
-                <strong>Order {highlightOrderId} Confirmed!</strong> Stripe Webhook event <code>checkout.session.completed</code> processed cleanly.
-              </span>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-              STATUS: PAID
-            </span>
+        {highlightOrderId && !loading && !loadError && (
+          <div className="p-4 rounded-2xl bg-nexus-card border border-gray-700 font-mono text-xs text-gray-200">
+            {paid
+              ? `Order ${highlight?.orderNumber || highlightOrderId} is ${highlight?.status} in the database.`
+              : `Order ${highlightOrderId} is ${highlight?.status || 'not in your orders yet'}. A card payment stays pending until Stripe’s webhook marks it paid.`}
           </div>
         )}
 
         <div className="border-b border-gray-800 pb-4">
           <h1 className="text-3xl font-extrabold flex items-center gap-3">
             <PackageCheck className="w-7 h-7 text-stellar-cyan" />
-            <span>Order History Ledger</span>
+            <span>Your orders</span>
           </h1>
-          <p className="text-xs text-gray-400 font-mono mt-1">Live status timeline synced with Render backend & Webhook events</p>
+          <p className="text-xs text-gray-400 mt-1">Status and amounts come from your orders in the database.</p>
         </div>
+
+        {loadError && <p className="text-sm text-rose-300">{loadError}</p>}
+        {loading && <p className="text-sm text-gray-400">Loading orders…</p>}
+        {!loading && orders.length === 0 && !loadError && (
+          <p className="text-sm text-gray-400">You do not have any orders yet.</p>
+        )}
 
         <div className="space-y-4">
           {orders.map((order) => {
@@ -124,7 +84,7 @@ function OrdersContent() {
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       {order.status}
                     </span>
-                    <span className="font-extrabold text-base text-white">${((order.totalCents || 4200) / 100).toFixed(2)}</span>
+                    <span className="font-extrabold text-base text-white">${((order.totalCents || 0) / 100).toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -139,23 +99,19 @@ function OrdersContent() {
                 </div>
 
                 {/* Webhook & IPFS Metadata Footer */}
-                <div className="pt-2 border-t border-gray-800/60 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[11px] gap-2">
-                  <div className="flex items-center gap-2 text-rail-emerald font-bold">
-                    <Bell className="w-3.5 h-3.5" />
-                    <span>Webhook Audit: verified (checkout.session.completed)</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-400">
-                    <span>IPFS Receipt:</span>
+                {order.ipfsHash && (
+                  <div className="pt-2 border-t border-gray-800/60 text-[11px] text-gray-400 flex items-center gap-2">
+                    <span>Delivery receipt:</span>
                     <a
-                      href={`https://gateway.pinata.cloud/ipfs/${order.ipfsHash || 'QmX7bDemoHash'}`}
+                      href={`https://gateway.pinata.cloud/ipfs/${order.ipfsHash}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-stellar-cyan hover:underline flex items-center gap-1 font-bold"
+                      className="text-stellar-cyan hover:underline inline-flex items-center gap-1"
                     >
-                      {order.ipfsHash || 'QmX7b82fK99a'} <ExternalLink className="w-3 h-3" />
+                      {order.ipfsHash} <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
-                </div>
+                )}
               </div>
             );
           })}

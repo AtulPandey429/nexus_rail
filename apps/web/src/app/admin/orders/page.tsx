@@ -18,6 +18,7 @@ export default function AdminOrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderState[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('nexus_token');
@@ -41,16 +42,12 @@ export default function AdminOrdersPage() {
         if (data.status === 'success' && Array.isArray(data.data?.orders)) {
           setOrders(data.data.orders);
         } else {
-          setOrders([
-            { id: 'ord_1001', orderNumber: 'NR-1001', buyerEmail: 'buyer@example.com', status: 'PAID', totalCents: 2400, createdAt: '2026-10-09T00:00:00.000Z' },
-            { id: 'ord_1002', orderNumber: 'NR-1002', buyerEmail: 'buyer2@example.com', status: 'FULFILLING', totalCents: 4200, createdAt: '2026-10-08T18:30:00.000Z' },
-          ]);
+          setOrders([]);
+          setError('Could not load orders to fulfill.');
         }
-      } catch (err) {
-        setOrders([
-          { id: 'ord_1001', orderNumber: 'NR-1001', buyerEmail: 'buyer@example.com', status: 'PAID', totalCents: 2400, createdAt: '2026-10-09T00:00:00.000Z' },
-          { id: 'ord_1002', orderNumber: 'NR-1002', buyerEmail: 'buyer2@example.com', status: 'FULFILLING', totalCents: 4200, createdAt: '2026-10-08T18:30:00.000Z' },
-        ]);
+      } catch {
+        setOrders([]);
+        setError('Could not load orders to fulfill.');
       } finally {
         setIsLoading(false);
       }
@@ -61,6 +58,7 @@ export default function AdminOrdersPage() {
 
   const handleStatusTransition = async (orderId: string, nextStatus: 'FULFILLING' | 'FULFILLED' | 'FAILED') => {
     const token = localStorage.getItem('nexus_token');
+    setError('');
     try {
       const res = await fetch(`/api/v1/admin/orders/${orderId}`, {
         method: 'PATCH',
@@ -71,19 +69,13 @@ export default function AdminOrdersPage() {
         body: JSON.stringify({ status: nextStatus }),
       });
       const data = await res.json();
-      if (data.status === 'success') {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-        );
+      if (res.ok && data.status === 'success') {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
       } else {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-        );
+        setError(data.error?.message || 'That status change was rejected.');
       }
-    } catch (err) {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-      );
+    } catch {
+      setError('Could not reach the fulfillment API. The order was not changed.');
     }
   };
 
@@ -104,6 +96,7 @@ export default function AdminOrdersPage() {
           </p>
         </div>
 
+        {error && <p className="text-sm text-rose-300">{error}</p>}
         {isLoading ? (
           <div className="p-8 text-center text-xs font-mono text-gray-400 flex items-center justify-center gap-2">
             <RefreshCw className="w-4 h-4 animate-spin text-rail-emerald" />
