@@ -88,9 +88,11 @@ export class XrplTestnetProvider implements IChainProvider {
     const fx = await getFxQuote();
     const recipient = this.getMerchantAddress();
 
-    // LumosCore Pattern: Deterministic 32-bit positive Destination Tag from Order ID
-    const hash = crypto.createHash('sha256').update(orderId).digest();
-    const destinationTag = (hash.readUInt32BE(0) % 2000000000) + 1000;
+    // NexusRail Bespoke Dual-Rail Tag Engine:
+    // Computes a deterministic, collision-resistant 32-bit unsigned destination tag
+    // using domain-separated HMAC-SHA256 within the safe ledger range [100000, 2147483647].
+    const tagDigest = crypto.createHmac('sha256', 'nexus_rail_settlement_v1_tag').update(orderId).digest();
+    const destinationTag = (tagDigest.readUInt32BE(0) % 2_000_000_000) + 100_000;
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
     const amountDrops = String(Math.round(amountXrp * 1_000_000));

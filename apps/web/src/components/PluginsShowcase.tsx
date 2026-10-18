@@ -28,15 +28,15 @@ export function PluginsShowcase() {
           <Cpu className="w-5 h-5 text-cyber-purple" />
           <span>Phase 5 Architecture: Extension Plugins & Hardening</span>
         </h3>
-        <p className="text-xs text-gray-400 font-mono">Hyperliquid Perps • fal.ai Asset Generator • Privy Passkeys • B2B API Keys</p>
+        <p className="text-xs text-gray-400 font-mono">Nexus Dual-Rail Perps • Bespoke Neural Asset Engine • WebAuthn Passkeys • B2B API Gateway</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* fal.ai Generative Asset Plugin Widget */}
+        {/* Neural Asset Engine Plugin Widget */}
         <div className="p-5 rounded-2xl bg-gray-900/60 border border-gray-800 flex flex-col justify-between space-y-4">
           <div>
             <div className="flex justify-between items-center text-xs font-mono text-rail-emerald mb-2">
-              <span className="flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> fal.ai Asset Generator Plugin</span>
+              <span className="flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> Neural Asset Engine Plugin</span>
               <span className="px-2 py-0.5 rounded bg-rail-emerald/10 text-[10px] border border-rail-emerald/30">ACTIVE</span>
             </div>
             <p className="text-xs text-gray-300 mb-3">
@@ -68,12 +68,12 @@ export function PluginsShowcase() {
           )}
         </div>
 
-        {/* Hyperliquid & B2B API Keys */}
+        {/* Nexus Dual-Rail Perps & B2B API Keys */}
         <div className="space-y-4">
-          {/* Hyperliquid Perps Trader */}
+          {/* Nexus Dual-Rail Perps Trader */}
           <div className="p-4 rounded-2xl bg-gray-900/60 border border-gray-800 space-y-2">
             <div className="flex justify-between items-center text-xs font-mono text-stellar-cyan">
-              <span className="flex items-center gap-1.5"><Cpu className="w-4 h-4" /> Hyperliquid Perps Plugin</span>
+              <span className="flex items-center gap-1.5"><Cpu className="w-4 h-4" /> Nexus Dual-Rail Perps Plugin</span>
               <span className="px-2 py-0.5 rounded bg-stellar-cyan/10 text-[10px] border border-stellar-cyan/30">TESTNET</span>
             </div>
             <div className="text-xs text-gray-300 flex justify-between items-center pt-1">

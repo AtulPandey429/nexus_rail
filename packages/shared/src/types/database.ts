@@ -9,6 +9,7 @@ export interface DbUser {
   password_hash?: string;
   wallet_address?: string;
   xrpl_address?: string;
+  passkey_id?: string;
   privy_did?: string;
   role: 'user' | 'admin';
   created_at: string;

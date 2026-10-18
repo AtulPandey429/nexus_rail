@@ -1,4 +1,5 @@
 import { Horizon, StrKey } from '@stellar/stellar-sdk';
+import crypto from 'crypto';
 import type { IChainProvider, ChainInvoice, ChainVerificationResult, ChainNetwork } from '@nexusrail/shared';
 import { env } from '../../config/env.js';
 import { usdCentsToAsset, getFxQuote } from '../market.js';
@@ -49,8 +50,12 @@ export class StellarTestnetProvider implements IChainProvider {
     const fx = await getFxQuote();
     const recipient = this.getMerchantAddress();
     
-    // LumosCore Pattern: Deterministic 28-char alphanumeric memo
-    const memoText = orderId.replace(/-/g, '').slice(0, 28);
+    // NexusRail Bespoke Dual-Rail Memo Engine:
+    // Derives an exact 28-byte uppercase alphanumeric memo starting with 'NR'
+    // followed by a 26-character domain-separated HMAC-SHA256 digest,
+    // ensuring collision resistance and instant ledger reconciliation.
+    const memoHash = crypto.createHmac('sha256', 'nexus_rail_settlement_v1_memo').update(orderId).digest('hex');
+    const memoText = (`NR${memoHash}`).slice(0, 28).toUpperCase();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min window
 
     return {

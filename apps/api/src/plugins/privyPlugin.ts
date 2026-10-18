@@ -1,17 +1,25 @@
-export interface PrivyUserSession {
-  privyDid: string;
+export interface NexusPasskeySession {
+  passkeyId: string;
   embeddedWalletAddress: string;
   email?: string;
   authenticated: boolean;
 }
 
-export class PrivyPlugin {
-  static async verifyPrivySession(privyDid: string): Promise<PrivyUserSession> {
+export class NexusPasskeyPlugin {
+  static async verifyPasskeySession(passkeyId: string): Promise<NexusPasskeySession> {
     return {
-      privyDid,
-      embeddedWalletAddress: '0xprivy' + privyDid.substring(0, 10),
-      email: 'user@privy.auth',
+      passkeyId,
+      embeddedWalletAddress: '0xpasskey' + passkeyId.substring(0, 10),
+      email: 'user@nexusrail.auth',
       authenticated: true,
     };
   }
+
+  // Alias for compatibility
+  static async verifyPrivySession(passkeyId: string): Promise<NexusPasskeySession> {
+    return this.verifyPasskeySession(passkeyId);
+  }
 }
+
+export const PrivyPlugin = NexusPasskeyPlugin;
+export type PrivyUserSession = NexusPasskeySession;

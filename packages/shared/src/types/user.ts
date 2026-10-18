@@ -5,6 +5,7 @@ export interface UserProfile {
   email?: string;
   walletAddress?: string;
   xrplAddress?: string;
+  passkeyId?: string;
   privyDid?: string;
   role: UserRole;
   createdAt: string;
