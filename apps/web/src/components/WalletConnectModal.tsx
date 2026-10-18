@@ -380,8 +380,8 @@ export function WalletConnectModal({ isOpen, onClose, onConnected }: WalletConne
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-md rounded-3xl bg-nexus-card border border-nexus-border p-6 space-y-5 shadow-2xl relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-nexus-card border border-slate-200 dark:border-nexus-border p-5 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative">
         {/* Glow backdrop decoration */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-rail-emerald/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-stellar-cyan/10 rounded-full blur-3xl pointer-events-none" />
@@ -665,17 +665,17 @@ export function WalletConnectModal({ isOpen, onClose, onConnected }: WalletConne
         type="button"
         onClick={() => handleConnect(wallet)}
         disabled={isConnecting}
-        className="w-full p-2.5 rounded-2xl bg-nexus-surface/50 hover:bg-nexus-surface/90 border border-nexus-border/60 hover:border-nexus-border transition-all flex items-center justify-between group text-left"
+        className="w-full p-2.5 rounded-2xl bg-slate-50 dark:bg-nexus-surface/50 hover:bg-slate-100 dark:hover:bg-nexus-surface/90 border border-slate-200 dark:border-nexus-border/60 hover:border-slate-300 dark:hover:border-nexus-border transition-all flex items-center justify-between group text-left shadow-sm"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="shrink-0 transition-transform duration-200 group-hover:scale-105">
             {wallet.icon}
           </div>
           <div className="min-w-0">
-            <h4 className="text-sm font-bold text-white group-hover:text-rail-emerald transition-colors truncate">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-rail-emerald transition-colors truncate">
               {wallet.name}
             </h4>
-            <p className="text-xs text-nexus-muted font-mono truncate">
+            <p className="text-xs text-slate-500 dark:text-nexus-muted font-mono truncate">
               {wallet.subtitle}
             </p>
           </div>
@@ -684,7 +684,7 @@ export function WalletConnectModal({ isOpen, onClose, onConnected }: WalletConne
         <div className="flex items-center gap-2 shrink-0 ml-2">
           {/* Status Badge */}
           {wallet.installed && (
-            <span className="px-2.5 py-0.5 rounded-full bg-nexus-dark/90 border border-nexus-border text-[11px] font-mono text-white/90">
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-nexus-dark/90 border border-slate-300 dark:border-nexus-border text-[11px] font-mono text-slate-800 dark:text-white/90 font-medium">
               Installed
             </span>
           )}
@@ -692,7 +692,7 @@ export function WalletConnectModal({ isOpen, onClose, onConnected }: WalletConne
           {isConnecting ? (
             <RefreshCw className="w-4 h-4 animate-spin text-rail-emerald" />
           ) : (
-            <ChevronRight className="w-4 h-4 text-nexus-muted group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+            <ChevronRight className="w-4 h-4 text-slate-400 dark:text-nexus-muted group-hover:text-slate-900 dark:group-hover:text-white group-hover:translate-x-0.5 transition-all" />
           )}
         </div>
       </button>

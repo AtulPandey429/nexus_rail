@@ -203,20 +203,20 @@ export default function CartPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090C] text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#07090C] text-slate-900 dark:text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black transition-colors duration-200">
       
       {/* Main Container */}
       <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
         
         {/* Breadcrumb Header */}
         <div className="mb-8">
-          <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-white/40">
+          <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-slate-400 dark:text-white/40 font-semibold">
             STORE / YOUR CART
           </p>
-          <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-bold text-white tracking-tight mt-2">
+          <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-bold text-slate-900 dark:text-white tracking-tight mt-2">
             A few good choices.
           </h1>
-          <p className="text-sm sm:text-base text-white/50 mt-1.5 font-normal">
+          <p className="text-sm sm:text-base text-slate-600 dark:text-white/50 mt-1.5 font-normal">
             Three considered essentials. One connected checkout.
           </p>
         </div>
@@ -393,13 +393,13 @@ export default function CartPage() {
 
             {/* Right Order Summary Column (4.5 cols) */}
             <div className="lg:col-span-5 xl:col-span-4">
-              <div className="rounded-xl bg-[#10141A] border border-white/10 p-6 sm:p-7 shadow-xl">
+              <div className="rounded-xl bg-white dark:bg-[#10141A] border border-slate-200 dark:border-white/10 p-5 sm:p-7 shadow-xl">
                 
                 {/* Card Title & Subtitle */}
-                <h2 className="text-2xl font-normal text-white tracking-tight">
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
                   Order summary
                 </h2>
-                <div className="flex items-center justify-between text-xs font-mono text-white/40 tracking-wider mt-2 pb-5 border-b border-white/10">
+                <div className="flex items-center justify-between text-xs font-mono text-slate-400 dark:text-white/40 tracking-wider mt-2 pb-5 border-b border-slate-100 dark:border-white/10">
                   <span>NR-1048 · {totalItemCount} ITEMS</span>
                   <span>USD</span>
                 </div>
@@ -407,36 +407,36 @@ export default function CartPage() {
                 {/* Subtotal Breakdown Lines */}
                 <div className="space-y-4 py-5 text-sm">
                   <div className="flex justify-between items-center">
-                    <span className="text-white/60">Subtotal</span>
-                    <span className="font-mono text-white">
+                    <span className="text-slate-600 dark:text-white/60">Subtotal</span>
+                    <span className="font-mono text-slate-900 dark:text-white font-bold">
                       ${(subtotalCents / 100).toFixed(2)}
                     </span>
                   </div>
 
                   {discountCents > 0 && (
-                    <div className="flex justify-between items-center text-[#7FF8C6]">
+                    <div className="flex justify-between items-center text-emerald-600 dark:text-[#7FF8C6]">
                       <span>Promo code discount</span>
-                      <span className="font-mono">
+                      <span className="font-mono font-bold">
                         -${(discountCents / 100).toFixed(2)}
                       </span>
                     </div>
                   )}
 
                   <div className="flex justify-between items-center">
-                    <span className="text-white/60">Demo shipping</span>
-                    <span className="font-mono text-white/90">Free</span>
+                    <span className="text-slate-600 dark:text-white/60">Demo shipping</span>
+                    <span className="font-mono text-slate-900 dark:text-white/90">Free</span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-white/60">Estimated network fee</span>
-                    <span className="font-mono text-white/70">&lt; $0.001</span>
+                    <span className="text-slate-600 dark:text-white/60">Estimated network fee</span>
+                    <span className="font-mono text-slate-500 dark:text-white/70">&lt; $0.001</span>
                   </div>
                 </div>
 
                 {/* Total Row */}
-                <div className="pt-4 border-t border-white/10 flex justify-between items-baseline">
-                  <span className="text-lg text-white font-medium">Total</span>
-                  <span className="text-2xl sm:text-3xl font-mono font-medium text-white tracking-tight">
+                <div className="pt-4 border-t border-slate-100 dark:border-white/10 flex justify-between items-baseline">
+                  <span className="text-lg text-slate-900 dark:text-white font-bold">Total</span>
+                  <span className="text-2xl sm:text-3xl font-mono font-bold text-slate-900 dark:text-white tracking-tight">
                     ${(totalCents / 100).toFixed(2)}
                   </span>
                 </div>

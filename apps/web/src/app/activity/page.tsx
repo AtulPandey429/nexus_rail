@@ -213,7 +213,7 @@ function ActivityContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090C] text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#07090C] text-slate-900 dark:text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black transition-colors duration-200">
       
       {/* Main Container */}
       <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20 space-y-8">
@@ -221,13 +221,13 @@ function ActivityContent() {
         {/* Header Breadcrumb & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-white/40">
+            <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-slate-400 dark:text-white/40 font-semibold">
               ACCOUNT / ACTIVITY
             </p>
-            <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-bold text-white tracking-tight mt-2">
+            <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-bold text-slate-900 dark:text-white tracking-tight mt-2">
               On the record.
             </h1>
-            <p className="text-sm sm:text-base text-white/50 mt-1 font-normal">
+            <p className="text-sm sm:text-base text-slate-600 dark:text-white/50 mt-1 font-normal">
               Follow your orders, inspect payments, and reconcile the entries behind them.
             </p>
           </div>
@@ -235,7 +235,7 @@ function ActivityContent() {
           <button
             type="button"
             onClick={handleExportHistory}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white font-mono text-xs transition-colors self-start sm:self-auto"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-white font-mono text-xs transition-colors self-start sm:self-auto shadow-sm"
           >
             <span>Export history</span>
             <Download className="w-3.5 h-3.5 text-white/40" />

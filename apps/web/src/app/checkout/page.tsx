@@ -203,29 +203,29 @@ function CheckoutContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090C] text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#07090C] text-slate-900 dark:text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black transition-colors duration-200">
       
       {/* Main Container */}
       <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
         
         {/* Step Progress Breadcrumb */}
-        <div className="flex items-center gap-3 text-xs font-mono mb-8">
-          <Link href="/cart" className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors">
-            <span className="w-4 h-4 rounded-full bg-[#092B21] border border-[#165D46] text-[#7FF8C6] flex items-center justify-center text-[10px]">
+        <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono mb-8 overflow-x-auto pb-1">
+          <Link href="/cart" className="flex items-center gap-1.5 text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0">
+            <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-[#092B21] border border-emerald-400 dark:border-[#165D46] text-emerald-700 dark:text-[#7FF8C6] flex items-center justify-center text-[10px] font-bold">
               ✓
             </span>
             <span>Cart</span>
           </Link>
-          <span className="text-white/20">──────</span>
-          <div className="flex items-center gap-1.5 text-white font-semibold">
+          <span className="text-slate-300 dark:text-white/20">──────</span>
+          <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-semibold shrink-0">
             <span className="w-4 h-4 rounded-full bg-[#7FF8C6] text-[#052E20] flex items-center justify-center text-[10px] font-bold">
               2
             </span>
             <span>Checkout</span>
           </div>
-          <span className="text-white/20">──────</span>
-          <div className="flex items-center gap-1.5 text-white/30">
-            <span className="w-4 h-4 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[10px]">
+          <span className="text-slate-300 dark:text-white/20">──────</span>
+          <div className="flex items-center gap-1.5 text-slate-400 dark:text-white/30 shrink-0">
+            <span className="w-4 h-4 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 flex items-center justify-center text-[10px]">
               3
             </span>
             <span>Receipt</span>
@@ -234,10 +234,10 @@ function CheckoutContent() {
 
         {/* Page Title & Order Badge */}
         <div className="flex items-center gap-3 mb-8">
-          <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-bold text-white tracking-tight">
+          <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-bold text-slate-900 dark:text-white tracking-tight">
             Checkout
           </h1>
-          <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-white/50 text-xs font-mono">
+          <span className="px-2.5 py-1 rounded bg-slate-200 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-white/50 text-xs font-mono font-bold">
             {orderId}
           </span>
         </div>
@@ -477,17 +477,17 @@ function CheckoutContent() {
 
           {/* Right Column: Your Order (5 cols) */}
           <div className="lg:col-span-5">
-            <div className="rounded-xl bg-[#10141A] border border-white/10 p-6 sm:p-7 shadow-xl space-y-6">
+            <div className="rounded-xl bg-white dark:bg-[#10141A] border border-slate-200 dark:border-white/10 p-5 sm:p-7 shadow-xl space-y-6">
               
-              <h2 className="text-xl font-medium text-white tracking-tight">
+              <h2 className="text-xl font-medium text-slate-900 dark:text-white tracking-tight">
                 Your order
               </h2>
 
               {/* Items List */}
-              <div className="space-y-4 divide-y divide-white/10">
+              <div className="space-y-4 divide-y divide-slate-100 dark:divide-white/10">
                 {items.map((item) => (
                   <div key={item.sku} className="pt-4 first:pt-0 flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-lg bg-[#111620] border border-white/10 overflow-hidden relative shrink-0">
+                    <div className="w-14 h-14 rounded-lg bg-slate-100 dark:bg-[#111620] border border-slate-200 dark:border-white/10 overflow-hidden relative shrink-0">
                       <Image
                         src={PRODUCT_IMAGE_MAP[item.sku] || '/products/rail-one.png'}
                         alt={item.title}
@@ -497,10 +497,10 @@ function CheckoutContent() {
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{item.title}</p>
-                      <p className="text-xs font-mono text-white/40 mt-0.5">Qty {item.qty}</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.title}</p>
+                      <p className="text-xs font-mono text-slate-500 dark:text-white/40 mt-0.5">Qty {item.qty}</p>
                     </div>
-                    <span className="text-sm font-mono text-white">
+                    <span className="text-sm font-mono text-slate-900 dark:text-white font-bold">
                       ${((item.priceCents * item.qty) / 100).toFixed(2)}
                     </span>
                   </div>
@@ -508,14 +508,14 @@ function CheckoutContent() {
               </div>
 
               {/* Financial Breakdown */}
-              <div className="space-y-3 py-4 border-t border-b border-white/10 text-xs font-mono">
-                <div className="flex justify-between text-white/60">
+              <div className="space-y-3 py-4 border-t border-b border-slate-100 dark:border-white/10 text-xs font-mono">
+                <div className="flex justify-between text-slate-600 dark:text-white/60">
                   <span>Subtotal</span>
-                  <span className="text-white">${rawSubtotalUsd.toFixed(2)}</span>
+                  <span className="text-slate-900 dark:text-white font-bold">${rawSubtotalUsd.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-white/60">
+                <div className="flex justify-between text-slate-600 dark:text-white/60">
                   <span>Shipping</span>
-                  <span className="text-white">Free</span>
+                  <span className="text-slate-900 dark:text-white font-bold">Free</span>
                 </div>
                 <div className="flex justify-between text-white/60">
                   <span>Network fee</span>

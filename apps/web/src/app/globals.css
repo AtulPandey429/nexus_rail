@@ -3,8 +3,25 @@
 @tailwind utilities;
 
 :root {
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --surface: #FFFFFF;
+  --card: #FFFFFF;
+  --card-subtle: #F1F5F9;
+  --border: #E2E8F0;
+  --border-focus: #CBD5E1;
+  --muted: #64748B;
+}
+
+.dark {
   --background: #08090D;
   --foreground: #F9FAFB;
+  --surface: #0B0D14;
+  --card: #11141D;
+  --card-subtle: #141824;
+  --border: #1D2230;
+  --border-focus: #2B3347;
+  --muted: #8A93A6;
 }
 
 body {
@@ -14,6 +31,8 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.25s ease, color 0.25s ease;
+  overflow-x: hidden;
 }
 
 /* Custom subtle scrollbar */
@@ -22,13 +41,20 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0B0D14;
+  background: transparent;
 }
-::-webkit-scrollbar-thumb {
+.dark ::-webkit-scrollbar-thumb {
   background: #1E2330;
   border-radius: 9999px;
 }
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
 ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
   background: #2D3548;
 }
 
@@ -36,6 +62,26 @@ body {
 .figma-grid {
   background-size: 32px 32px;
   background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+}
+.dark .figma-grid {
+  background-image: 
     linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Portfolio Ambient Glow Orb */
+.portfolio-glow-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Glassmorphism Card Utility */
+.glass-panel {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }

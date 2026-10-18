@@ -199,7 +199,7 @@ function LoginFormContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090E] text-white flex flex-col justify-between selection:bg-rail-emerald/30">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#07090E] text-slate-900 dark:text-white flex flex-col justify-between selection:bg-rail-emerald/30 transition-colors duration-200">
       {/* Wallet Modal */}
       <WalletConnectModal
         isOpen={isWalletModalOpen}
@@ -221,29 +221,29 @@ function LoginFormContent() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-[calc(100vh-48px)]">
         
         {/* LEFT COLUMN: Hero Brand Narrative (40% width / 5 cols) */}
-        <div className="lg:col-span-5 bg-[#05070A] border-r border-[#151921] p-8 sm:p-12 lg:p-16 flex flex-col justify-between relative overflow-hidden">
+        <div className="lg:col-span-5 bg-white dark:bg-[#05070A] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-[#151921] p-6 sm:p-10 lg:p-16 flex flex-col justify-between relative overflow-hidden">
           {/* Subtle geometric grid background */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#10141D_1px,transparent_1px),linear-gradient(to_bottom,#10141D_1px,transparent_1px)] bg-[size:32px_32px] opacity-25 pointer-events-none" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#10141D_1px,transparent_1px),linear-gradient(to_bottom,#10141D_1px,transparent_1px)] bg-[size:32px_32px] opacity-10 dark:opacity-25 pointer-events-none" />
 
           {/* Top Brand Tag */}
           <div className="space-y-6 relative z-10">
-            <Link href="/" className="inline-flex items-center gap-2 text-white font-bold tracking-tight text-lg">
+            <Link href="/" className="inline-flex items-center gap-2 text-slate-900 dark:text-white font-bold tracking-tight text-lg">
               <span className="w-2 h-2 rounded-full bg-rail-emerald shadow-[0_0_8px_#00E5A3]" />
               <span className="tracking-tighter font-mono">nexusrail</span>
             </Link>
 
-            <div className="space-y-4 pt-8">
+            <div className="space-y-4 pt-6 sm:pt-8">
               <div className="inline-block px-3 py-1 rounded-full border border-rail-emerald/40 bg-rail-emerald/5 text-[10px] font-mono tracking-widest text-rail-emerald uppercase">
                 THE CONNECTED COMMERCE DEMO
               </div>
 
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-[1.15]">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.15]">
                 Your account.<br />
                 Your assets.<br />
                 Your next move.
               </h1>
 
-              <p className="text-sm text-[#8A93A6] leading-relaxed max-w-md pt-2">
+              <p className="text-sm text-slate-600 dark:text-[#8A93A6] leading-relaxed max-w-md pt-2">
                 A familiar way in. A better way to move between shopping, payments and everything onchain.
               </p>
             </div>
@@ -271,13 +271,13 @@ function LoginFormContent() {
         </div>
 
         {/* RIGHT COLUMN: Connection & Authentication Card (60% width / 7 cols) */}
-        <div className="lg:col-span-7 bg-[#07090E] p-8 sm:p-12 lg:p-16 flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-slate-50 dark:bg-[#07090E] p-6 sm:p-10 lg:p-16 flex flex-col justify-between">
           
           {/* Top Navigation Row */}
           <div className="flex justify-end">
             <Link
               href="/store"
-              className="inline-flex items-center gap-1.5 text-xs text-[#8A93A6] hover:text-white transition-colors font-mono"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#8A93A6] hover:text-slate-900 dark:hover:text-white transition-colors font-mono"
             >
               <span>&larr; Back to demo store</span>
             </Link>
@@ -291,10 +291,10 @@ function LoginFormContent() {
               <span className="text-[11px] font-mono tracking-widest uppercase text-rail-emerald font-semibold">
                 WELCOME TO NEXUSRAIL
               </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                 Make your connection.
               </h2>
-              <p className="text-xs text-[#8A93A6]">
+              <p className="text-xs text-slate-600 dark:text-[#8A93A6]">
                 Sign in or create an account. Your journey starts here.
               </p>
             </div>
@@ -328,13 +328,13 @@ function LoginFormContent() {
               <button
                 type="button"
                 onClick={() => setIsWalletModalOpen(true)}
-                className="w-full py-4 px-6 rounded-2xl bg-rail-emerald hover:bg-rail-mint text-[#05070A] font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-[0_4px_24px_rgba(0,229,163,0.25)] hover:shadow-[0_6px_32px_rgba(0,229,163,0.4)]"
+                className="w-full py-4 px-6 rounded-2xl bg-rail-emerald hover:bg-rail-mint text-[#05070A] font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-rail-emerald/25 hover:shadow-xl hover:scale-[1.01] active:scale-95"
               >
                 <Wallet className="w-4 h-4" />
                 <span>Connect a wallet</span>
               </button>
 
-              <p className="text-[11px] font-mono text-center text-[#8A93A6]">
+              <p className="text-[11px] font-mono text-center text-slate-500 dark:text-[#8A93A6]">
                 Freighter &bull; GemWallet &bull; Xaman &bull; EVM / MetaMask
               </p>
             </div>
@@ -342,20 +342,20 @@ function LoginFormContent() {
             {/* Divider: OR CONTINUE WITH */}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[#1C2331]" />
+                <div className="w-full border-t border-slate-200 dark:border-[#1C2331]" />
               </div>
               <div className="relative flex justify-center text-[10px] uppercase font-mono tracking-wider">
-                <span className="bg-[#07090E] px-3 text-[#5A6478]">OR CONTINUE WITH</span>
+                <span className="bg-slate-50 dark:bg-[#07090E] px-3 text-slate-400 dark:text-[#5A6478]">OR CONTINUE WITH</span>
               </div>
             </div>
 
-            {/* Social Row: Google & Apple */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Social Row: Google */}
+            <div className="grid grid-cols-1 gap-3">
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
-                className="py-3 px-4 rounded-xl bg-[#0E131E] hover:bg-[#141B2B] border border-[#1C2331] hover:border-[#2A3449] text-xs font-mono text-white flex items-center justify-center gap-2.5 transition-all"
+                className="py-3 px-4 rounded-xl bg-white dark:bg-[#0E131E] hover:bg-slate-100 dark:hover:bg-[#141B2B] border border-slate-300 dark:border-[#1C2331] text-xs font-mono text-slate-800 dark:text-white flex items-center justify-center gap-2.5 transition-all shadow-sm hover:scale-[1.01] active:scale-95"
               >
                 <GoogleIcon className="w-4 h-4" />
                 <span>Google</span>

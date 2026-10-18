@@ -136,20 +136,20 @@ export default function SwapPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090C] text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#07090C] text-slate-900 dark:text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black transition-colors duration-200">
       
       {/* Main Container */}
       <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
         
         {/* Header Breadcrumb */}
         <div className="mb-8">
-          <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-white/40">
+          <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-slate-400 dark:text-white/40 font-semibold">
             ASSET ROUTING / TESTNET
           </p>
-          <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-bold text-white tracking-tight mt-2">
+          <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-bold text-slate-900 dark:text-white tracking-tight mt-2">
             Make your next move.
           </h1>
-          <p className="text-sm sm:text-base text-white/50 mt-1.5 font-normal">
+          <p className="text-sm sm:text-base text-slate-600 dark:text-white/50 mt-1.5 font-normal">
             Preview a multi-chain test-asset swap. Know the rate, route and limits before you sign.
           </p>
         </div>
@@ -159,11 +159,11 @@ export default function SwapPage() {
           
           {/* Left Column: Swap Assets Card (6 cols) */}
           <div className="lg:col-span-6 space-y-4">
-            <div className="rounded-2xl bg-[#10141A] border border-white/10 p-6 sm:p-7 shadow-xl space-y-4">
+            <div className="rounded-2xl bg-white dark:bg-[#10141A] border border-slate-200 dark:border-white/10 p-5 sm:p-7 shadow-xl space-y-4">
               
               {/* Card Title & Slippage Selector */}
               <div className="flex items-center justify-between pb-1">
-                <h2 className="text-xl font-medium text-white tracking-tight">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
                   Swap assets
                 </h2>
                 
