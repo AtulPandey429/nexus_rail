@@ -17,7 +17,9 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
   const target = `${API_SERVER_URL.replace(/\/$/, '')}/api/v1/${(path || []).join('/')}${req.nextUrl.search}`;
   const headers = new Headers();
   req.headers.forEach((value, key) => {
-    if (!['host', 'connection', 'content-length'].includes(key.toLowerCase())) headers.set(key, value);
+    if (!['host', 'connection', 'content-length', 'origin'].includes(key.toLowerCase())) {
+      headers.set(key, value);
+    }
   });
   const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await req.arrayBuffer();
   try {

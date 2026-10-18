@@ -27,20 +27,25 @@ import type { HealthResponse } from '@nexusrail/shared';
 const app = express();
 const startTime = Date.now();
 
-const allowedOrigins = [
-  env.CORS_ORIGIN,
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  env.APP_URL,
-].filter(Boolean);
+const isAllowedOrigin = (origin: string): boolean => {
+  if (!origin) return true;
+  if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') return true;
+  if (env.CORS_ORIGIN && (origin === env.CORS_ORIGIN || origin.startsWith(env.CORS_ORIGIN))) return true;
+  if (env.APP_URL && (origin === env.APP_URL || origin.startsWith(env.APP_URL))) return true;
+  // Authorize all Vercel production and preview deployment URLs
+  if (origin.endsWith('.vercel.app') || origin.includes('vercel.app')) return true;
+  return false;
+};
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || env.NODE_ENV !== 'production') {
+      if (!origin || isAllowedOrigin(origin) || env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
-      return callback(new Error(`CORS policy violation: Origin "${origin}" is not authorized`));
+      const err: any = new Error(`CORS policy violation: Origin "${origin}" is not authorized`);
+      err.status = 403;
+      return callback(err);
     },
     credentials: true,
   })
