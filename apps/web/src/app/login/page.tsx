@@ -17,6 +17,7 @@ import {
 import { notifySession } from '@/lib/shop';
 import { GoogleIcon } from '@/components/WalletIcons';
 import { WalletConnectModal } from '@/components/WalletConnectModal';
+import { NexusLogo } from '@/components/NexusLogo';
 
 function LoginFormContent() {
   const router = useRouter();
@@ -227,8 +228,8 @@ function LoginFormContent() {
 
           {/* Top Brand Tag */}
           <div className="space-y-6 relative z-10">
-            <Link href="/" className="inline-flex items-center gap-2 text-slate-900 dark:text-white font-bold tracking-tight text-lg">
-              <span className="w-2 h-2 rounded-full bg-rail-emerald shadow-[0_0_8px_#00E5A3]" />
+            <Link href="/" className="inline-flex items-center gap-2.5 text-slate-900 dark:text-white font-bold tracking-tight text-lg group">
+              <NexusLogo size={28} glow className="group-hover:scale-105 transition-transform shadow-md" />
               <span className="tracking-tighter font-mono">nexusrail</span>
             </Link>
 
@@ -253,13 +254,9 @@ function LoginFormContent() {
           <div className="my-10 relative z-10 flex items-center justify-center">
             <div className="relative w-48 h-48 flex items-center justify-center">
               {/* Concentric grid rings */}
-              <div className="absolute inset-0 rounded-3xl border border-white/5 rotate-12" />
-              <div className="absolute inset-2 rounded-3xl border border-white/5 -rotate-6" />
-              <div className="w-24 h-24 rounded-2xl border border-rail-emerald/40 bg-gradient-to-br from-rail-emerald/10 to-transparent flex items-center justify-center shadow-[0_0_30px_rgba(0,229,163,0.15)]">
-                <div className="w-6 h-6 rounded-lg bg-rail-emerald/30 border border-rail-emerald flex items-center justify-center text-rail-emerald">
-                  <span className="w-2 h-2 rounded-full bg-rail-emerald animate-ping" />
-                </div>
-              </div>
+              <div className="absolute inset-0 rounded-3xl border border-slate-300 dark:border-white/5 rotate-12" />
+              <div className="absolute inset-2 rounded-3xl border border-slate-300 dark:border-white/5 -rotate-6" />
+              <NexusLogo size={88} glow className="shadow-[0_0_40px_rgba(0,229,163,0.3)] hover:scale-105 transition-transform duration-500 z-10" />
             </div>
           </div>
 

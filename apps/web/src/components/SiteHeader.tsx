@@ -24,6 +24,7 @@ import {
   SessionUser,
   verifySession,
 } from '@/lib/shop';
+import { NexusLogo } from './NexusLogo';
 import { useTheme } from './ThemeProvider';
 import { WalletConnectModal } from './WalletConnectModal';
 
@@ -92,9 +93,7 @@ export function SiteHeader() {
         {/* Logo & Network Status Pill */}
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2 group shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-[#0E131E] border border-slate-300 dark:border-[#1C2638] flex items-center justify-center group-hover:border-rail-emerald/60 transition-colors shadow-sm">
-              <span className="w-2.5 h-2.5 rounded-sm bg-rail-emerald shadow-sm shadow-rail-emerald/50" />
-            </div>
+            <NexusLogo size={30} glow priority className="group-hover:scale-105 transition-transform shadow-md" />
             <span className="text-base font-bold text-slate-900 dark:text-white tracking-tight lowercase font-mono">
               nexusrail
             </span>

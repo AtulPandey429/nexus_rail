@@ -18,6 +18,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { addSkuToCart } from '@/lib/shop';
+import { NexusLogo } from '@/components/NexusLogo';
 
 export default function HomePage() {
   const [addingSku, setAddingSku] = useState<string | null>(null);
@@ -168,9 +169,7 @@ export default function HomePage() {
                 {/* Center Routing graphic */}
                 <div className="my-8 sm:my-10 flex flex-col items-center justify-center space-y-4">
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-rail-emerald/10 border border-rail-emerald/40 flex items-center justify-center shadow-xl shadow-rail-emerald/15 group-hover:scale-110 transition-transform duration-500">
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rail-emerald flex items-center justify-center text-nexus-dark font-black text-base shadow-md">
-                      NR
-                    </div>
+                    <NexusLogo size={52} glow priority className="shadow-lg" />
                   </div>
                   <div className="text-center font-mono space-y-1">
                     <div className="text-xs text-slate-500 dark:text-gray-400 uppercase tracking-widest font-semibold">

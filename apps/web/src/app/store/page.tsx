@@ -26,6 +26,7 @@ import {
   onSessionChange,
 } from '@/lib/shop';
 import { useLiveExchangeRates } from '@/lib/rates';
+import { NexusLogo } from '@/components/NexusLogo';
 
 type CategoryFilter = 'all' | 'hardware' | 'workspace' | 'essentials';
 type SortOption = 'featured' | 'price-asc' | 'price-desc' | 'rating';
@@ -212,13 +213,13 @@ export default function StoreCatalogPage() {
           <div className="flex items-center gap-3">
             {/* Search Input */}
             <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#5A6478] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <NexusLogo size="xs" glow className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none rounded shadow-sm" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search the collection"
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white dark:bg-[#0B0F17] border border-slate-300 dark:border-[#1C2638] text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#5A6478] focus:outline-none focus:border-rail-emerald transition-colors shadow-sm"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-white dark:bg-[#0B0F17] border border-slate-300 dark:border-[#1C2638] text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#5A6478] focus:outline-none focus:border-rail-emerald transition-colors shadow-sm"
               />
             </div>
 

@@ -16,6 +16,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 import { fetchOrders } from '@/lib/shop';
+import { NexusLogo } from '@/components/NexusLogo';
 
 interface OrderItem {
   id: string;
@@ -342,13 +343,13 @@ function ActivityContent() {
 
           {/* Search Box */}
           <div className="relative w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+            <NexusLogo size="xs" glow className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none rounded shadow-sm" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search order or transaction"
-              className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#10141A] border border-white/10 text-xs font-mono text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-white dark:bg-[#10141A] border border-slate-300 dark:border-white/10 text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-white/30 focus:outline-none focus:border-rail-emerald shadow-sm"
             />
           </div>
 

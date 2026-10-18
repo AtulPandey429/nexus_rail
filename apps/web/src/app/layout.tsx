@@ -9,6 +9,16 @@ const inter = Inter({ subsets: ['latin'], display: 'swap' });
 export const metadata: Metadata = {
   title: 'NexusRail | Multi-Rail Crypto Commerce Engine',
   description: 'Shop catalog, cart, and dual-rail settlement through Stellar and XRPL ledger rails.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/logo-icon.webp', type: 'image/webp' },
+      { url: '/favicon.png', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/logo-256.png', sizes: '256x256' },
+    ],
+  },
 };
 
 export const viewport: Viewport = {

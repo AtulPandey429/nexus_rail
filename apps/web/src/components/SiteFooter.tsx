@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { NexusLogo } from './NexusLogo';
 
 export function SiteFooter() {
   return (
@@ -10,9 +11,7 @@ export function SiteFooter() {
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-sm bg-slate-200 dark:bg-nexus-card border border-slate-300 dark:border-nexus-border flex items-center justify-center">
-                <span className="w-1.5 h-1.5 rounded-sm bg-rail-emerald" />
-              </div>
+              <NexusLogo size={20} />
               <span className="font-bold text-slate-900 dark:text-white tracking-tight lowercase">nexusrail</span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-gray-500">
