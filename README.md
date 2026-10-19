@@ -9,11 +9,11 @@
 [![XRPL](https://img.shields.io/badge/XRPL-Altnet-0055ff?logo=xrp)](https://xrpl.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-NexusRail is a multi-rail commerce platform combining native Web3 settlements (Stellar & XRPL), traditional fiat checkout (Stripe), and an autonomous AI commerce assistant.
+NexusRail is an enterprise-grade multi-rail commerce platform combining native Web3 settlements (Stellar & XRPL), traditional fiat checkout (Stripe), an immutable double-entry ledger in MongoDB Atlas, and an autonomous AI commerce assistant.
 
 ---
 
-## Deployments
+## 🌐 Deployments
 
 | Service | Platform | URL | Status |
 | :--- | :--- | :--- | :--- |
@@ -24,7 +24,24 @@ NexusRail is a multi-rail commerce platform combining native Web3 settlements (S
 
 ---
 
-## Features
+## 📚 Documentation Index
+
+| Document | Purpose |
+| :--- | :--- |
+| [**`docs/PROJECT_OVERVIEW.md`**](./docs/PROJECT_OVERVIEW.md) | High-level project purpose, value propositions, and verified capabilities. |
+| [**`docs/ARCHITECTURE.md`**](./docs/ARCHITECTURE.md) | System topology, request lifecycle, multi-chain provider patterns, and diagrams. |
+| [**`docs/API_REFERENCE.md`**](./docs/API_REFERENCE.md) | Complete reference for all verified endpoints, request bodies, and responses. |
+| [**`docs/DATA_SOURCES.md`**](./docs/DATA_SOURCES.md) | Inventory of databases, blockchains, APIs, caching mechanisms, and data flows. |
+| [**`docs/CONFIGURATION.md`**](./docs/CONFIGURATION.md) | Environment variable definitions, deployment profiles, and defaults. |
+| [**`docs/TESTING_AND_OPERATIONS.md`**](./docs/TESTING_AND_OPERATIONS.md) | Test suites, commands, 33/33 test verification results, and operational runbooks. |
+| [**`docs/KNOWN_LIMITATIONS.md`**](./docs/KNOWN_LIMITATIONS.md) | Catalog of stubbed routes (HTTP 501), in-memory fallbacks, and known constraints. |
+| [**`docs/ROADMAP.md`**](./docs/ROADMAP.md) | Prioritized (P0–P3) technical improvement proposals with implementation outlines. |
+| [**`docs/SOURCE_OF_TRUTH.md`**](./docs/SOURCE_OF_TRUTH.md) | Strict claim-to-code audit mapping verifying real vs planned features. |
+| [**`openapi.yaml`**](./openapi.yaml) | Valid OpenAPI 3.0.3 specification for the REST API. |
+
+---
+
+## ✨ Features
 
 - **Multi-Rail Crypto Settlement**:
   - **Stellar Horizon**: Direct XLM settlement with transaction memo matching and sequence verification.
@@ -37,7 +54,7 @@ NexusRail is a multi-rail commerce platform combining native Web3 settlements (S
 
 ---
 
-## Architecture
+## 🏗 Architecture
 
 ```mermaid
 flowchart TD
@@ -77,7 +94,7 @@ flowchart TD
 
 ---
 
-## Repository Structure
+## 📂 Repository Structure
 
 ```
 nexus-rail/
@@ -103,6 +120,8 @@ nexus-rail/
 ├── packages/
 │   └── shared/                 # Shared TypeScript models, schemas, and interfaces
 │
+├── docs/                       # Comprehensive System Documentation
+├── openapi.yaml                # OpenAPI 3.0.3 Specification
 ├── .env.example                # Environment variable template
 ├── package.json                # Workspaces configuration
 └── README.md                   # Project overview
@@ -110,7 +129,7 @@ nexus-rail/
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
 ### 1. Prerequisites
 - **Node.js**: `v20.x` or `v22.x`
@@ -140,9 +159,10 @@ APP_URL=http://localhost:3000
 API_SERVER_URL=http://localhost:4000
 ```
 
-### 4. Build Shared Types
+### 4. Build Shared Types & Packages
 ```bash
 npm run build:shared
+npm run build:api
 ```
 
 ### 5. Run Development Servers
@@ -156,29 +176,7 @@ npm run dev:web
 
 ---
 
-## Environment Variables
-
-| Variable | Scope | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `PORT` | Backend | Optional | Port for the Express API server (default: `4000`). |
-| `NODE_ENV` | Global | Required | Execution environment (`development` \| `production`). |
-| `MONGODB_URI` | Backend | **Required** | MongoDB connection string. |
-| `JWT_SECRET` | Backend | **Required** | HMAC key for signing authentication tokens. |
-| `CORS_ORIGIN` | Backend | Required | Allowed CORS origin (e.g., `http://localhost:3000`). |
-| `API_SERVER_URL` | Frontend | Required | Backend target URL for the Next.js API proxy route. |
-| `GROQ_API_KEY` | Backend | Optional | API key for LLM chat completions in the AI Agent Desk. |
-| `GROQ_MODEL` | Backend | Optional | Model identifier (default: `llama-3.3-70b-versatile`). |
-| `HORIZON_URL` | Backend | Optional | Stellar Horizon RPC node (default: `https://horizon-testnet.stellar.org`). |
-| `STELLAR_MERCHANT_PUBLIC_KEY` | Backend | Optional | Merchant public key (G-address) for XLM settlement. |
-| `XRPL_WSS` | Backend | Optional | XRPL WebSocket endpoint (default: `wss://s.altnet.rippletest.net:51233`). |
-| `XRPL_MERCHANT_ADDRESS` | Backend | Optional | Merchant classic address (r-address) for XRP settlement. |
-| `STRIPE_SECRET_KEY` | Backend | Optional | Stripe secret key (`sk_test_...`) for card payments. |
-| `STRIPE_WEBHOOK_SECRET` | Backend | Optional | Stripe webhook signature secret (`whsec_...`). |
-| `PINATA_JWT` | Backend | Optional | Pinata JWT for IPFS receipt pinning. |
-
----
-
-## Scripts
+## 📜 Scripts
 
 - `npm run build`: Compiles shared packages, backend TypeScript, and Next.js frontend.
 - `npm run dev:api`: Starts backend API in development mode with live reload.
@@ -188,5 +186,5 @@ npm run dev:web
 
 ---
 
-## License
+## 📄 License
 MIT

@@ -1,0 +1,687 @@
+openapi: 3.0.3
+info:
+  title: NexusRail Core API Engine
+  description: >
+    Enterprise-grade multi-rail digital commerce platform combining native public testnet
+    crypto settlements (Stellar Horizon & XRPL Altnet), traditional card checkout (Stripe),
+    double-entry wallet ledgering in MongoDB Atlas, and autonomous AI commerce agent orchestration.
+  version: 1.0.0
+  contact:
+    name: NexusRail Engineering Team
+    url: https://nexus-rail-one.vercel.app
+
+servers:
+  - url: https://nexus-rail.onrender.com
+    description: Production Render API Microservice
+  - url: https://nexus-rail-one.vercel.app/api/v1
+    description: Proxied Vercel Edge Gateway
+  - url: http://localhost:4000
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Enter HMAC-SHA256 session JWT issued by /api/v1/auth/login or /api/v1/auth/register.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: B2B developer API key starting with nr_live_...
+
+  schemas:
+    StandardSuccess:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    StandardError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: An error occurred
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: c88f1234-abcd-5678-ef01-123456789abc
+        email:
+          type: string
+          format: email
+          example: shopper@example.com
+        walletAddress:
+          type: string
+          nullable: true
+          example: GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR
+        role:
+          type: string
+          enum: [user, admin]
+          example: user
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          example: prod_rail_one_01
+        sku:
+          type: string
+          example: RAIL-ONE
+        title:
+          type: string
+          example: Rail One
+        description:
+          type: string
+          example: Self-custody cold storage hardware signer with native Stellar and XRPL key generation.
+        price_cents:
+          type: integer
+          example: 12900
+        category:
+          type: string
+          example: hardware
+        stock_quantity:
+          type: integer
+          example: 45
+        active:
+          type: boolean
+          example: true
+        upvotes_count:
+          type: integer
+          example: 248
+        rail:
+          type: string
+          enum: [stellar, xrpl, multi]
+          example: stellar
+        tag:
+          type: string
+          example: Flagship Hardware
+        rating:
+          type: number
+          example: 4.9
+
+    CartItem:
+      type: object
+      properties:
+        sku:
+          type: string
+          example: RAIL-ONE
+        qty:
+          type: integer
+          example: 1
+
+    OrderItem:
+      type: object
+      properties:
+        sku:
+          type: string
+          example: RAIL-ONE
+        title:
+          type: string
+          example: Rail One
+        qty:
+          type: integer
+          example: 1
+        unit_price_cents:
+          type: integer
+          example: 12900
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 3e8f9120-1234-5678-abcd-123456789abc
+        orderNumber:
+          type: string
+          example: NR-4A2B9F01
+        status:
+          type: string
+          enum: [PENDING, PAID, FULFILLING, FULFILLED, CANCELLED, REFUNDED]
+          example: PENDING
+        totalCents:
+          type: integer
+          example: 12900
+        rail:
+          type: string
+          example: STELLAR
+        txHash:
+          type: string
+          nullable: true
+        paymentAddress:
+          type: string
+          nullable: true
+        paymentMemo:
+          type: string
+          nullable: true
+        ipfsHash:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    ChainInvoice:
+      type: object
+      properties:
+        orderId:
+          type: string
+        chain:
+          type: string
+          enum: [stellar, xrpl]
+        network:
+          type: string
+          example: testnet
+        recipientAddress:
+          type: string
+        destination:
+          type: string
+        paymentIdentifierType:
+          type: string
+          enum: [memo_text, destination_tag]
+        paymentIdentifier:
+          oneOf:
+            - type: string
+            - type: integer
+        memo:
+          type: string
+        destinationTag:
+          type: integer
+        amountAsset:
+          type: number
+        amountXlm:
+          type: string
+        amountXrp:
+          type: number
+        assetSymbol:
+          type: string
+          enum: [XLM, XRP]
+        amountUsdCents:
+          type: integer
+        fxRateUsd:
+          type: number
+        qrPayload:
+          type: string
+
+paths:
+  /health:
+    get:
+      summary: Root Server Health Check
+      responses:
+        '200':
+          description: Server is online
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: nexusrail-api
+                  uptimeSeconds:
+                    type: integer
+                    example: 1420
+
+  /api/v1/health:
+    get:
+      summary: API Version 1 Health Check
+      responses:
+        '200':
+          description: Versioned API health and telemetry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 1.0.0
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/v1/auth/register:
+    post:
+      summary: Register User with Email and Password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: User registered and JWT session token issued
+        '400':
+          description: Registration validation failed
+
+  /api/v1/auth/login:
+    post:
+      summary: Authenticate User with Credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Successfully authenticated
+        '401':
+          description: Invalid email or password
+
+  /api/v1/auth/me:
+    get:
+      summary: Fetch Authenticated User Profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /api/v1/auth/google:
+    post:
+      summary: Authenticate via Google OAuth Credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credential:
+                  type: string
+                email:
+                  type: string
+                name:
+                  type: string
+                googleId:
+                  type: string
+      responses:
+        '200':
+          description: Google account resolved and internal JWT issued
+
+  /api/v1/products:
+    get:
+      summary: Query Active Product Catalog
+      responses:
+        '200':
+          description: Product catalog list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  cached:
+                    type: boolean
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+
+  /api/v1/products/{sku}:
+    get:
+      summary: Fetch Product by SKU
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product details
+        '404':
+          description: Product not found
+
+  /api/v1/products/leaderboard:
+    get:
+      summary: Trending Products Leaderboard
+      responses:
+        '200':
+          description: Products ordered by community upvotes
+
+  /api/v1/products/{id}/upvote:
+    post:
+      summary: Cast Atomic Upvote for Product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Upvote recorded
+
+  /api/v1/cart:
+    get:
+      summary: Load Authenticated User Cart
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cart items
+
+  /api/v1/cart/items:
+    put:
+      summary: Add or Update Cart Line Item
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku, qty]
+              properties:
+                sku:
+                  type: string
+                qty:
+                  type: integer
+      responses:
+        '200':
+          description: Updated cart
+
+  /api/v1/cart/items/{sku}:
+    delete:
+      summary: Remove Item from Cart
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Item removed
+
+  /api/v1/orders:
+    post:
+      summary: Create Tamper-Proof Order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [sku, qty]
+                    properties:
+                      sku:
+                        type: string
+                      qty:
+                        type: integer
+                rail:
+                  type: string
+                fromCart:
+                  type: boolean
+      responses:
+        '200':
+          description: Order created with server-verified prices
+    get:
+      summary: List User Order History
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User orders
+
+  /api/v1/checkout/{chain}/create-invoice:
+    post:
+      summary: Create On-Chain Multi-Rail Invoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: chain
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [stellar, xrpl]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId]
+              properties:
+                orderId:
+                  type: string
+      responses:
+        '200':
+          description: Invoice generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  invoice:
+                    $ref: '#/components/schemas/ChainInvoice'
+
+  /api/v1/checkout/{chain}/verify-payment:
+    post:
+      summary: Verify On-Chain Transaction Hash
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: chain
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [stellar, xrpl]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, txHash]
+              properties:
+                orderId:
+                  type: string
+                txHash:
+                  type: string
+      responses:
+        '200':
+          description: Verification result and updated order status
+
+  /api/v1/checkout/stripe/create-session:
+    post:
+      summary: Create Stripe Card Checkout Session
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientUrl:
+                  type: string
+      responses:
+        '200':
+          description: Stripe session URL
+
+  /api/v1/crypto/rates:
+    get:
+      summary: Live Crypto Exchange Rates
+      responses:
+        '200':
+          description: XLM and XRP rates relative to USD
+
+  /api/v1/crypto/providers:
+    get:
+      summary: Discover Registered Multi-Chain Providers
+      responses:
+        '200':
+          description: Provider registry and vault balances
+
+  /api/v1/wallet/balance:
+    get:
+      summary: Internal Double-Entry Wallet Balance
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Balances across USD, XLM, and XRP
+
+  /api/v1/wallet/transactions:
+    get:
+      summary: Wallet Ledger Transaction History
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of ledger credit and debit entries
+
+  /api/v1/agent/chat:
+    post:
+      summary: Send Prompt to AI Commerce Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        '200':
+          description: AI response with optional single-use purchase proposal lock
+
+  /api/v1/agent/confirm:
+    post:
+      summary: Confirm and Execute AI Purchase Proposal Lock
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proposalId]
+              properties:
+                proposalId:
+                  type: string
+      responses:
+        '200':
+          description: Proposal authorized and order paid
+
+  /api/v1/showdowns:
+    get:
+      summary: Community Product Showdown Battles
+      responses:
+        '200':
+          description: List of active showdowns
+
+  /api/v1/showdowns/{id}/vote:
+    post:
+      summary: Vote on Product Showdown
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [choice]
+              properties:
+                choice:
+                  type: string
+                  enum: [A, B]
+      responses:
+        '200':
+          description: Vote recorded
+
+  /api/v1/analytics/summary:
+    get:
+      summary: Public Revenue & Order Telemetry
+      responses:
+        '200':
+          description: Aggregated paid revenue and payment rail distribution
+
+  /api/v1/rwa/live-prices:
+    get:
+      summary: Spot Gold & Silver Oracle Prices
+      responses:
+        '200':
+          description: Gold and silver rates per gram in USD and INR
+
+  /api/v1/webhooks/stripe:
+    post:
+      summary: Stripe Asynchronous Webhook Handler
+      description: Receives raw JSON bytes and verifies stripe-signature header.
+      responses:
+        '200':
+          description: Webhook received and processed
