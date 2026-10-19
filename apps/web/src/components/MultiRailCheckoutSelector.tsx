@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { CreditCard, Wallet, Zap, Rocket, CheckCircle, RefreshCw, ExternalLink, Copy, Check, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CreditCard, Wallet, Zap, Rocket, CheckCircle, RefreshCw, ExternalLink, Copy, Check, AlertCircle, Radio, Clock, ShieldCheck, ShieldAlert, Coins } from 'lucide-react';
 import { StripeCheckoutModal } from './StripeCheckoutModal';
 
-export type PaymentRailChoice = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR';
+export type PaymentRailChoice = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR' | 'STELLAR_USDC';
 
 interface MultiRailCheckoutProps {
   priceCents: number;
@@ -32,6 +32,98 @@ export function MultiRailCheckoutSelector({
   const [txHashInput, setTxHashInput] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<string | null>(null);
+  const [isListeningStream, setIsListeningStream] = useState(false);
+  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState<number | null>(null);
+  const [isRefreshingQuote, setIsRefreshingQuote] = useState(false);
+
+  // FEAT-02: Cryptographic Quote Ticket Countdown
+  useEffect(() => {
+    if (!invoiceData?.expiresAt) {
+      setQuoteSecondsLeft(null);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const diff = Math.max(0, Math.floor((new Date(invoiceData.expiresAt).getTime() - Date.now()) / 1000));
+      setQuoteSecondsLeft(diff);
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [invoiceData?.expiresAt]);
+
+  const handleRefreshQuote = async () => {
+    if (!activeOrderId) return;
+    setIsRefreshingQuote(true);
+    try {
+      const token = localStorage.getItem('nexus_token');
+      const res = await fetch('/api/v1/checkout/quote/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderId: activeOrderId, chain: selectedRail }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setInvoiceData((prev: any) => ({
+          ...prev,
+          amount: data.amount,
+          amountXrp: data.amountXrp,
+          amountXlm: data.amountXlm,
+          quoteTicket: data.quoteTicket,
+          expiresAt: data.expiresAt,
+        }));
+      }
+    } catch (err) {
+      console.warn('Failed to refresh quote', err);
+    } finally {
+      setIsRefreshingQuote(false);
+    }
+  };
+
+  // FEAT-01: Real-Time SSE Settlement Stream Listener
+  useEffect(() => {
+    if (!activeOrderId || (selectedRail !== 'XRPL' && selectedRail !== 'STELLAR' && selectedRail !== 'STELLAR_USDC')) {
+      setIsListeningStream(false);
+      return;
+    }
+
+    const token = localStorage.getItem('nexus_token');
+    if (!token) return;
+
+    const streamUrl = `/api/v1/checkout/orders/${encodeURIComponent(activeOrderId)}/stream?token=${encodeURIComponent(token)}`;
+    const eventSource = new EventSource(streamUrl);
+
+    eventSource.onopen = () => {
+      setIsListeningStream(true);
+    };
+
+    eventSource.addEventListener('settlement', (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.status === 'PAID') {
+          setVerificationResult(`Payment confirmed on-chain! Order marked PAID via live block stream.`);
+          setIsListeningStream(false);
+          eventSource.close();
+          onPaymentSuccess?.(payload);
+        }
+      } catch (err) {
+        console.warn('Failed to parse SSE settlement event', err);
+      }
+    });
+
+    eventSource.onerror = () => {
+      setIsListeningStream(false);
+    };
+
+    return () => {
+      eventSource.close();
+      setIsListeningStream(false);
+    };
+  }, [activeOrderId, selectedRail, onPaymentSuccess]);
 
   const usdPrice = (priceCents / 100).toFixed(2);
 
@@ -92,7 +184,7 @@ export function MultiRailCheckoutSelector({
         setActiveOrderId(currentOrderId);
       }
 
-      const path = rail === 'XRPL' ? 'xrpl' : 'stellar';
+      const path = rail === 'XRPL' ? 'xrpl' : rail === 'STELLAR_USDC' ? 'stellar-usdc' : 'stellar';
       const res = await fetch(`/api/v1/checkout/${path}/create-invoice`, {
         method: 'POST',
         headers: {
@@ -119,7 +211,7 @@ export function MultiRailCheckoutSelector({
     setVerifying(true);
     setVerificationResult(null);
     const token = localStorage.getItem('nexus_token');
-    const path = selectedRail === 'XRPL' ? 'xrpl' : 'stellar';
+    const path = selectedRail === 'XRPL' ? 'xrpl' : selectedRail === 'STELLAR_USDC' ? 'stellar-usdc' : 'stellar';
     try {
       const res = await fetch(`/api/v1/checkout/${path}/verify-payment`, {
         method: 'POST',
@@ -232,6 +324,27 @@ export function MultiRailCheckoutSelector({
               <div className="text-xs text-gray-400">Horizon Testnet</div>
             </div>
           </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelect('STELLAR_USDC')}
+            className={`col-span-2 p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+              selectedRail === 'STELLAR_USDC'
+                ? 'bg-blue-500/10 border-blue-400 text-white shadow-lg shadow-blue-500/10'
+                : 'bg-nexus-dark/50 border-gray-800 text-gray-400 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Coins className="w-5 h-5 text-blue-400" />
+              <div className="text-left">
+                <div className="text-sm font-semibold text-white flex items-center gap-2">
+                  <span>Circle USDC (Stellar)</span>
+                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">1:1 Guaranteed</span>
+                </div>
+                <div className="text-xs text-gray-400">${usdPrice} USDC • Zero Volatility</div>
+              </div>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -250,6 +363,40 @@ export function MultiRailCheckoutSelector({
               {selectedRail} TESTNET
             </span>
           </div>
+
+          {/* FEAT-02: Cryptographic Quote Ticket Status & Countdown */}
+          {quoteSecondsLeft != null && (
+            quoteSecondsLeft > 0 ? (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-gray-800/80 border border-gray-700/60 text-[11px] text-gray-300">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-rail-emerald" />
+                  <span>Guaranteed Rate (&lt; 1.5% Slippage Guard)</span>
+                </div>
+                <div className="flex items-center gap-1 font-mono font-bold text-amber-300">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>
+                    {Math.floor(quoteSecondsLeft / 60)}:{(quoteSecondsLeft % 60).toString().padStart(2, '0')}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300">
+                <div className="flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Quote Ticket Expired</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRefreshQuote}
+                  disabled={isRefreshingQuote}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400/20 text-amber-200 hover:bg-amber-400/30 text-[10px] font-bold"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshingQuote ? 'animate-spin' : ''}`} />
+                  <span>{isRefreshingQuote ? 'Refreshing…' : 'Renew Quote'}</span>
+                </button>
+              </div>
+            )
+          )}
 
           {invoiceData.error && (
             <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-2">
@@ -312,11 +459,15 @@ export function MultiRailCheckoutSelector({
             </div>
           )}
 
-          {selectedRail === 'STELLAR' && (invoiceData.amountXlm != null || invoiceData.amount != null) && (
+          {(selectedRail === 'STELLAR' || selectedRail === 'STELLAR_USDC') && (invoiceData.amountXlm != null || invoiceData.amountUsdc != null || invoiceData.amount != null) && (
             <div className="space-y-2 text-gray-300">
               <div className="flex justify-between items-center">
                 <span>Send Exactly:</span>
-                <strong className="text-white text-sm">{String(invoiceData.amountXlm || invoiceData.amount)} XLM</strong>
+                <strong className="text-white text-sm">
+                  {selectedRail === 'STELLAR_USDC'
+                    ? `${String(invoiceData.amountUsdc || invoiceData.amount)} USDC`
+                    : `${String(invoiceData.amountXlm || invoiceData.amount)} XLM`}
+                </strong>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-gray-400">
@@ -367,9 +518,22 @@ export function MultiRailCheckoutSelector({
           )}
 
           {/* Verification section */}
-          {(selectedRail === 'XRPL' || selectedRail === 'STELLAR') && (
+          {(selectedRail === 'XRPL' || selectedRail === 'STELLAR' || selectedRail === 'STELLAR_USDC') && (
             <div className="pt-2 border-t border-gray-800 space-y-2">
-              <div className="text-[11px] text-gray-400">Verify Payment Hash:</div>
+              {isListeningStream && !verificationResult?.includes('PAID') && (
+                <div className="flex items-center justify-between p-2 rounded-lg bg-rail-emerald/10 border border-rail-emerald/20 text-xs text-rail-emerald">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rail-emerald opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rail-emerald"></span>
+                    </span>
+                    <span>Auto-Confirm Stream Active: Listening for ledger block...</span>
+                  </div>
+                  <Radio className="w-3.5 h-3.5 animate-pulse text-rail-emerald" />
+                </div>
+              )}
+
+              <div className="text-[11px] text-gray-400">Or Manually Verify Payment Hash:</div>
               <div className="flex gap-2">
                 <input
                   type="text"

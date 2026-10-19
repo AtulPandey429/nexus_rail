@@ -65,9 +65,12 @@ export interface MongoOrderDoc {
   payment_address?: string;
   payment_memo?: string;
   tx_hash?: string;
-  status: 'PENDING' | 'PAID' | 'FULFILLING' | 'FULFILLED' | 'CANCELLED' | 'REFUNDED';
+  status: 'PENDING' | 'PAID' | 'UNDERPAID' | 'FULFILLING' | 'FULFILLED' | 'CANCELLED' | 'REFUNDED';
   stripe_session_id?: string;
   ipfs_cid?: string;
+  quote_ticket?: any;
+  slippage_percent?: number;
+  underpaid_cents?: number;
   created_at: string;
   updated_at: string;
 }
@@ -84,6 +87,26 @@ export interface MongoWalletTxDoc {
   created_at: string;
 }
 
+export interface MongoWalletBalanceDoc {
+  _id?: any;
+  user_id: string;
+  currency: 'USD' | 'XRP' | 'XLM';
+  available_cents: number;
+  locked_cents: number;
+  version: number;
+  updated_at: string;
+}
+
+export interface MongoGuideMessageDoc {
+  _id?: any;
+  id: string;
+  user_id: string;
+  role: 'user' | 'assistant';
+  body: string;
+  suggested_skus: string[];
+  created_at: string;
+}
+
 export interface MongoProposalDoc {
   _id?: any;
   id: string;
@@ -93,6 +116,19 @@ export interface MongoProposalDoc {
   status: 'PROPOSED' | 'CONFIRMED' | 'EXPIRED';
   expiresAt: Date;
   created_at: string;
+}
+
+export interface MongoWebhookEventDoc {
+  _id?: any;
+  id: string;
+  source: 'STRIPE';
+  type: string;
+  payload: any;
+  status: 'PENDING' | 'PROCESSED' | 'FAILED';
+  retry_count: number;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AgentAuditTrace {
@@ -193,6 +229,17 @@ export class MongoService {
 
       // 6. Audit Traces
       await db.collection('agent_audit_traces').createIndex({ userId: 1, createdAt: -1 });
+
+      // 7. Wallet Balances & Ledger
+      await db.collection('wallet_balances').createIndex({ user_id: 1, currency: 1 }, { unique: true });
+      await db.collection('wallet_ledger').createIndex({ user_id: 1, created_at: -1 });
+
+      // 8. Catalog Guide Messages
+      await db.collection('guide_messages').createIndex({ user_id: 1, created_at: 1 });
+
+      // 9. Webhook Events DLQ
+      await db.collection('webhook_events').createIndex({ id: 1 }, { unique: true });
+      await db.collection('webhook_events').createIndex({ status: 1, retry_count: 1 });
 
       console.log('✅ [MongoDB Atlas] Primary Collections & TTL Indexes Initialized');
     } catch (err: any) {

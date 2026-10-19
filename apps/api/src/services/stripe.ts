@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { requiredEnv } from '../config/env.js';
 import { MongoService, MongoOrderDoc, MongoCartItemDoc, OrderItem } from './mongo.js';
 import { ProductService } from './products.js';
+import { settlementEmitter } from './settlementEvents.js';
 import crypto from 'crypto';
 
 function stripe(): Stripe {
@@ -87,11 +88,47 @@ export class StripeService {
     };
   }
 
+  static constructWebhookEvent(rawBody: Buffer, signature: string): Stripe.Event {
+    return stripe().webhooks.constructEvent(rawBody, signature, requiredEnv('STRIPE_WEBHOOK_SECRET'));
+  }
+
+  static async fulfillOrderFromSession(session: any): Promise<{ orderId: string; status: string }> {
+    const orderId = session?.metadata?.orderId || session?.client_reference_id;
+    if (!orderId) throw new Error('Stripe session did not include an order id');
+
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const result = await ordersCol.findOneAndUpdate(
+      { id: orderId, status: { $ne: 'PAID' } },
+      {
+        $set: {
+          status: 'PAID',
+          stripe_session_id: session.id,
+          updated_at: new Date().toISOString(),
+        },
+      },
+      { returnDocument: 'after' }
+    );
+
+    const doc: any = (result as any)?.value || result;
+
+    // Broadcast SSE settlement event
+    settlementEmitter.emitSettlement({
+      orderId,
+      orderNumber: doc?.order_number,
+      status: 'PAID',
+      paymentRail: 'STRIPE',
+      txHash: session.payment_intent ? String(session.payment_intent) : `stripe_${session.id}`,
+      timestamp: new Date().toISOString(),
+    });
+
+    return { orderId, status: 'PAID' };
+  }
+
   static async markCheckoutPaid(rawBody: Buffer, signature: string | undefined) {
     if (!signature) throw new Error('Missing Stripe-Signature header');
     let event: Stripe.Event;
     try {
-      event = stripe().webhooks.constructEvent(rawBody, signature, requiredEnv('STRIPE_WEBHOOK_SECRET'));
+      event = this.constructWebhookEvent(rawBody, signature);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Stripe signature verification failed');
     }
@@ -101,16 +138,8 @@ export class StripeService {
     }
 
     const session = event.data.object as Stripe.Checkout.Session;
-    const orderId = session.metadata?.orderId || session.client_reference_id;
-    if (!orderId) throw new Error('Stripe session did not include an order id');
+    const fulfilled = await this.fulfillOrderFromSession(session);
 
-    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
-    const updated = await ordersCol.findOneAndUpdate(
-      { id: orderId, status: 'PENDING' },
-      { $set: { status: 'PAID', updated_at: new Date().toISOString() } },
-      { returnDocument: 'after' }
-    );
-
-    return { received: true, order: updated };
+    return { received: true, order: fulfilled };
   }
 }

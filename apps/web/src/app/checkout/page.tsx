@@ -28,6 +28,8 @@ import {
   checkGemWalletInstalled,
   payWithFreighter,
   payWithGemWallet,
+  deriveAuthoritativeStellarMemo,
+  deriveAuthoritativeXrplTag,
 } from '@/lib/wallets';
 import { WalletConnectModal } from '@/components/WalletConnectModal';
 import { TransactionSafetyCenter } from '@/components/TransactionSafetyCenter';
@@ -145,22 +147,26 @@ function CheckoutContent() {
     try {
       let txHash = '';
       let ledgerSeq = '5,284,901';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
 
       if (selectedRail === 'STELLAR' && hasFreighter) {
-        // Real Freighter testnet signing
+        // Authoritative 28-byte HMAC-SHA256 memo derivation (NR<HMAC>)
+        const authoritativeMemo = await deriveAuthoritativeStellarMemo(orderId);
         const res = await payWithFreighter({
           amount: activeTotalCrypto,
           destination: 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
-          memo: `NR-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`,
+          memo: authoritativeMemo,
           orderId,
+          authToken: token || undefined,
         });
         txHash = res.txHash || `8fa2${Math.random().toString(16).slice(2, 8)}c91d`;
       } else if (selectedRail === 'XRPL' && hasGemWallet) {
-        // Real GemWallet testnet signing
+        // Authoritative 32-bit HMAC-SHA256 destination tag derivation
+        const authoritativeTag = await deriveAuthoritativeXrplTag(orderId);
         const res = await payWithGemWallet({
           amountXrp: activeTotalCrypto,
           destination: 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW',
-          destinationTag: 104857,
+          destinationTag: authoritativeTag,
         });
         txHash = res.txHash || `xrpl_${Math.random().toString(16).slice(2, 10)}`;
       } else {
@@ -170,6 +176,23 @@ function CheckoutContent() {
           ? `8fa2b7e4${Math.random().toString(16).slice(2, 6)}c91d`
           : `5d91e3f8${Math.random().toString(16).slice(2, 6)}b41a`;
         ledgerSeq = `${Math.floor(5280000 + Math.random() * 9000)}`;
+      }
+
+      // Verify on-chain payment with backend if real wallet transaction
+      if (token && txHash && !txHash.startsWith('8fa2') && !txHash.startsWith('5d91')) {
+        try {
+          const path = selectedRail === 'XRPL' ? 'xrpl' : 'stellar';
+          await fetch(`/api/v1/checkout/${path}/verify-payment`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ orderId, txHash }),
+          });
+        } catch {
+          // Background watcher will reconcile
+        }
       }
 
       // Persist completed order details for Receipt Screen 8

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import type { ClientSession } from 'mongodb';
 import { MongoService, MongoProposalDoc } from '../services/mongo.js';
 
 export class ProposalLockManager {
@@ -34,11 +35,14 @@ export class ProposalLockManager {
     };
   }
 
-  static async consumeProposal(proposalId: string, userId: string) {
+  static async consumeProposal(proposalId: string, userId: string, session?: ClientSession): Promise<MongoProposalDoc> {
     const col = await MongoService.getCollection<MongoProposalDoc>('proposals');
 
+    const updateOptions: any = { returnDocument: 'before' };
+    if (session) updateOptions.session = session;
+
     // Atomically find, validate expiry, and update status
-    const updated = await col.findOneAndUpdate(
+    const result: any = await col.findOneAndUpdate(
       {
         id: proposalId,
         user_id: userId,
@@ -48,10 +52,12 @@ export class ProposalLockManager {
       {
         $set: { status: 'CONFIRMED' },
       },
-      { returnDocument: 'before' }
+      updateOptions
     );
 
-    if (!updated) {
+    const updated = result?.value || result;
+
+    if (!updated || !updated.id) {
       // Check if it existed but was expired or already used
       const existing = await col.findOne({ id: proposalId });
       if (!existing) throw new Error('Proposal was not found');
@@ -61,6 +67,6 @@ export class ProposalLockManager {
       throw new Error('Proposal could not be consumed');
     }
 
-    return updated;
+    return updated as MongoProposalDoc;
   }
 }

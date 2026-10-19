@@ -4,13 +4,16 @@ import type { IChainProvider, ChainInvoice, ChainVerificationResult, ChainNetwor
 import { env } from '../../config/env.js';
 import { usdCentsToAsset, getFxQuote } from '../market.js';
 
+export const CIRCLE_USDC_TESTNET_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+export const CIRCLE_USDC_TESTNET_ASSET = new Asset('USDC', CIRCLE_USDC_TESTNET_ISSUER);
+
 export class StellarTestnetProvider implements IChainProvider {
-  readonly chainId = 'stellar';
-  readonly assetSymbol = 'XLM';
+  readonly chainId: string = 'stellar';
+  readonly assetSymbol: string = 'XLM';
   readonly network: ChainNetwork = 'testnet';
 
-  private horizonServer: Horizon.Server;
-  private defaultMerchantAddress = 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR';
+  protected horizonServer: Horizon.Server;
+  protected defaultMerchantAddress = 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR';
 
   constructor() {
     const horizonUrl = env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org';
@@ -126,6 +129,31 @@ export class StellarTestnetProvider implements IChainProvider {
   }
 
   /**
+   * Scans the 20 most recent Stellar transactions to find an incoming payment with the matching HMAC memo
+   */
+  async findRecentPaymentByMemo(expectedMemo: string): Promise<string | null> {
+    try {
+      const merchantVault = this.getMerchantAddress();
+      const txPage: any = await this.horizonServer
+        .transactions()
+        .forAccount(merchantVault)
+        .order('desc')
+        .limit(20)
+        .call();
+
+      for (const tx of txPage.records) {
+        if (tx.successful && tx.memo && tx.memo.toUpperCase() === expectedMemo.toUpperCase()) {
+          return tx.hash;
+        }
+      }
+      return null;
+    } catch (err: any) {
+      console.warn('⚠️ [StellarTestnetProvider findRecentPaymentByMemo]:', err.message);
+      return null;
+    }
+  }
+
+  /**
    * Authoritative Payment Verification on Stellar Horizon:
    * Inspects operations to verify payment recipient, exact delivered amount,
    * native asset type, and matching HMAC memo.
@@ -211,6 +239,148 @@ export class StellarTestnetProvider implements IChainProvider {
         verified: false,
         txHash,
         assetSymbol: this.assetSymbol,
+        network: this.network,
+        error: `Stellar Horizon verification failed: ${err.message}`,
+      };
+    }
+  }
+}
+
+/**
+ * FEAT-03: Native Stellar Circle USDC Stablecoin Settlement Provider
+ * Delivers exact 1:1 USD pricing without crypto conversion volatility.
+ */
+export class StellarUsdcTestnetProvider extends StellarTestnetProvider {
+  override readonly chainId = 'stellar-usdc';
+  override readonly assetSymbol = 'USDC';
+
+  override async createInvoice(orderId: string, amountUsdCents: number): Promise<ChainInvoice> {
+    const amountUsdc = Number((amountUsdCents / 100).toFixed(2));
+    const recipient = this.getMerchantAddress();
+
+    const memoHash = crypto.createHmac('sha256', 'nexus_rail_settlement_v1_memo').update(orderId).digest('hex');
+    const memoText = (`NR${memoHash}`).slice(0, 28).toUpperCase();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    return {
+      orderId,
+      chain: this.chainId,
+      network: this.network,
+      recipientAddress: recipient,
+      paymentIdentifierType: 'memo_text',
+      paymentIdentifier: memoText,
+      amountAsset: amountUsdc,
+      assetSymbol: 'USDC',
+      amountDropsOrStroops: String(Math.round(amountUsdc * 10_000_000)),
+      amountUsdCents,
+      fxRateUsd: 1.0,
+      expiresAt,
+      explorerUrl: `https://stellar.expert/explorer/testnet/account/${recipient}`,
+      qrPayload: `stellar:pay?destination=${recipient}&amount=${amountUsdc}&asset_code=USDC&asset_issuer=${CIRCLE_USDC_TESTNET_ISSUER}&memo=${memoText}`,
+    };
+  }
+
+  override async buildPaymentXdr(sourcePublicKey: string, amountUsdc: number, memoText: string): Promise<string> {
+    if (!StrKey.isValidEd25519PublicKey(sourcePublicKey)) {
+      throw new Error('Invalid Stellar source public key');
+    }
+
+    const sourceAccount = await this.horizonServer.loadAccount(sourcePublicKey);
+    const recipient = this.getMerchantAddress();
+
+    const tx = new TransactionBuilder(sourceAccount, {
+      fee: '100',
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: recipient,
+          asset: CIRCLE_USDC_TESTNET_ASSET,
+          amount: amountUsdc.toFixed(7),
+        })
+      )
+      .addMemo(Memo.text(memoText.slice(0, 28)))
+      .setTimeout(300)
+      .build();
+
+    return tx.toXDR();
+  }
+
+  override async verifyPayment(orderId: string, txHash: string, expectedAmountAsset?: number): Promise<ChainVerificationResult> {
+    try {
+      const tx = await this.horizonServer.transactions().transaction(txHash).call();
+      const memoHash = crypto.createHmac('sha256', 'nexus_rail_settlement_v1_memo').update(orderId).digest('hex');
+      const expectedMemo = (`NR${memoHash}`).slice(0, 28).toUpperCase();
+
+      const memoMatches = Boolean(tx.memo && tx.memo.toUpperCase() === expectedMemo);
+
+      if (!tx.successful) {
+        return {
+          verified: false,
+          txHash,
+          assetSymbol: 'USDC',
+          network: this.network,
+          error: 'Transaction failed on the Stellar ledger',
+        };
+      }
+
+      if (!memoMatches) {
+        return {
+          verified: false,
+          txHash,
+          assetSymbol: 'USDC',
+          network: this.network,
+          error: 'Transaction memo does not match order payment specification',
+        };
+      }
+
+      const ops = await tx.operations();
+      const merchantVault = this.getMerchantAddress();
+
+      const paymentOp = ops.records.find((op: any) =>
+        op.type === 'payment' &&
+        op.to === merchantVault &&
+        op.asset_code === 'USDC' &&
+        op.asset_issuer === CIRCLE_USDC_TESTNET_ISSUER
+      );
+
+      if (!paymentOp) {
+        return {
+          verified: false,
+          txHash,
+          assetSymbol: 'USDC',
+          network: this.network,
+          error: 'No valid Circle USDC payment operation found matching merchant vault and issuer',
+        };
+      }
+
+      const deliveredAmount = parseFloat((paymentOp as any).amount);
+      if (expectedAmountAsset && deliveredAmount < expectedAmountAsset) {
+        return {
+          verified: false,
+          txHash,
+          assetSymbol: 'USDC',
+          network: this.network,
+          error: `Delivered USDC amount (${deliveredAmount}) is less than required (${expectedAmountAsset})`,
+        };
+      }
+
+      return {
+        verified: true,
+        txHash,
+        sourceAddress: tx.source_account,
+        destinationAddress: merchantVault,
+        amountDelivered: deliveredAmount,
+        assetSymbol: 'USDC',
+        ledgerIndex: tx.ledger_attr,
+        timestamp: tx.created_at,
+        network: this.network,
+      };
+    } catch (err: any) {
+      return {
+        verified: false,
+        txHash,
+        assetSymbol: 'USDC',
         network: this.network,
         error: `Stellar Horizon verification failed: ${err.message}`,
       };

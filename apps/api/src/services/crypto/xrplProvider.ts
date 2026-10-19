@@ -14,10 +14,26 @@ export class XrplTestnetProvider implements IChainProvider {
   private connectingPromise: Promise<void> | null = null;
   private defaultMerchantAddress = 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW'; // Live faucet funded address
 
+  private endpoints: string[];
+  private currentEndpointIndex = 0;
+
   constructor() {
-    const wssUrl = env.XRPL_WSS || env.XRPL_TESTNET_WSS || 'wss://s.altnet.rippletest.net:51233';
-    this.client = new Client(wssUrl, {
+    const primaryWss = env.XRPL_WSS || env.XRPL_TESTNET_WSS || 'wss://s.altnet.rippletest.net:51233';
+    this.endpoints = [primaryWss, 'wss://testnet.xrpl-labs.com'].filter(Boolean);
+    this.client = new Client(this.endpoints[0], {
       connectionTimeout: 8000,
+    });
+    this.attachClientListeners();
+  }
+
+  private attachClientListeners(): void {
+    this.client.on('disconnected', (code: any) => {
+      this.isConnected = false;
+      console.warn(`⚡ [XrplTestnetProvider] WebSocket connection dropped (code: ${code}). Auto-reconnect ready.`);
+    });
+
+    this.client.on('error', (errorCode: any, errorMessage: any) => {
+      console.warn(`⚠️ [XrplTestnetProvider Socket Warning]: ${errorCode} - ${errorMessage}`);
     });
   }
 
@@ -32,20 +48,51 @@ export class XrplTestnetProvider implements IChainProvider {
     }
 
     this.connectingPromise = (async () => {
-      try {
-        await this.client.connect();
-        this.isConnected = true;
-        console.log('⚡ [XrplTestnetProvider] Pooled WebSocket Connected to XRPL Testnet');
-      } catch (err: any) {
-        console.warn('⚠️ [XrplTestnetProvider Connection Warning]:', err.message);
-        throw err;
-      } finally {
-        this.connectingPromise = null;
+      let lastError: Error | null = null;
+
+      for (let attempt = 0; attempt < this.endpoints.length; attempt++) {
+        const targetEndpoint = this.endpoints[(this.currentEndpointIndex + attempt) % this.endpoints.length];
+        try {
+          // If switching endpoints, instantiate a fresh client
+          if (this.client.url !== targetEndpoint) {
+            try {
+              if (this.client.isConnected()) await this.client.disconnect();
+            } catch {}
+            this.client = new Client(targetEndpoint, { connectionTimeout: 8000 });
+            this.attachClientListeners();
+          }
+
+          await this.client.connect();
+          this.isConnected = true;
+          this.currentEndpointIndex = (this.currentEndpointIndex + attempt) % this.endpoints.length;
+          console.log(`⚡ [XrplTestnetProvider] Connected to XRPL Testnet: ${targetEndpoint}`);
+          return;
+        } catch (err: any) {
+          lastError = err;
+          console.warn(`⚠️ [XrplTestnetProvider Connection Attempt ${attempt + 1} Failed (${targetEndpoint})]:`, err.message);
+        }
       }
-    })();
+
+      throw lastError || new Error('Failed to connect to any XRPL testnet endpoint');
+    })().finally(() => {
+      this.connectingPromise = null;
+    });
 
     await this.connectingPromise;
     return this.client;
+  }
+
+  /**
+   * Pings the active XRPL node to verify connection health
+   */
+  async ping(): Promise<boolean> {
+    try {
+      const client = await this.ensureConnected();
+      const res: any = await client.request({ command: 'ping' });
+      return res?.result?.status === 'success' || res?.status === 'success' || Boolean(res?.result);
+    } catch {
+      return false;
+    }
   }
 
   getMerchantAddress(): string {
@@ -172,6 +219,39 @@ export class XrplTestnetProvider implements IChainProvider {
         network: this.network,
         error: `XRPL testnet lookup failed: ${err.message}`,
       };
+    }
+  }
+
+  /**
+   * Scans recent account transactions to find an incoming payment with the matching DestinationTag
+   */
+  async findRecentPaymentByDestinationTag(expectedTag: number): Promise<string | null> {
+    try {
+      const client = await this.ensureConnected();
+      const merchantVault = this.getMerchantAddress();
+      const res: any = await client.request({
+        command: 'account_tx',
+        account: merchantVault,
+        limit: 20,
+      });
+
+      const txs = res.result?.transactions || [];
+      for (const record of txs) {
+        const tx = record.tx || record.tx_json || record;
+        const meta = record.meta;
+        const isSuccess = meta?.TransactionResult === 'tesSUCCESS';
+        if (
+          isSuccess &&
+          tx?.Destination === merchantVault &&
+          Number(tx?.DestinationTag) === expectedTag
+        ) {
+          return tx.hash;
+        }
+      }
+      return null;
+    } catch (err: any) {
+      console.warn('⚠️ [XrplTestnetProvider findRecentPaymentByDestinationTag]:', err.message);
+      return null;
     }
   }
 

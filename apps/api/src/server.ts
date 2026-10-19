@@ -14,6 +14,7 @@ import { analyticsRouter } from './routes/analytics.js';
 import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import { SocketService } from './sockets/server.js';
 import { KeepAliveWorker } from './workers/keepAlive.js';
+import { WebhookDlqWorker } from './workers/webhookDlq.js';
 import superPlatformRouter from './routes/superPlatform.js';
 import { cartRouter } from './routes/cart.js';
 import { ordersRouter } from './routes/orders.js';
@@ -121,6 +122,7 @@ app.listen(env.PORT, () => {
   LedgerWatcherWorker.startWatchers();
   SocketService.initializeSockets();
   KeepAliveWorker.startKeepAlive();
+  WebhookDlqWorker.startWorker();
 });
 
 export default app;

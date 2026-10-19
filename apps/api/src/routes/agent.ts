@@ -118,50 +118,63 @@ agentRouter.post('/confirm', requireAuth, async (req: AuthenticatedRequest, res:
     const { proposalId } = parseResult.data;
     const userId = req.user!.id;
 
-    const proposal = await ProposalLockManager.consumeProposal(proposalId, userId);
-    const priceCents = Number(proposal.payload?.priceCents);
-    const sku = String(proposal.payload?.sku || '');
+    const client = await MongoService.getClient();
+    const session = client.startSession();
 
-    if (!Number.isFinite(priceCents) || priceCents <= 0) {
-      return res.status(400).json({ success: false, error: 'Proposal has no valid price' });
+    let executedOrder: MongoOrderDoc | null = null;
+    let executedTx: any = null;
+
+    try {
+      await session.withTransaction(async () => {
+        // 1. Atomically consume proposal lock
+        const proposal = await ProposalLockManager.consumeProposal(proposalId, userId, session);
+        const priceCents = Number(proposal.payload?.priceCents);
+        const sku = String(proposal.payload?.sku || '');
+
+        if (!Number.isFinite(priceCents) || priceCents <= 0) {
+          throw new Error('Proposal has no valid price');
+        }
+
+        // 2. Atomic debit from user's internal wallet
+        executedTx = await walletService.debitBalance(userId, priceCents, 'USD', proposal.id, session);
+
+        // 3. Create a fulfilled order in MongoDB orders collection
+        const product = await ProductService.getProductBySku(sku);
+        const orderId = crypto.randomUUID();
+        const orderNumber = `NR-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+        const now = new Date().toISOString();
+
+        executedOrder = {
+          id: orderId,
+          user_id: userId,
+          order_number: orderNumber,
+          total_cents: priceCents,
+          items: [
+            {
+              sku,
+              title: product?.title || sku,
+              qty: 1,
+              unit_price_cents: priceCents,
+            },
+          ],
+          payment_rail: 'WALLET',
+          status: 'PAID',
+          created_at: now,
+          updated_at: now,
+        };
+
+        const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+        await ordersCol.insertOne(executedOrder as any, { session });
+      });
+    } finally {
+      await session.endSession();
     }
-
-    // Atomic debit from user's internal wallet
-    const tx = await walletService.debitBalance(userId, priceCents, 'USD', proposal.id);
-
-    // Create a fulfilled order in MongoDB orders collection
-    const product = await ProductService.getProductBySku(sku);
-    const orderId = crypto.randomUUID();
-    const orderNumber = `NR-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-    const now = new Date().toISOString();
-
-    const orderDoc: MongoOrderDoc = {
-      id: orderId,
-      user_id: userId,
-      order_number: orderNumber,
-      total_cents: priceCents,
-      items: [
-        {
-          sku,
-          title: product?.title || sku,
-          qty: 1,
-          unit_price_cents: priceCents,
-        },
-      ],
-      payment_rail: 'WALLET',
-      status: 'PAID',
-      created_at: now,
-      updated_at: now,
-    };
-
-    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
-    await ordersCol.insertOne(orderDoc as any);
 
     res.json({
       success: true,
       message: 'Proposal authorized and executed successfully!',
-      order: orderDoc,
-      transaction: tx,
+      order: executedOrder,
+      transaction: executedTx,
     });
   } catch (error: any) {
     res.status(409).json({ success: false, error: error.message || 'Proposal confirmation failed' });

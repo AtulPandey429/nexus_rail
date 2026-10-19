@@ -24,10 +24,25 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
   const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await req.arrayBuffer();
   try {
     const upstream = await fetch(target, { method: req.method, headers, body, cache: 'no-store' });
+    const contentType = upstream.headers.get('content-type') || 'application/json';
+
+    // Stream SSE directly without buffering in memory
+    if (contentType.includes('text/event-stream')) {
+      return new NextResponse(upstream.body, {
+        status: upstream.status,
+        headers: {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache, no-transform',
+          'connection': 'keep-alive',
+          'x-accel-buffering': 'no',
+        },
+      });
+    }
+
     const text = await upstream.text();
     return new NextResponse(text, {
       status: upstream.status,
-      headers: { 'content-type': upstream.headers.get('content-type') || 'application/json' },
+      headers: { 'content-type': contentType },
     });
   } catch (error) {
     return NextResponse.json(
