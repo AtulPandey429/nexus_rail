@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { CrossChainSwapService } from '../services/crossChainSwapService.js';
 import { getFxQuote } from '../services/market.js';
+import { stellarProvider } from '../services/crypto/index.js';
 
 export const swapRouter = Router();
 
@@ -97,6 +98,64 @@ swapRouter.post('/execute', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/swap/stellar/prepare-xdr
+ * Builds unsigned transaction XDR for Freighter browser extension
+ */
+swapRouter.post('/stellar/prepare-xdr', async (req: Request, res: Response) => {
+  try {
+    const { swapId, sourcePublicKey } = req.body || {};
+    if (!swapId || !sourcePublicKey) {
+      return res.status(400).json({ success: false, error: 'swapId and sourcePublicKey are required' });
+    }
+
+    const order = CrossChainSwapService.getSwapOrder(swapId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Swap order not found or expired' });
+    }
+
+    if (order.fromAsset !== 'XLM') {
+      return res.status(400).json({ success: false, error: 'Source asset is not XLM for this swap order' });
+    }
+
+    const memoText = String(order.paymentIdentifier);
+    const xdr = await stellarProvider.buildPaymentXdr(
+      sourcePublicKey,
+      order.payAmount,
+      memoText
+    );
+
+    return res.json({
+      success: true,
+      xdr,
+      destination: order.platformDepositAddress,
+      amountXlm: order.payAmount,
+      memo: memoText,
+      networkPassphrase: 'Test SDF Network ; September 2015',
+    });
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error.message || 'Failed to prepare Stellar XDR' });
+  }
+});
+
+/**
+ * POST /api/v1/swap/stellar/submit-xdr
+ * Submits client-signed Freighter XDR to Stellar Horizon testnet
+ */
+swapRouter.post('/stellar/submit-xdr', async (req: Request, res: Response) => {
+  try {
+    const { signedXdr } = req.body || {};
+    if (!signedXdr) {
+      return res.status(400).json({ success: false, error: 'signedXdr is required' });
+    }
+
+    const result = await stellarProvider.submitSignedXdr(signedXdr);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error.message || 'Horizon submission rejected' });
   }
 });
 

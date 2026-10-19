@@ -10,6 +10,8 @@ import {
   signTransaction as signFreighterTransaction,
 } from '@stellar/freighter-api';
 
+export { signFreighterTransaction };
+
 import {
   isInstalled as isGemInstalled,
   getAddress as getGemAddress,
