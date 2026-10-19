@@ -56,6 +56,14 @@ export function onSessionChange(listener: () => void) {
   };
 }
 
+export function saveSession(user: SessionUser, token: string = 'nexus_session_token') {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('nexus_token', token);
+    localStorage.setItem('nexus_user', JSON.stringify(user));
+    notifySession();
+  }
+}
+
 export function clearSession() {
   localStorage.removeItem('nexus_token');
   localStorage.removeItem('nexus_user');

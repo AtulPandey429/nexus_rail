@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { addSkuToCart } from '@/lib/shop';
 import { NexusLogo } from '@/components/NexusLogo';
+import { Nexus3DCanvas } from '@/components/Nexus3DCanvas';
 
 export default function HomePage() {
   const [addingSku, setAddingSku] = useState<string | null>(null);
@@ -150,15 +151,21 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right Visual: Interactive Rail Card (Glassmorphic Portfolio Card) */}
-            <div className="lg:col-span-5 w-full">
-              <div className="relative rounded-3xl p-6 sm:p-7 bg-white dark:bg-nexus-card border border-slate-200 dark:border-nexus-border shadow-2xl overflow-hidden figma-grid hover:-translate-y-1.5 transition-all duration-500 group">
+            {/* Right Visual: 3D Multi-Rail Holographic Nexus with Interactive Parallax */}
+            <div className="lg:col-span-5 w-full relative">
+              <div className="relative rounded-3xl p-6 sm:p-7 bg-white/80 dark:bg-nexus-card/80 border border-slate-200 dark:border-nexus-border shadow-2xl overflow-hidden backdrop-blur-xl card-3d-glow group">
+                
+                {/* 3D WebGL Particle Canvas Layer */}
+                <div className="absolute inset-0 z-0 opacity-80 flex items-center justify-center pointer-events-none">
+                  <Nexus3DCanvas variant="hero" className="w-full h-full" />
+                </div>
+
                 {/* Node connection visual */}
-                <div className="flex justify-between items-center text-xs font-mono text-slate-500 dark:text-gray-400 border-b border-slate-100 dark:border-nexus-border/80 pb-4">
+                <div className="relative z-10 flex justify-between items-center text-xs font-mono text-slate-500 dark:text-gray-400 border-b border-slate-100 dark:border-nexus-border/80 pb-4">
                   <span className="flex items-center gap-1.5 text-stellar-cyan font-bold">
                     <Rocket className="w-3.5 h-3.5 animate-bounce" /> Stellar
                   </span>
-                  <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-nexus-border text-[10px] text-slate-800 dark:text-gray-300 font-bold">
+                  <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-nexus-border/80 backdrop-blur-md text-[10px] text-slate-800 dark:text-gray-300 font-bold border border-white/10">
                     XLM / XRP
                   </span>
                   <span className="flex items-center gap-1.5 text-xrpl-blue font-bold">
@@ -167,8 +174,8 @@ export default function HomePage() {
                 </div>
 
                 {/* Center Routing graphic */}
-                <div className="my-8 sm:my-10 flex flex-col items-center justify-center space-y-4">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-rail-emerald/10 border border-rail-emerald/40 flex items-center justify-center shadow-xl shadow-rail-emerald/15 group-hover:scale-110 transition-transform duration-500">
+                <div className="relative z-10 my-8 sm:my-10 flex flex-col items-center justify-center space-y-4">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-rail-emerald/10 border border-rail-emerald/40 flex items-center justify-center shadow-2xl shadow-rail-emerald/20 group-hover:scale-110 transition-transform duration-500 backdrop-blur-md">
                     <NexusLogo size={52} glow priority className="shadow-lg" />
                   </div>
                   <div className="text-center font-mono space-y-1">
@@ -182,7 +189,7 @@ export default function HomePage() {
                 </div>
 
                 {/* Floating Order Badge */}
-                <div className="p-4 rounded-xl bg-slate-100 dark:bg-nexus-dark/90 border border-slate-200 dark:border-nexus-border flex items-center justify-between font-mono text-xs shadow-md">
+                <div className="relative z-10 p-4 rounded-xl bg-slate-100/90 dark:bg-nexus-dark/90 border border-slate-200 dark:border-nexus-border flex items-center justify-between font-mono text-xs shadow-md backdrop-blur-md">
                   <div>
                     <span className="text-[10px] text-slate-500 dark:text-gray-500 uppercase block">Order ID</span>
                     <span className="font-bold text-slate-900 dark:text-white">NR-1048</span>

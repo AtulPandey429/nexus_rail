@@ -24,6 +24,7 @@ import {
 import { useLiveExchangeRates } from '@/lib/rates';
 import { readSession, SessionUser, onSessionChange } from '@/lib/shop';
 import { WalletConnectModal } from '@/components/WalletConnectModal';
+import { Nexus3DCanvas } from '@/components/Nexus3DCanvas';
 import {
   checkFreighterInstalled,
   checkGemWalletInstalled,
@@ -409,7 +410,11 @@ export default function SwapPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-[#07090C] text-slate-900 dark:text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black transition-colors duration-200">
       
       {/* Main Container */}
-      <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
+      <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20 relative">
+        {/* Ambient 3D Dual-Rail Particle Canvas */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] pointer-events-none opacity-25 dark:opacity-40 -z-0 hidden md:block">
+          <Nexus3DCanvas variant="ambient" className="w-full h-full" />
+        </div>
         
         {/* Header Breadcrumb */}
         <div className="mb-8">

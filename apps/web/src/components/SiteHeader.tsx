@@ -33,7 +33,7 @@ const NAV_LINKS = [
   { href: '/store', label: 'Store' },
   { href: '/app/swap', label: 'Swap' },
   { href: '/app/activity', label: 'Activity' },
-  { href: '/admin', label: 'Admin' },
+  { href: '/admin', label: 'Admin', adminOnly: true },
 ];
 
 export function SiteHeader() {
@@ -82,6 +82,9 @@ export function SiteHeader() {
     if (pathname.startsWith('/admin')) router.push('/');
   };
 
+  const isAdmin = user?.role === 'admin' || Boolean(user?.email && user.email.toLowerCase().includes('admin'));
+  const filteredNavLinks = NAV_LINKS.filter((link) => !link.adminOnly || isAdmin);
+
   const isLinkActive = (href: string) => {
     if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
@@ -105,7 +108,7 @@ export function SiteHeader() {
 
         {/* Desktop Navigation Links */}
         <nav className="hidden md:flex items-center gap-1 font-mono text-xs">
-          {NAV_LINKS.map((link) => {
+          {filteredNavLinks.map((link) => {
             const active = isLinkActive(link.href);
             return (
               <Link
@@ -232,7 +235,7 @@ export function SiteHeader() {
         <div className="md:hidden border-b border-slate-200 dark:border-nexus-border bg-white dark:bg-[#08090D] px-4 pt-3 pb-6 space-y-4 animate-fade-in-up shadow-2xl">
           {/* Navigation Links */}
           <nav className="flex flex-col space-y-1 font-mono text-sm">
-            {NAV_LINKS.map((link) => {
+            {filteredNavLinks.map((link) => {
               const active = isLinkActive(link.href);
               return (
                 <Link

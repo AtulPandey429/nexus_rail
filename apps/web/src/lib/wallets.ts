@@ -387,9 +387,16 @@ export async function payWithGemWallet(params: {
     );
 
     const paymentPromise = (async () => {
+      // In XRPL protocol, payment Amount is specified in drops (1 XRP = 1,000,000 drops)
+      const xrpVal = typeof params.amountXrp === 'number' ? params.amountXrp : parseFloat(params.amountXrp);
+      if (isNaN(xrpVal) || xrpVal <= 0) {
+        throw new Error(`Invalid XRP payment amount: "${params.amountXrp}"`);
+      }
+      const amountDrops = String(Math.round(xrpVal * 1_000_000));
+
       const res = await sendGemPayment({
         destination: params.destination,
-        amount: params.amountXrp,
+        amount: amountDrops,
         destinationTag: params.destinationTag ? Number(params.destinationTag) : undefined,
       });
 
