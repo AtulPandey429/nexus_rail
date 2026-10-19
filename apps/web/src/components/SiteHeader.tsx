@@ -171,6 +171,16 @@ export function SiteHeader() {
 
               <button
                 type="button"
+                onClick={() => setIsWalletModalOpen(true)}
+                title={user.walletAddress ? `Wallet: ${user.walletAddress}` : 'Connect / Manage Web3 Wallet'}
+                className="p-1.5 rounded-xl bg-slate-100 dark:bg-[#0E131E] border border-slate-300 dark:border-[#1C2638] text-rail-emerald hover:border-rail-emerald/60 hover:bg-rail-emerald/10 transition-colors"
+                aria-label="Manage Connected Wallets"
+              >
+                <Wallet className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
                 onClick={signOut}
                 className="text-[11px] font-mono text-slate-500 dark:text-[#5A6478] hover:text-slate-900 dark:hover:text-white transition-colors ml-1"
               >

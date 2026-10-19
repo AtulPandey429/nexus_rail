@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useLiveExchangeRates } from '@/lib/rates';
 import { readSession, SessionUser, onSessionChange } from '@/lib/shop';
+import { WalletConnectModal } from '@/components/WalletConnectModal';
 
 type SwapToken = 'XRP' | 'XLM' | 'USDC' | 'RLUSD';
 
@@ -35,6 +36,7 @@ export default function SwapPage() {
   const [slippage, setSlippage] = useState<'0.1%' | '0.5%' | '1.0%'>('0.5%');
   const [showSlippageMenu, setShowSlippageMenu] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
   // Live Exchange Rates Hook with 30-minute caching
   const { xlmUsd, xrpUsd, refreshRates, fromCache, ttlMinutes, loading: ratesLoading } = useLiveExchangeRates();
@@ -310,9 +312,17 @@ export default function SwapPage() {
             </div>
 
             {/* Bottom Testnet Balances Card */}
-            <div className="rounded-xl bg-[#0E1218] border border-white/10 p-5 flex items-center justify-between">
+            <div 
+              onClick={() => setIsWalletModalOpen(true)}
+              className="rounded-xl bg-[#0E1218] border border-white/10 hover:border-[#7FF8C6]/40 p-5 flex items-center justify-between cursor-pointer transition-all group"
+            >
               <div>
-                <p className="text-sm font-medium text-white">Your testnet balances</p>
+                <p className="text-sm font-medium text-white flex items-center gap-2">
+                  <span>Your testnet balances</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-white/50 group-hover:text-[#7FF8C6] group-hover:border-[#7FF8C6]/30 transition-colors">
+                    {user?.walletAddress ? 'Manage' : 'Connect'}
+                  </span>
+                </p>
                 <p className="text-xs text-white/40 font-mono mt-0.5">Available before this swap</p>
               </div>
               <div className="text-right">
@@ -447,15 +457,16 @@ export default function SwapPage() {
             <div className="p-5 rounded-xl bg-[#0E1218] border border-white/10 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-mono text-white/40 uppercase">
-                  {fromToken === 'XRP' ? 'XRPL' : 'STELLAR'} · rNXs...9b3K
+                  {fromToken === 'XRP' ? 'XRPL' : 'STELLAR'} · {user?.walletAddress ? `${user.walletAddress.slice(0, 4)}..${user.walletAddress.slice(-4)}` : (fromToken === 'XRP' ? 'rNXs...9b3K' : 'GCKF..7Q2M')}
                 </p>
                 <p className="text-xl font-mono font-medium text-white mt-0.5">
-                  500.00 XRP
+                  {fromToken === 'XRP' ? `${xrpBalance.toFixed(2)} XRP` : `${xlmBalance.toFixed(2)} XLM`}
                 </p>
               </div>
               <button
                 type="button"
-                className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-white hover:bg-white/10 transition-colors"
+                onClick={() => setIsWalletModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-white hover:bg-white/10 hover:border-[#7FF8C6]/40 transition-all cursor-pointer"
               >
                 Manage wallets
               </button>
@@ -575,6 +586,12 @@ export default function SwapPage() {
           <p>Test assets only. No real funds or fulfillment.</p>
         </div>
       </footer>
+
+      {/* Wallet Management Modal */}
+      <WalletConnectModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+      />
 
     </div>
   );
