@@ -59,6 +59,18 @@ cartRouter.put('/items', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
+// DELETE /api/v1/cart - Clear user's active cart after payment
+cartRouter.delete('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  try {
+    const col = await MongoService.getCollection<MongoCartItemDoc>('cart_items');
+    await col.deleteMany({ user_id: userId });
+    res.json({ success: true, data: { items: [] } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Could not clear cart' });
+  }
+});
+
 // DELETE /api/v1/cart/items/:sku - Remove item from cart
 cartRouter.delete('/items/:sku', async (req: AuthenticatedRequest, res: Response) => {
   const sku = Array.isArray(req.params.sku) ? req.params.sku[0] : req.params.sku;

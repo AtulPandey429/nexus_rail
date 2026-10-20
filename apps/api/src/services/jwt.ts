@@ -3,8 +3,11 @@ import { requiredEnv } from '../config/env.js';
 
 export type TokenUser = {
   id: string;
+  name?: string;
   email?: string;
   walletAddress?: string;
+  stellarAddress?: string;
+  xrplAddress?: string;
   role: 'user' | 'admin';
 };
 
@@ -18,8 +21,11 @@ export function signToken(user: TokenUser): string {
   const body = b64url(
     JSON.stringify({
       sub: user.id,
+      name: user.name,
       email: user.email,
       walletAddress: user.walletAddress,
+      stellarAddress: user.stellarAddress,
+      xrplAddress: user.xrplAddress,
       role: user.role,
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
     })
@@ -45,8 +51,11 @@ export function verifyToken(token: string): TokenUser {
   }
   const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as {
     sub?: string;
+    name?: string;
     email?: string;
     walletAddress?: string;
+    stellarAddress?: string;
+    xrplAddress?: string;
     role?: string;
     exp?: number;
   };
@@ -58,8 +67,11 @@ export function verifyToken(token: string): TokenUser {
   }
   return {
     id: payload.sub,
+    name: payload.name,
     email: payload.email,
     walletAddress: payload.walletAddress,
+    stellarAddress: payload.stellarAddress,
+    xrplAddress: payload.xrplAddress,
     role: payload.role,
   };
 }

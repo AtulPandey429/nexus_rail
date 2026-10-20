@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { MongoService, MongoOrderDoc, OrderItem, MongoCartItemDoc } from '../services/mongo.js';
 import { ProductService } from '../services/products.js';
+import { OrderSequenceService } from '../services/orderSequence.js';
 
 export const ordersRouter = Router();
 ordersRouter.use(requireAuth);
@@ -42,9 +43,13 @@ ordersRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
 ordersRouter.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
+    const variants = OrderSequenceService.getLookupVariants(id);
     const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
     const order = await ordersCol.findOne({
-      $or: [{ id }, { order_number: id }],
+      $or: [
+        { id: { $in: variants } },
+        { order_number: { $in: variants } },
+      ],
       user_id: req.user!.id,
     });
 
@@ -91,7 +96,7 @@ ordersRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
 
     const totalCents = pricedItems.reduce((sum, item) => sum + item.unit_price_cents * item.qty, 0);
     const orderId = crypto.randomUUID();
-    const orderNumber = `NR-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const orderNumber = await OrderSequenceService.getNextOrderNumber();
     const now = new Date().toISOString();
 
     const orderDoc: MongoOrderDoc = {

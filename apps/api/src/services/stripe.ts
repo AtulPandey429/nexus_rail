@@ -3,6 +3,7 @@ import { requiredEnv } from '../config/env.js';
 import { MongoService, MongoOrderDoc, MongoCartItemDoc, OrderItem } from './mongo.js';
 import { ProductService } from './products.js';
 import { settlementEmitter } from './settlementEvents.js';
+import { OrderSequenceService } from './orderSequence.js';
 import crypto from 'crypto';
 
 function stripe(): Stripe {
@@ -29,7 +30,7 @@ export class StripeService {
 
     const totalCents = priced.reduce((sum, line) => sum + line.unit_price_cents * line.qty, 0);
     const orderId = crypto.randomUUID();
-    const orderNumber = `NR-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const orderNumber = await OrderSequenceService.getNextOrderNumber();
     const now = new Date().toISOString();
 
     const orderDoc: MongoOrderDoc = {

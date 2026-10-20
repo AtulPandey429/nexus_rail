@@ -55,7 +55,8 @@ authRouter.post('/verify-signature', async (req: Request, res: Response) => {
   const parsed = Web3VerifySignatureSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, error: 'Invalid signature payload' });
   try {
-    const result = await AuthService.verifyWallet(parsed.data.walletAddress, parsed.data.signature, parsed.data.nonce);
+    const chain = String(req.body?.chain || '').toLowerCase();
+    const result = await AuthService.verifyWallet(parsed.data.walletAddress, parsed.data.signature, parsed.data.nonce, chain);
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(401).json({ success: false, error: error instanceof Error ? error.message : 'Signature rejected' });

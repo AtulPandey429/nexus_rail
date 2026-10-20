@@ -4,11 +4,25 @@ import { env } from '../config/env.js';
 export interface MongoUserDoc {
   _id?: any;
   id: string; // UUID or string identifier for consistent API representation
+  name?: string;
   email?: string;
   passwordHash?: string;
   walletAddress?: string;
   xrplAddress?: string;
   stellarAddress?: string;
+  lastConnectedWallet?: {
+    network: 'stellar' | 'xrpl';
+    provider: string;
+    address: string;
+    connectedAt: string;
+  };
+  wallets?: Array<{
+    network: 'stellar' | 'xrpl';
+    address: string;
+    provider: string;
+    connectedAt: string;
+    verified: boolean;
+  }>;
   role: 'user' | 'admin';
   createdAt: string;
   updatedAt: string;
@@ -111,11 +125,12 @@ export interface MongoProposalDoc {
   _id?: any;
   id: string;
   user_id: string;
-  action: 'PURCHASE_ORDER' | 'DEPOSIT_FUNDS';
+  action: 'PURCHASE_ORDER' | 'DEPOSIT_FUNDS' | 'PAY_ORDER';
   payload: Record<string, unknown>;
-  status: 'PROPOSED' | 'CONFIRMED' | 'EXPIRED';
+  status: 'PROPOSED' | 'CONFIRMED' | 'REJECTED' | 'EXPIRED';
   expiresAt: Date;
   created_at: string;
+  rejected_at?: string;
 }
 
 export interface MongoWebhookEventDoc {
