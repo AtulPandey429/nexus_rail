@@ -2,26 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #F8FAFC;
-  --foreground: #0F172A;
-  --surface: #FFFFFF;
-  --card: #FFFFFF;
-  --card-subtle: #F1F5F9;
-  --border: #E2E8F0;
-  --border-focus: #CBD5E1;
-  --muted: #64748B;
+/* =========================================================================
+   NEXUSRAIL MULTI-THEME GLASSMORPHISM DESIGN TOKEN ARCHITECTURE
+   Supports:
+   1. Dark Glass (Deep obsidian, frosted graphite glass, cyan & gold accents)
+   2. Black & Gold (Executive deep charcoal, champagne gold metallic accents)
+   3. Light Glass (Frosted crystal pearlescent, slate typography, pristine contrast)
+   ========================================================================= */
+
+:root,
+[data-theme="dark-glass"] {
+  --background: #090B0E;
+  --foreground: #F0F4F8;
+  --surface: rgba(16, 20, 30, 0.28);
+  --surface-solid: #12161E;
+  --card: rgba(18, 23, 34, 0.22);
+  --card-hover: rgba(26, 33, 50, 0.40);
+  --card-subtle: rgba(14, 18, 26, 0.18);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-highlight: rgba(0, 229, 255, 0.40);
+  --border-focus: #00E5FF;
+  --muted: #8A93A6;
+  --gold: #D4AF37;
+  --gold-bright: #F2D675;
+  --accent: #00E5FF;
+  --glass-blur: 12px;
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+  --ambient-1: rgba(0, 229, 255, 0.10);
+  --ambient-2: rgba(212, 175, 55, 0.08);
 }
 
-.dark {
-  --background: #08090D;
-  --foreground: #F9FAFB;
-  --surface: #0B0D14;
-  --card: #11141D;
-  --card-subtle: #141824;
-  --border: #1D2230;
-  --border-focus: #2B3347;
-  --muted: #8A93A6;
+[data-theme="black-gold"] {
+  --background: #141619;
+  --foreground: #F2E8D3;
+  --surface: rgba(26, 28, 34, 0.32);
+  --surface-solid: #1C1F24;
+  --card: rgba(30, 33, 40, 0.24);
+  --card-hover: rgba(40, 44, 54, 0.42);
+  --card-subtle: rgba(20, 22, 28, 0.18);
+  --border: rgba(197, 160, 89, 0.22);
+  --border-highlight: rgba(212, 175, 55, 0.45);
+  --border-focus: #D4AF37;
+  --muted: #A69E8D;
+  --gold: #D4AF37;
+  --gold-bright: #E8CE90;
+  --accent: #D4AF37;
+  --glass-blur: 12px;
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.55);
+  --ambient-1: rgba(212, 175, 55, 0.09);
+  --ambient-2: rgba(197, 160, 89, 0.06);
+}
+
+[data-theme="light-glass"] {
+  --background: #F4F6F9;
+  --foreground: #0F172A;
+  --surface: rgba(255, 255, 255, 0.28);
+  --surface-solid: #FFFFFF;
+  --card: rgba(255, 255, 255, 0.22);
+  --card-hover: rgba(255, 255, 255, 0.40);
+  --card-subtle: rgba(255, 255, 255, 0.14);
+  --border: rgba(15, 23, 42, 0.10);
+  --border-highlight: rgba(217, 119, 6, 0.50);
+  --border-focus: #D97706;
+  --muted: #475569;
+  --gold: #D97706;
+  --gold-bright: #F59E0B;
+  --accent: #0284C7;
+  --glass-blur: 12px;
+  --glass-shadow: 0 10px 36px 0 rgba(15, 23, 42, 0.07);
+  --ambient-1: rgba(2, 132, 199, 0.12);
+  --ambient-2: rgba(217, 119, 6, 0.10);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
@@ -33,6 +88,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.25s ease, color 0.25s ease;
   overflow-x: hidden;
+  text-rendering: optimizeLegibility;
 }
 
 /* Custom subtle scrollbar */
@@ -58,32 +114,70 @@ body {
   background: #2D3548;
 }
 
-/* Figma grid overlay helper */
-.figma-grid {
-  background-size: 32px 32px;
-  background-image: 
-    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
-}
-.dark .figma-grid {
-  background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+/* =========================================================================
+   GLASSMORPHISM UTILITIES
+   ========================================================================= */
+
+.nexus-glass-card {
+  background-color: var(--card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Portfolio Ambient Glow Orb */
-.portfolio-glow-orb {
-  position: absolute;
+.nexus-glass-card:hover {
+  border-color: var(--border-highlight);
+  background-color: var(--card-hover);
+}
+
+.nexus-glass-surface {
+  background-color: var(--surface);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border);
+}
+
+.nexus-glass-nav {
+  background-color: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Background Ambient Lighting Controls */
+[data-effects="minimal"] .nexus-ambient-orb {
+  display: none !important;
+}
+
+.nexus-ambient-orb {
+  position: fixed;
   border-radius: 9999px;
-  filter: blur(80px);
+  filter: blur(100px);
   pointer-events: none;
   z-index: 0;
+  will-change: transform, opacity;
 }
 
-/* Glassmorphism Card Utility */
-.glass-panel {
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+/* =========================================================================
+   ACCESSIBLE MOTION & REDUCED MOTION OVERRIDES
+   ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-motion="reduced"] *,
+[data-motion="reduced"] ::before,
+[data-motion="reduced"] ::after {
+  animation: none !important;
+  transition: none !important;
 }
 
 /* Fluent 3D & Holographic Utilities */
@@ -136,3 +230,75 @@ body {
 .animate-pulse-glow {
   animation: pulse-glow 4s ease-in-out infinite;
 }
+
+/* =========================================================================
+   CINEMATIC AMBIENT & SCROLL UTILITIES (Adopted from atul-portfolio)
+   ========================================================================= */
+
+/* Procedural Film Grain Overlay */
+.site-grain {
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* Floating Ambient Gradient Orbs */
+@keyframes orb-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, -30px) scale(1.15); }
+}
+
+@keyframes orb-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-35px, 25px) scale(1.1); }
+}
+
+.ambient-orb-1 {
+  position: absolute;
+  top: 10%;
+  right: 15%;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  filter: blur(85px);
+  opacity: 0.22;
+  pointer-events: none;
+  animation: orb-float-1 14s ease-in-out infinite;
+}
+
+.ambient-orb-2 {
+  position: absolute;
+  bottom: 20%;
+  left: 10%;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--gold) 0%, transparent 75%);
+  filter: blur(95px);
+  opacity: 0.18;
+  pointer-events: none;
+  animation: orb-float-2 18s ease-in-out infinite;
+}
+
+/* Lenis Smooth Scroll Integration */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
