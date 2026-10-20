@@ -1,0 +1,211 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900" width="100%" height="100%">
+  <defs>
+    <!-- Filters for Depth and Glow -->
+    <filter id="ground-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="24" result="blur" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.08   0 0 0 0 0.12   0 0 0 0 0.22  0 0 0 0.25 0" />
+    </filter>
+
+    <filter id="drop-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="20" flood-color="#0f172a" flood-opacity="0.25" />
+    </filter>
+
+    <filter id="neon-cyan" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur1" />
+      <feGaussianBlur stdDeviation="12" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="neon-orange" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Metallic & Ceramic Gradients -->
+    <linearGradient id="cobalt-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f8fff" />
+      <stop offset="45%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+
+    <linearGradient id="deep-blue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <linearGradient id="neon-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9838" />
+      <stop offset="50%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+
+    <linearGradient id="chrome-grey" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="40%" stop-color="#e2e8f0" />
+      <stop offset="80%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#475569" />
+    </linearGradient>
+
+    <linearGradient id="dark-metal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <linearGradient id="glass-blue" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#93c5fd" stop-opacity="0.7" />
+    </linearGradient>
+
+    <radialGradient id="screen-bg" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#05070a" />
+    </radialGradient>
+  </defs>
+
+  <!-- 1. Ambient Drop Shadow on Floor -->
+  <ellipse cx="400" cy="820" rx="230" ry="36" fill="#0f172a" filter="url(#ground-shadow)" />
+
+  <!-- 2. Dual-Layer Hologram Pedestal -->
+  <g id="pedestal">
+    <!-- Bottom Metal Base -->
+    <ellipse cx="400" cy="790" rx="160" ry="32" fill="url(#chrome-grey)" />
+    <ellipse cx="400" cy="786" rx="156" ry="29" fill="url(#dark-metal)" />
+    
+    <!-- Glowing Orange Core Ring -->
+    <ellipse cx="400" cy="770" rx="145" ry="26" fill="none" stroke="url(#neon-amber)" stroke-width="5" filter="url(#neon-orange)" transform="rotate(-4 400 770)" />
+
+    <!-- Glassy Blue Platform Disk -->
+    <ellipse cx="400" cy="746" rx="195" ry="36" fill="url(#glass-blue)" stroke="#93c5fd" stroke-width="3" transform="rotate(-6 400 746)" />
+    <ellipse cx="400" cy="746" rx="170" ry="30" fill="none" stroke="#38bdf8" stroke-width="2" opacity="0.9" filter="url(#neon-cyan)" transform="rotate(-6 400 746)" />
+  </g>
+
+  <!-- 3. Character Body -->
+  <g id="robot-character" filter="url(#drop-shadow)">
+
+    <!-- Left Leg (Background) -->
+    <g id="left-leg">
+      <ellipse cx="465" cy="635" rx="20" ry="34" fill="url(#cobalt-blue)" transform="rotate(-15 465 635)" />
+      <ellipse cx="480" cy="680" rx="15" ry="26" fill="url(#chrome-grey)" transform="rotate(10 480 680)" />
+      <!-- Foot -->
+      <path d="M 466 702 C 472 688, 502 690, 505 704 C 507 718, 466 720, 466 702 Z" fill="url(#dark-metal)" />
+    </g>
+
+    <!-- Right Leg (Foreground) -->
+    <g id="right-leg">
+      <!-- Thigh Joint (Orange Accent) -->
+      <circle cx="375" cy="590" r="14" fill="url(#neon-amber)" />
+      <ellipse cx="380" cy="640" rx="22" ry="36" fill="url(#cobalt-blue)" transform="rotate(10 380 640)" />
+      <ellipse cx="390" cy="692" rx="17" ry="28" fill="url(#chrome-grey)" transform="rotate(-5 390 692)" />
+      <!-- Foot -->
+      <path d="M 374 716 C 380 700, 416 702, 418 718 C 420 732, 374 734, 374 716 Z" fill="url(#dark-metal)" />
+    </g>
+
+    <!-- Waist & Belt -->
+    <path d="M 360 560 Q 400 580 440 560 L 442 585 Q 400 605 358 585 Z" fill="url(#neon-amber)" />
+
+    <!-- Torso Armor -->
+    <g id="torso">
+      <!-- Outer Shell -->
+      <path d="M 330 450 C 330 415, 470 415, 470 450 C 476 515, 456 570, 400 575 C 344 570, 324 515, 330 450 Z" fill="url(#cobalt-blue)" />
+      
+      <!-- Center Chrome Plate -->
+      <path d="M 356 460 C 356 440, 444 440, 444 460 C 448 500, 436 540, 400 545 C 364 540, 352 500, 356 460 Z" fill="url(#chrome-grey)" />
+
+      <!-- Glowing Power Button Core -->
+      <rect x="382" y="482" width="36" height="36" rx="10" fill="url(#dark-metal)" stroke="#f97316" stroke-width="2" />
+      <!-- Glowing Power Icon -->
+      <path d="M 400 490 L 400 499 M 393 495 A 7 7 0 1 0 407 495" fill="none" stroke="#ffedd5" stroke-width="2.5" stroke-linecap="round" filter="url(#neon-orange)" />
+    </g>
+
+    <!-- Left Arm (Resting with Orange Gauntlet) -->
+    <g id="left-arm">
+      <!-- Shoulder -->
+      <circle cx="480" cy="450" r="24" fill="url(#cobalt-blue)" />
+      <circle cx="480" cy="450" r="14" fill="url(#neon-amber)" />
+      <!-- Forearm Gauntlet -->
+      <ellipse cx="512" cy="505" rx="17" ry="30" fill="url(#neon-amber)" transform="rotate(-20 512 505)" />
+      <!-- Wrist & Hand -->
+      <circle cx="530" cy="550" r="14" fill="url(#chrome-grey)" />
+      <path d="M 522 558 C 532 580, 546 575, 538 555" stroke="url(#dark-metal)" stroke-width="9" stroke-linecap="round" fill="none" />
+    </g>
+
+    <!-- Right Arm (Thumbs-up with Orange Gauntlet) -->
+    <g id="right-arm">
+      <!-- Shoulder Joint -->
+      <circle cx="320" cy="450" r="24" fill="url(#cobalt-blue)" />
+      <circle cx="320" cy="450" r="14" fill="url(#neon-amber)" />
+      <!-- Bicep & Bent Elbow -->
+      <path d="M 315 455 Q 275 490, 270 430" fill="none" stroke="url(#neon-amber)" stroke-width="28" stroke-linecap="round" />
+      <circle cx="270" cy="425" r="17" fill="url(#chrome-grey)" />
+
+      <!-- Thumbs Up Hand -->
+      <ellipse cx="264" cy="415" rx="16" ry="18" fill="url(#dark-metal)" />
+      <!-- Thumb Up -->
+      <path d="M 264 415 Q 262 370, 275 365 C 285 362, 290 378, 280 405 Z" fill="url(#chrome-grey)" />
+      <!-- Knuckle Highlights -->
+      <line x1="256" y1="410" x2="270" y2="410" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" />
+      <line x1="256" y1="417" x2="270" y2="417" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" />
+      <line x1="258" y1="424" x2="268" y2="424" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" />
+    </g>
+
+    <!-- 4. Head & Face -->
+    <g id="head">
+      <!-- Antenna Left (Cyan Ring Spark) -->
+      <path d="M 315 240 L 298 160" stroke="url(#cobalt-blue)" stroke-width="10" stroke-linecap="round" />
+      <circle cx="298" cy="160" r="8" fill="url(#neon-amber)" stroke="#ffffff" stroke-width="2" />
+      
+      <!-- Antenna Right -->
+      <path d="M 485 240 L 502 160" stroke="url(#cobalt-blue)" stroke-width="10" stroke-linecap="round" />
+      <circle cx="502" cy="160" r="8" fill="url(#neon-amber)" stroke="#ffffff" stroke-width="2" />
+
+      <!-- Ear Pods -->
+      <rect x="285" y="235" width="30" height="75" rx="15" fill="url(#chrome-grey)" />
+      <circle cx="300" cy="272" r="16" fill="url(#cobalt-blue)" />
+      <circle cx="300" cy="272" r="9" fill="url(#neon-amber)" />
+
+      <rect x="485" y="235" width="30" height="75" rx="15" fill="url(#chrome-grey)" />
+      <circle cx="500" cy="272" r="16" fill="url(#cobalt-blue)" />
+      <circle cx="500" cy="272" r="9" fill="url(#neon-amber)" />
+
+      <!-- Outer Helmet (Glossy Cobalt Blue) -->
+      <rect x="300" y="190" width="200" height="180" rx="64" fill="url(#cobalt-blue)" stroke="#93c5fd" stroke-width="3" />
+      
+      <!-- Upper Visor Cap with Glowing Orange 'NR' -->
+      <path d="M 318 220 C 338 180, 462 180, 482 220 L 476 250 C 450 236, 350 236, 324 250 Z" fill="url(#deep-blue)" />
+      <text x="400" y="235" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="25" fill="#f97316" text-anchor="middle" letter-spacing="2" filter="url(#neon-orange)">NR</text>
+
+      <!-- Glass Visor Face Screen -->
+      <rect x="320" y="240" width="160" height="110" rx="38" fill="url(#screen-bg)" stroke="#1e293b" stroke-width="3" />
+
+      <!-- Visor Gloss Curve Reflection -->
+      <path d="M 330 250 C 360 245, 440 245, 470 250 C 450 264, 350 264, 330 250 Z" fill="#ffffff" opacity="0.2" />
+
+      <!-- Cute Cyan Glowing Expression -->
+      <!-- Left Eye (Open Joyful Eye) -->
+      <circle cx="360" cy="290" r="12" fill="#38bdf8" filter="url(#neon-cyan)" />
+      
+      <!-- Right Eye (Winking Arc) -->
+      <path d="M 422 290 Q 436 278, 450 290" fill="none" stroke="#38bdf8" stroke-width="5.5" stroke-linecap="round" filter="url(#neon-cyan)" />
+
+      <!-- Smiling Mouth -->
+      <path d="M 386 316 Q 400 328, 414 316" fill="none" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" filter="url(#neon-cyan)" />
+
+      <!-- Cheeks Blush Dots (Electric Orange Accent) -->
+      <circle cx="344" cy="308" r="5" fill="#f97316" filter="url(#neon-orange)" />
+      <circle cx="456" cy="308" r="5" fill="#f97316" filter="url(#neon-orange)" />
+    </g>
+
+    <!-- Floating Sparkles & Orbital Nodes around Head -->
+    <ellipse cx="400" cy="175" rx="145" ry="18" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="8 6" opacity="0.6" transform="rotate(-8 400 175)" />
+    <circle cx="308" cy="165" r="4.5" fill="#f97316" filter="url(#neon-orange)" />
+    <circle cx="494" cy="186" r="4.5" fill="#38bdf8" filter="url(#neon-cyan)" />
+  </g>
+</svg>
