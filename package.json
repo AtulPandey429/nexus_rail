@@ -1,6 +1,7 @@
 {
   "name": "nexus-rail-monorepo",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.12.4",
   "private": true,
   "type": "module",
   "description": "NexusRail — Flagship Multi-Rail Commerce & AI Agent Desk Monorepo",
