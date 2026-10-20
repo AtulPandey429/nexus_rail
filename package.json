@@ -10,13 +10,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm run dev --workspace=apps/api",
-    "dev:web": "npm run dev --workspace=apps/web",
-    "build:shared": "npm run build --workspace=packages/shared",
-    "build:api": "npm run build --workspace=apps/api",
-    "build:web": "npm run build --workspace=apps/web",
-    "build": "npm run build:shared && npm run build:api && npm run build:web",
-    "test": "npm run test --workspace=apps/api"
+    "dev:api": "pnpm --filter @nexusrail/api dev",
+    "dev:web": "pnpm --filter @nexusrail/web dev",
+    "build:shared": "pnpm --filter @nexusrail/shared build",
+    "build:api": "pnpm --filter @nexusrail/api build",
+    "build:web": "pnpm --filter @nexusrail/web build",
+    "build": "pnpm --filter @nexusrail/shared build && pnpm --filter @nexusrail/api build && pnpm --filter @nexusrail/web build",
+    "test": "pnpm --filter @nexusrail/api test"
   },
   "devDependencies": {
     "next": "^15.2.3",

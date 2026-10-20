@@ -4,6 +4,7 @@ node_modules/
 
 # Build Outputs
 dist/
+!packages/shared/dist/
 .next/
 out/
 
