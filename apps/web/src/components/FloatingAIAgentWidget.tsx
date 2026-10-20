@@ -29,10 +29,7 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
   const [hasInteracted, setHasInteracted] = useState(false);
   const [mouseOffset, setMouseOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // When chat box is open, hide floating widget completely so bot is docked at the chat panel top corner
-  if (isOpen) return null;
-
-  // Typewriter effect state
+  // Typewriter effect state — must stay above any early return (Rules of Hooks)
   const [messageIndex, setMessageIndex] = useState(0);
   const [currentText, setCurrentText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -48,6 +45,8 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
 
   // Typewriter state-machine loop
   useEffect(() => {
+    if (isOpen) return;
+
     const fullMessage = WELCOME_MESSAGES[messageIndex];
     let timer: NodeJS.Timeout;
 
@@ -77,7 +76,7 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
     }
 
     return () => clearTimeout(timer);
-  }, [currentText, isDeleting, messageIndex]);
+  }, [currentText, isDeleting, messageIndex, isOpen]);
 
   // Load saved position on mount (NO annoying auto-popup on load; only on user hover)
   useEffect(() => {
@@ -97,6 +96,8 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
 
   // 3D Parallax Mouse Tracking (tilts robot smoothly toward cursor)
   useEffect(() => {
+    if (isOpen) return;
+
     const handleGlobalMouseMove = (e: MouseEvent) => {
       if (!widgetRef.current) return;
       const rect = widgetRef.current.getBoundingClientRect();
@@ -113,7 +114,7 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
 
     window.addEventListener('mousemove', handleGlobalMouseMove, { passive: true });
     return () => window.removeEventListener('mousemove', handleGlobalMouseMove);
-  }, []);
+  }, [isOpen]);
 
   // Drag start handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -201,6 +202,9 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
       onOpen();
     }
   };
+
+  // Hide floating widget while the desk panel is open — after all hooks
+  if (isOpen) return null;
 
   return (
     <div
