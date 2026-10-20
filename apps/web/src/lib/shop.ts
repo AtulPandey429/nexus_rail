@@ -1,7 +1,10 @@
 export type SessionUser = {
   id: string;
+  name?: string;
   email?: string;
   walletAddress?: string;
+  stellarAddress?: string;
+  xrplAddress?: string;
   role: 'user' | 'admin';
 };
 
@@ -458,6 +461,20 @@ export async function removeCartSku(sku: string) {
   notifyCart();
 }
 
+export async function clearCart() {
+  const { token } = readSession();
+  if (token) {
+    try {
+      await fetch('/api/v1/cart', {
+        method: 'DELETE',
+        headers: headers(),
+      });
+    } catch {}
+  }
+  setLocalCart([]);
+  notifyCart();
+}
+
 export async function startStripeCheckout() {
   const clientUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
   const res = await fetch('/api/v1/checkout/stripe/create-session', {
@@ -496,8 +513,11 @@ export async function createOrderFromCart(lines: CartLine[], rail = 'MULTI') {
     // fallback to demo order below
   }
 
-  // Resilient fallback demo order creation so demo checkout always works seamlessly
-  const orderNumber = `NR-${Math.floor(1000 + Math.random() * 9000)}`;
+  // Resilient fallback demo order creation with short, professional #NR8K2P9X format
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let randCode = '';
+  for (let i = 0; i < 6; i++) randCode += chars[Math.floor(Math.random() * chars.length)];
+  const orderNumber = `#NR${randCode}`;
   const totalCents = lines.reduce((acc, line) => acc + line.priceCents * line.qty, 0);
   const demoOrder = {
     id: `ord_${orderNumber.toLowerCase()}`,
