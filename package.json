@@ -1,7 +1,6 @@
 {
   "name": "nexus-rail-monorepo",
   "version": "1.0.0",
-  "packageManager": "pnpm@10.12.4",
   "private": true,
   "type": "module",
   "description": "NexusRail — Flagship Multi-Rail Commerce & AI Agent Desk Monorepo",
@@ -10,13 +9,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "pnpm --filter @nexusrail/api dev",
-    "dev:web": "pnpm --filter @nexusrail/web dev",
-    "build:shared": "pnpm --filter @nexusrail/shared build",
-    "build:api": "pnpm --filter @nexusrail/api build",
-    "build:web": "pnpm --filter @nexusrail/web build",
-    "build": "pnpm --filter @nexusrail/shared build && pnpm --filter @nexusrail/api build && pnpm --filter @nexusrail/web build",
-    "test": "pnpm --filter @nexusrail/api test"
+    "dev:api": "npm run dev --workspace=@nexusrail/api",
+    "dev:web": "npm run dev --workspace=@nexusrail/web",
+    "build:shared": "npm run build --workspace=@nexusrail/shared",
+    "build:api": "npm run build --workspace=@nexusrail/api",
+    "build:web": "npm run build --workspace=@nexusrail/web",
+    "build": "npm run build:shared && npm run build:api && npm run build:web",
+    "start:api": "npm run start --workspace=@nexusrail/api",
+    "start:web": "npm run start --workspace=@nexusrail/web",
+    "test": "npm run test --workspace=@nexusrail/api"
   },
   "devDependencies": {
     "next": "^15.2.3",
@@ -25,10 +26,5 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
     "mongodb": "^7.7.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

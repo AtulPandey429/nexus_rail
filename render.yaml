@@ -2,21 +2,10 @@ services:
   - type: web
     name: nexusrail-api
     env: node
-    buildCommand: pnpm install && pnpm --filter @nexusrail/shared build && pnpm --filter @nexusrail/api build
-    startCommand: pnpm --filter @nexusrail/api start
+    buildCommand: npm install && npm run build:shared && npm run build:api
+    startCommand: npm run start:api
     envVars:
       - key: PORT
         value: 4000
-      - key: NODE_ENV
-        value: production
-
-  - type: web
-    name: nexusrail-web
-    env: node
-    buildCommand: pnpm install && pnpm --filter @nexusrail/shared build && pnpm --filter @nexusrail/web build
-    startCommand: pnpm --filter @nexusrail/web start
-    envVars:
-      - key: PORT
-        value: 3000
       - key: NODE_ENV
         value: production
