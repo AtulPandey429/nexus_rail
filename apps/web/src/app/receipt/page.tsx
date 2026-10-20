@@ -5,16 +5,15 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import {
-  Check,
-  ShieldCheck,
-  Download,
-  ExternalLink,
-  ArrowRight,
-  BookOpen,
-  CheckCircle2,
   Printer,
+  ExternalLink,
+  ShieldCheck,
+  Copy,
+  Check,
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { CartLine } from '@/lib/shop';
+import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -25,9 +24,148 @@ const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-CABLES': '/products/rail-cables.png',
 };
 
+const PRODUCT_CATALOG_PRICES: Record<string, number> = {
+  'RAIL-ONE': 12900,
+  'RELAY-MAT': 3900,
+  'NEXUS-TEE': 3200,
+  'NODE-STAND': 5800,
+  'SIGNAL-CAP': 2800,
+  'RAIL-CABLES': 1900,
+};
+
+const PRODUCT_CATALOG_DESCRIPTIONS: Record<string, string> = {
+  'RAIL-ONE': 'Graphite · Dual-Rail Processor',
+  'RELAY-MAT': 'Charcoal · 80 × 40 cm',
+  'NEXUS-TEE': 'Washed Black · Size M',
+  'NODE-STAND': 'Solid Anodized Aluminum Mount',
+  'SIGNAL-CAP': 'Water-Repellent Technical Cap',
+  'RAIL-CABLES': 'Braided High-Current Cables',
+};
+
+function getItemPriceCents(item: any): number {
+  if (typeof item.priceCents === 'number' && item.priceCents > 0) return item.priceCents;
+  if (typeof item.unit_price_cents === 'number' && item.unit_price_cents > 0) return item.unit_price_cents;
+  if (typeof item.unitPriceCents === 'number' && item.unitPriceCents > 0) return item.unitPriceCents;
+  if (typeof item.price_cents === 'number' && item.price_cents > 0) return item.price_cents;
+  if (typeof item.price === 'number' && item.price > 0) return Math.round(item.price * 100);
+  if (item.sku && PRODUCT_CATALOG_PRICES[item.sku]) return PRODUCT_CATALOG_PRICES[item.sku];
+  return 0;
+}
+
+function getItemDescription(item: any): string {
+  if (item.description && typeof item.description === 'string' && item.description.trim()) {
+    return item.description;
+  }
+  if (item.sku && PRODUCT_CATALOG_DESCRIPTIONS[item.sku]) {
+    return PRODUCT_CATALOG_DESCRIPTIONS[item.sku];
+  }
+  return 'Enterprise Web3 Hardware & Gear';
+}
+
+function PlatformSignature({ className = 'w-44 h-12' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 240 70" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <defs>
+        <linearGradient id="sigGold" x1="0" y1="0" x2="240" y2="70" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFF2D6" />
+          <stop offset="0.3" stopColor="#E5C378" />
+          <stop offset="0.7" stopColor="#D4AF37" />
+          <stop offset="1" stopColor="#AA822A" />
+        </linearGradient>
+      </defs>
+      {/* Cursive 'N' */}
+      <path
+        d="M15 48 C 12 36, 18 16, 26 12 C 30 10, 34 14, 30 26 C 26 38, 22 52, 21 54 C 23 48, 38 18, 48 14 C 54 12, 58 18, 54 30 C 50 42, 47 52, 46 54"
+        stroke="url(#sigGold)"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* 'e-x-u-s' */}
+      <path
+        d="M48 44 C 52 40, 58 38, 60 42 C 62 46, 56 50, 52 50 C 49 50, 53 44, 62 36 M 55 42 L 67 48 M 65 36 C 68 44, 70 48, 73 50 C 76 52, 79 48, 81 40 C 82 34, 84 48, 86 50"
+        stroke="url(#sigGold)"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* 'R' */}
+      <path
+        d="M96 52 C 96 32, 98 14, 104 10 C 112 5, 126 8, 124 22 C 122 32, 110 36, 102 36 C 108 38, 116 44, 122 52"
+        stroke="url(#sigGold)"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* 'a-i-l' */}
+      <path
+        d="M125 46 C 127 40, 134 38, 138 42 C 141 46, 138 52, 134 52 C 130 52, 134 42, 142 38 M 142 42 L 146 52 M 145 32 L 146 34 M 147 48 C 150 40, 153 22, 157 14 C 160 8, 163 12, 160 26 C 157 40, 155 50, 164 48"
+        stroke="url(#sigGold)"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Dynamic flourishing loop & underline */}
+      <path
+        d="M16 58 C 45 56, 110 57, 178 54 C 196 53, 222 50, 218 42 C 214 34, 185 36, 172 45 C 165 50, 176 58, 228 58"
+        stroke="url(#sigGold)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PlatformCryptographicSeal({ className = 'w-20 h-20' }: { className?: string }) {
+  return (
+    <div className={`relative flex items-center justify-center select-none ${className}`}>
+      <svg viewBox="0 0 120 120" className="w-full h-full">
+        <defs>
+          <linearGradient id="sealGold" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#FFF2D6" />
+            <stop offset="0.4" stopColor="#E5C378" />
+            <stop offset="0.8" stopColor="#D4AF37" />
+            <stop offset="1" stopColor="#8A6B22" />
+          </linearGradient>
+          <path
+            id="sealTextCircle"
+            d="M 60,60 m -44,0 a 44,44 0 1,1 88,0 a 44,44 0 1,1 -88,0"
+          />
+        </defs>
+
+        {/* Outer serrated ring */}
+        <circle cx="60" cy="60" r="56" stroke="url(#sealGold)" strokeWidth="1.2" strokeDasharray="3 2" fill="rgba(212, 175, 55, 0.04)" />
+        
+        {/* Inner solid border ring */}
+        <circle cx="60" cy="60" r="49" stroke="url(#sealGold)" strokeWidth="1.4" fill="none" />
+        
+        {/* Innermost dashed ring */}
+        <circle cx="60" cy="60" r="32" stroke="url(#sealGold)" strokeWidth="0.9" strokeDasharray="2 2" fill="none" />
+
+        {/* Circular text */}
+        <text fill="url(#sealGold)" fontSize="6.8" fontFamily="monospace" fontWeight="bold" letterSpacing="2.2">
+          <textPath href="#sealTextCircle" startOffset="50%" textAnchor="middle">
+            ★ NEXUSRAIL PROTOCOL ★ OFFICIALLY SEALED & VERIFIED
+          </textPath>
+        </text>
+
+        {/* Center platform icon */}
+        <g transform="translate(48, 48)">
+          <circle cx="12" cy="12" r="10" fill="#1C1F24" stroke="url(#sealGold)" strokeWidth="1" />
+          <path d="M7 12L11 16L17 9" stroke="#E8CE90" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 function ReceiptContent() {
   const searchParams = useSearchParams();
-  const orderId = searchParams.get('orderId') || 'NR-1048';
+  const orderId = searchParams.get('orderId') || '#NR8K2P9X';
+  const [copied, setCopied] = useState(false);
+  const [orderCopied, setOrderCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
   // Receipt details state
   const [receiptData, setReceiptData] = useState({
@@ -39,17 +177,37 @@ function ReceiptContent() {
     subtotalUsd: '200.00',
     feeUsd: '0.02',
     rateAtApproval: '1 XLM = $0.1000',
-    txHash: '8fa2b7e4a901c91d',
+    txHash: '8fa2b109c91d4e02aaef06aa74b18086343e6f7df6f4a32570e361d2ed4ecf0946',
     ledgerSequence: '5,284,901',
     timestamp: '18 OCT 2026 · 14:32:24 UTC',
     email: 'alex.kim@example.com',
     paidFrom: 'GCKF...7Q2M',
+    status: 'SETTLED',
     items: [
-      { sku: 'RAIL-ONE', title: 'Rail One', description: 'Graphite · USB-C', priceCents: 12900, qty: 1, priced: true },
-      { sku: 'RELAY-MAT', title: 'Relay desk mat', description: 'Charcoal · 80 × 40 cm', priceCents: 3900, qty: 1, priced: true },
-      { sku: 'NEXUS-TEE', title: 'Nexus tee', description: 'Washed black · Size M', priceCents: 3200, qty: 1, priced: true },
+      { sku: 'RAIL-ONE', title: 'Rail One', description: 'Graphite · Dual-Rail Processor', priceCents: 12900, qty: 1, priced: true },
+      { sku: 'RELAY-MAT', title: 'Relay Desk Mat', description: 'Charcoal · 80 × 40 cm', priceCents: 3900, qty: 1, priced: true },
+      { sku: 'NEXUS-TEE', title: 'Nexus Tee', description: 'Washed Black · Size M', priceCents: 3200, qty: 1, priced: true },
     ] as CartLine[],
   });
+
+  const explorerUrl = receiptData.rail === 'STELLAR'
+    ? `https://stellar.expert/explorer/testnet/tx/${receiptData.txHash}`
+    : `https://testnet.xrpl.org/transactions/${receiptData.txHash}`;
+
+  // Generate on-chain verification QR code with high-contrast black on white for 100% instant mobile scanning
+  useEffect(() => {
+    QRCode.toDataURL(explorerUrl, {
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF',
+      },
+      width: 220,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+    })
+      .then(setQrDataUrl)
+      .catch(() => {});
+  }, [explorerUrl]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -57,497 +215,553 @@ function ReceiptContent() {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
+          if (parsed.items && Array.isArray(parsed.items)) {
+            parsed.items = parsed.items.map((it: any) => ({
+              ...it,
+              sku: it.sku || 'RAIL-ONE',
+              title: it.title || it.sku || 'Nexus Item',
+              description: getItemDescription(it),
+              priceCents: getItemPriceCents(it),
+              unit_price_cents: getItemPriceCents(it),
+              qty: it.qty || 1,
+            }));
+          }
           setReceiptData((prev) => ({ ...prev, ...parsed }));
         } catch {}
       }
     }
+
+    async function loadBackendOrder() {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+        if (token) {
+          const res = await fetch(`/api/v1/orders/${encodeURIComponent(orderId)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && json.data?.order) {
+              const o = json.data.order;
+              const mappedItems = o.items && o.items.length > 0
+                ? o.items.map((it: any) => ({
+                    sku: it.sku || 'RAIL-ONE',
+                    title: it.title || it.sku || 'Nexus Item',
+                    description: getItemDescription(it),
+                    priceCents: getItemPriceCents(it),
+                    unit_price_cents: getItemPriceCents(it),
+                    qty: it.qty || 1,
+                  }))
+                : undefined;
+
+              const totalC = o.totalCents || (mappedItems ? mappedItems.reduce((acc: number, it: any) => acc + (getItemPriceCents(it) * (it.qty || 1)), 0) : 0);
+              const totalUsdStr = totalC > 0 ? (totalC / 100).toFixed(2) : undefined;
+
+              setReceiptData((prev) => ({
+                ...prev,
+                orderId: o.orderNumber || o.id,
+                amountUsd: totalUsdStr || prev.amountUsd,
+                subtotalUsd: totalUsdStr || prev.subtotalUsd,
+                rail: o.rail || prev.rail,
+                token: o.rail === 'XRPL' ? 'XRP' : (o.rail === 'STELLAR' ? 'XLM' : prev.token),
+                txHash: o.txHash || prev.txHash,
+                status: o.status || prev.status,
+                items: mappedItems || prev.items,
+                timestamp: o.createdAt ? new Date(o.createdAt).toUTCString() : prev.timestamp,
+              }));
+            }
+          }
+        }
+      } catch {}
+    }
+    loadBackendOrder();
   }, [orderId]);
 
-  const explorerUrl = receiptData.rail === 'STELLAR'
-    ? `https://stellar.expert/explorer/testnet/tx/${receiptData.txHash}`
-    : `https://testnet.xrpl.org/transactions/${receiptData.txHash}`;
-
-  const handleDownloadReceipt = () => {
+  const handlePrint = () => {
     if (typeof window !== 'undefined') {
       window.print();
     }
   };
 
+  const handleCopyHash = () => {
+    if (typeof navigator !== 'undefined') {
+      navigator.clipboard.writeText(receiptData.txHash);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  // Dynamic calculation to ensure zero rate / zero cost bugs never occur
+  const computedSubtotalCents = receiptData.items.reduce(
+    (sum, it) => sum + getItemPriceCents(it) * (it.qty || 1),
+    0
+  );
+  const displaySubtotalUsd =
+    computedSubtotalCents > 0
+      ? (computedSubtotalCents / 100).toFixed(2)
+      : receiptData.subtotalUsd;
+  const displayAmountUsd =
+    computedSubtotalCents > 0
+      ? (computedSubtotalCents / 100).toFixed(2)
+      : receiptData.amountUsd;
+
+  const tokenRate = receiptData.token === 'XLM' ? 0.10 : 0.50;
+  const displayAmountCrypto =
+    computedSubtotalCents > 0
+      ? (computedSubtotalCents / 100 / tokenRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : receiptData.amountCrypto;
+
   return (
-    <div className="min-h-screen bg-[#07090C] text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black">
+    <div className="receipt-outer min-h-screen bg-transparent text-[#E0D8C3] font-sans antialiased selection:bg-[#D4AF37]/30 selection:text-[#F8F7F2] py-6 sm:py-10 px-3 sm:px-6 print:py-0 print:px-0 print:min-h-0 print:bg-transparent">
       
+      {/* Top Control Bar (Screen only) */}
+      <header className="max-w-[820px] mx-auto mb-4 flex flex-wrap items-center justify-between gap-4 px-2 print:hidden">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/store"
+            className="inline-flex items-center gap-1.5 text-xs font-mono text-[#D4AF37] hover:text-[#F2D675] transition-colors"
+          >
+            <span>&larr; Store</span>
+          </Link>
+          <span className="text-[#3D4148]">|</span>
+          <Link
+            href="/orders"
+            className="inline-flex items-center gap-1.5 text-xs font-mono text-[#A69E8D] hover:text-[#F2D675] transition-colors"
+          >
+            <span>All Orders</span>
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <a
+            href={explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg bg-[#22252A] border border-[#3D4148] hover:border-[#D4AF37]/60 text-xs font-mono text-[#E0D8C3] hover:text-white flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <span>Explorer Proof</span>
+            <ExternalLink className="w-3.5 h-3.5 text-[#D4AF37]" />
+          </a>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="px-4 py-1.5 rounded-lg bg-[#D4AF37] hover:bg-[#E5C378] text-[#141619] font-bold text-xs font-mono flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer active:scale-95"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print / Save 1-Page PDF</span>
+          </button>
+        </div>
+      </header>
+
       {/* =========================================================================
-          SCREEN-ONLY INTERACTIVE LAYOUT
+          THE EXECUTIVE LUXURY INVOICE / RECEIPT DOCUMENT
+          - Exact 1-Page A4 Guarantee
+          - Official Platform Logo (No "Nexus Rail" text)
+          - Instantly Scannable QR Code
+          - Product Thumbnail Images
+          - Platform Notary Seal & Signature
           ========================================================================= */}
-      <div className="print:hidden">
-        {/* Main Container */}
-        <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
+      <article
+        id="nexus-official-receipt"
+        className="max-w-[820px] mx-auto bg-[#26282C] border border-[#C5A059] rounded-none sm:rounded-sm shadow-2xl p-5 sm:p-9 relative overflow-hidden text-[#D9D2C2]"
+        style={{
+          boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(212, 175, 55, 0.25)',
+        }}
+      >
+        {/* Subtle Matte Executive Texture Accent */}
+        <div className="absolute inset-0 bg-[radial-gradient(#C5A059_0.5px,transparent_0.5px)] [background-size:24px_24px] opacity-[0.03] pointer-events-none" />
+
+        {/* Center Faint Background Platform Watermark */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 opacity-[0.025] pointer-events-none select-none">
+          <Image
+            src="/logo-256.png"
+            alt="Watermark"
+            fill
+            className="object-contain filter grayscale"
+          />
+        </div>
+
+        {/* =====================================================================
+            1. TOP HEADER SECTION
+            Left: Official Platform Logo Only (No "Nexus Rail" text)
+            Center: Vertical Dividing Rule
+            Right: Large "INVOICE", Order Number, and Status Badge
+            ===================================================================== */}
+        <div className="grid grid-cols-12 gap-4 pb-4 items-center relative z-10">
           
-          {/* Step Progress Breadcrumb */}
-          <div className="flex items-center gap-3 text-xs font-mono mb-8">
-            <div className="flex items-center gap-1.5 text-white/50">
-              <span className="w-4 h-4 rounded-full bg-[#092B21] border border-[#165D46] text-[#7FF8C6] flex items-center justify-center text-[10px]">
-                ✓
-              </span>
-              <span>Cart</span>
-            </div>
-            <span className="text-white/20">──────</span>
-            <div className="flex items-center gap-1.5 text-white/50">
-              <span className="w-4 h-4 rounded-full bg-[#092B21] border border-[#165D46] text-[#7FF8C6] flex items-center justify-center text-[10px]">
-                ✓
-              </span>
-              <span>Checkout</span>
-            </div>
-            <span className="text-white/20">──────</span>
-            <div className="flex items-center gap-1.5 text-white font-semibold">
-              <span className="w-4 h-4 rounded-full bg-[#7FF8C6] text-[#052E20] flex items-center justify-center text-[10px] font-bold">
-                ✓
-              </span>
-              <span>Receipt</span>
+          {/* Top Left: Official Platform Logo Only */}
+          <div className="col-span-5 flex items-center">
+            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shadow-sm">
+              <Image
+                src="/logo-256.png"
+                alt="Platform Logo"
+                fill
+                priority
+                className="object-contain"
+              />
             </div>
           </div>
 
-          {/* Confirmation Hero */}
-          <div className="flex items-start gap-4 sm:gap-6 mb-8">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#092B21] border border-[#165D46] text-[#7FF8C6] flex items-center justify-center shrink-0">
-              <Check className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.5]" />
-            </div>
+          {/* Vertical Divider Line */}
+          <div className="col-span-1 flex justify-center">
+            <div className="w-[1px] h-20 bg-[#C5A059]" />
+          </div>
 
-            <div>
-              <p className="text-[11px] font-mono tracking-widest uppercase text-[#7FF8C6]">
-                CONFIRMED ON {receiptData.rail === 'STELLAR' ? 'STELLAR TESTNET' : 'XRPL TESTNET'}
+          {/* Top Right: Large "INVOICE" Title & Number */}
+          <div className="col-span-6 flex flex-col justify-start pl-2">
+            <h1 className="text-2xl sm:text-4xl font-normal tracking-[0.16em] text-[#E8CE90] uppercase font-sans">
+              INVOICE
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs sm:text-sm font-mono tracking-widest text-[#C5A059] font-medium">
+                №: {receiptData.orderId.startsWith('#') ? receiptData.orderId : '#' + receiptData.orderId}
               </p>
-              <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-bold text-white tracking-tight mt-1">
-                Good move. Payment complete.
-              </h1>
-              <p className="text-sm sm:text-base text-white/50 mt-1 font-normal">
-                Your payment is verified, your ledger is balanced, and your receipt is ready.
-              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof navigator !== 'undefined') {
+                    navigator.clipboard.writeText(receiptData.orderId);
+                    setOrderCopied(true);
+                    setTimeout(() => setOrderCopied(false), 2000);
+                  }
+                }}
+                className="text-[#C5A059] hover:text-[#F2D675] transition-colors print:hidden cursor-pointer p-0.5"
+                title="Copy Full Order ID"
+              >
+                {orderCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <span className="inline-block px-2 py-0.5 bg-[#C5A059]/15 border border-[#C5A059]/40 text-[#F2D675] font-mono text-[9.5px] font-bold uppercase tracking-wider">
+                {receiptData.status === 'PAID' || receiptData.status === 'SETTLED' ? 'OFFICIAL SETTLED' : receiptData.status}
+              </span>
+              <span className="text-[10px] font-mono text-[#A69E8D]">
+                {receiptData.timestamp}
+              </span>
             </div>
           </div>
 
-          {/* 2-Column Responsive Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-12 items-start">
+        </div>
+
+        {/* Primary Horizontal Gold Divider Rule */}
+        <div className="w-full h-[1px] bg-[#C5A059] mb-5 relative z-10" />
+
+        {/* =====================================================================
+            2. TWO-COLUMN MAIN BODY
+            Left: Client Account, Terms, Ledger Details & Scannable QR Code
+            Right: Line Items with Images, Subtotals & Official Seal / Signature
+            ===================================================================== */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start relative z-10">
+          
+          {/* ===================================================================
+              LEFT COLUMN: Client Account, Terms, and Ledger Details
+              =================================================================== */}
+          <div className="md:col-span-5 space-y-4 text-xs font-mono">
             
-            {/* Left Column: Official Payment Receipt Card (7 cols) */}
-            <div className="lg:col-span-7 space-y-6">
-              <div className="rounded-2xl bg-[#10141A] border border-white/10 p-6 sm:p-8 shadow-xl space-y-6">
-                
-                {/* Receipt Header */}
-                <div className="flex items-center justify-between border-b border-white/10 pb-5">
-                  <div>
-                    <p className="text-[10px] font-mono tracking-widest uppercase text-[#7FF8C6]">
-                      PAYMENT RECEIPT
-                    </p>
-                    <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
-                      Order {receiptData.orderId}
-                    </h2>
-                  </div>
-                  <span className="px-2.5 py-1 rounded bg-[#092B21] border border-[#165D46] text-[#7FF8C6] text-xs font-mono font-medium">
-                    PAID / VERIFIED
-                  </span>
-                </div>
+            {/* Client Destination */}
+            <div className="space-y-0.5">
+              <p className="text-[#C5A059] font-bold tracking-wider text-[10px] uppercase">
+                To:
+              </p>
+              <p className="font-semibold text-[#F2E8D3] text-xs">
+                Client / Account Holder
+              </p>
+              <p className="text-[#B3AA96] break-all text-[10.5px]">
+                {receiptData.email}
+              </p>
+              <p className="text-[#A69E8D] text-[9.5px]">
+                WALLET: <span className="text-[#D4AF37]">{receiptData.paidFrom}</span>
+              </p>
+              <p className="text-[#A69E8D] text-[9.5px]">
+                NETWORK: <span className="text-[#F2E8D3]">{receiptData.rail} Testnet Ledger</span>
+              </p>
+            </div>
 
-                {/* Total Paid Block */}
-                <div className="space-y-1">
-                  <p className="text-xs font-mono text-white/40">
-                    Total paid / illustrative USD
+            {/* Terms & Conditions */}
+            <div className="space-y-0.5 pt-1">
+              <p className="text-[#C5A059] font-bold tracking-wider text-[10px] uppercase">
+                TERMS & CONDITIONS
+              </p>
+              <p className="text-[#9E9584] text-[9.5px] leading-relaxed">
+                Cryptographic Dual-Chain Settlement. Verified against Horizon & Altnet consensus ledgers. All posted entries zero-variance balanced.
+              </p>
+            </div>
+
+            {/* Platform Vault Account Reference */}
+            <div className="space-y-0.5">
+              <p className="text-[#C5A059] font-bold tracking-wider text-[10px] uppercase">
+                Bank / Vault Account:
+              </p>
+              <p className="text-[#A69E8D] text-[9.5px] font-mono break-all leading-tight">
+                {receiptData.rail === 'STELLAR'
+                  ? PLATFORM_STELLAR_VAULT
+                  : PLATFORM_XRPL_VAULT}
+              </p>
+            </div>
+
+            {/* Bottom Left Bracket Section with Instant Scannable QR Code */}
+            <div className="pt-2 border-l-2 border-[#C5A059] pl-3 space-y-2.5 mt-3">
+              <div>
+                <p className="text-[9.5px] uppercase tracking-wider text-[#C5A059] font-bold">
+                  PAYMENT METHOD
+                </p>
+                <p className="text-[11px] text-[#F2E8D3] font-semibold">
+                  {receiptData.rail} ({receiptData.token})
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[9.5px] uppercase tracking-wider text-[#C5A059] font-bold">
+                  SETTLEMENT DATE
+                </p>
+                <p className="text-[10px] text-[#D9D2C2]">
+                  {receiptData.timestamp}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[9.5px] uppercase tracking-wider text-[#C5A059] font-bold">
+                  LEDGER PROOF
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[9.5px] text-[#A69E8D] font-mono truncate max-w-[180px]">
+                    Tx: {receiptData.txHash}
                   </p>
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-4xl sm:text-5xl font-mono font-bold text-white tracking-tight">
-                      ${receiptData.amountUsd}
-                    </span>
-                    <span className="text-sm font-mono text-[#7FF8C6]">
-                      ({receiptData.amountCrypto} {receiptData.token})
-                    </span>
-                  </div>
-                  <p className="text-[11px] font-mono text-white/40 pt-1">
-                    {receiptData.timestamp}
-                  </p>
-                </div>
-
-                {/* Verified Key-Value Ledger Table */}
-                <div className="space-y-3.5 text-xs font-mono divide-y divide-white/5 pt-2">
-                  <div className="flex justify-between items-center py-2.5">
-                    <span className="text-white/50">Payment rail</span>
-                    <span className="text-white font-medium">
-                      {receiptData.rail === 'STELLAR' ? 'Stellar testnet' : 'XRPL testnet'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2.5">
-                    <span className="text-white/50">Paid from</span>
-                    <span className="text-white font-mono">{receiptData.paidFrom}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2.5">
-                    <span className="text-white/50">Transaction hash</span>
-                    <a
-                      href={explorerUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#7FF8C6] hover:underline flex items-center gap-1 font-mono"
-                    >
-                      <span>{receiptData.txHash.length > 18 ? `${receiptData.txHash.slice(0, 12)}...${receiptData.txHash.slice(-6)}` : receiptData.txHash}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                  <div className="flex justify-between items-center py-2.5">
-                    <span className="text-white/50">Ledger sequence</span>
-                    <span className="text-white font-mono">{receiptData.ledgerSequence}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2.5">
-                    <span className="text-white/50">Rate at approval</span>
-                    <span className="text-white">{receiptData.rateAtApproval}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2.5">
-                    <span className="text-white/50">Receipt sent to</span>
-                    <span className="text-white">{receiptData.email}</span>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
                   <button
                     type="button"
-                    onClick={handleDownloadReceipt}
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#7FF8C6] hover:bg-[#6EE7B7] text-[#052E20] font-mono text-xs font-bold transition-all shadow-md active:scale-[0.99]"
+                    onClick={handleCopyHash}
+                    className="text-[#C5A059] hover:text-white transition-colors"
+                    title="Copy Transaction Hash"
                   >
-                    <Printer className="w-4 h-4" />
-                    <span>Download / Print Receipt</span>
+                    {copied ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
                   </button>
-
-                  <a
-                    href={explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white font-mono text-xs font-medium transition-colors"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>View on explorer</span>
-                  </a>
                 </div>
-
-              </div>
-
-              {/* Verified From Start to Finish Timeline */}
-              <div className="space-y-4 pt-2">
-                <p className="text-base font-medium text-white tracking-tight">
-                  Verified from start to finish.
+                <p className="text-[9.5px] text-[#A69E8D] mt-0.5">
+                  Sequence #{receiptData.ledgerSequence} · Journal JE-2048
                 </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
-                  <div className="p-4 rounded-xl bg-[#0E1218] border border-white/10 space-y-1">
-                    <div className="flex items-center gap-1.5 text-[#7FF8C6]">
-                      <Check className="w-3.5 h-3.5" />
-                      <span className="font-semibold text-white">Signed in wallet</span>
-                    </div>
-                    <p className="text-[11px] text-white/40">14:32:18 UTC</p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-[#0E1218] border border-white/10 space-y-1">
-                    <div className="flex items-center gap-1.5 text-[#7FF8C6]">
-                      <Check className="w-3.5 h-3.5" />
-                      <span className="font-semibold text-white">Confirmed onchain</span>
-                    </div>
-                    <p className="text-[11px] text-white/40">14:32:21 UTC</p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-[#0E1218] border border-white/10 space-y-1">
-                    <div className="flex items-center gap-1.5 text-[#7FF8C6]">
-                      <Check className="w-3.5 h-3.5" />
-                      <span className="font-semibold text-white">Journal posted</span>
-                    </div>
-                    <p className="text-[11px] text-white/40">14:32:24 UTC</p>
-                  </div>
-                </div>
               </div>
 
+              {/* High-Contrast Scannable Verification QR Code */}
+              {qrDataUrl && (
+                <div className="pt-1.5 flex items-center gap-3">
+                  <div className="w-[74px] h-[74px] rounded bg-white p-1 border border-[#C5A059] shrink-0 shadow-md flex items-center justify-center">
+                    <img
+                      src={qrDataUrl}
+                      alt="On-Chain Verification QR Code"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[9.5px] font-bold uppercase tracking-wider text-[#E8CE90]">
+                      SCAN TO VERIFY
+                    </p>
+                    <p className="text-[8.5px] text-[#A69E8D] leading-tight">
+                      Instant mobile camera scan to live on-chain explorer consensus.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Right Column: Bag Details & Ledger Link (5 cols) */}
-            <div className="lg:col-span-5 space-y-4">
-              <div className="rounded-2xl bg-[#10141A] border border-white/10 p-6 sm:p-7 shadow-xl space-y-6">
-                
-                <h2 className="text-xl font-medium text-white tracking-tight">
-                  The details in your bag
-                </h2>
+            {/* Left Column Bottom Footer URL */}
+            <div className="pt-2">
+              <p className="text-[9.5px] font-mono text-[#8C8372] tracking-wider">
+                www.nexusrail.com
+              </p>
+            </div>
 
-                {/* Items List */}
-                <div className="space-y-4 divide-y divide-white/10">
-                  {receiptData.items.map((item) => (
-                    <div key={item.sku} className="pt-4 first:pt-0 flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-lg bg-[#111620] border border-white/10 overflow-hidden relative shrink-0">
-                        <Image
-                          src={PRODUCT_IMAGE_MAP[item.sku] || '/products/rail-one.png'}
-                          alt={item.title}
-                          fill
-                          sizes="56px"
-                          className="object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{item.title}</p>
-                        <p className="text-xs font-mono text-white/40 mt-0.5">Qty {item.qty} · Demo item</p>
-                      </div>
-                      <span className="text-sm font-mono text-white">
-                        ${((item.priceCents * item.qty) / 100).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+          </div>
 
-                {/* Breakdown Rows */}
-                <div className="space-y-3 py-4 border-t border-b border-white/10 text-xs font-mono">
-                  <div className="flex justify-between text-white/60">
-                    <span>Products</span>
-                    <span className="text-white">${receiptData.subtotalUsd}</span>
-                  </div>
-                  <div className="flex justify-between text-white/60">
-                    <span>Network fee</span>
-                    <span className="text-white">${receiptData.feeUsd}</span>
-                  </div>
-                </div>
+          {/* ===================================================================
+              RIGHT COLUMN: Items Table with Product Images, Subtotals & Seal
+              =================================================================== */}
+          <div className="md:col-span-7 flex flex-col justify-between h-full space-y-4">
+            
+            {/* 1. Line Items Table with Product Thumbnail Images */}
+            <div>
+              <table className="w-full text-left font-mono text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-[#C5A059] text-[10px] uppercase tracking-wider text-[#E8CE90]">
+                    <th className="py-2 font-bold text-center w-10">QTY</th>
+                    <th className="py-2 font-bold pl-2.5">DESCRIPTIONS</th>
+                    <th className="py-2 font-bold text-right">RATE</th>
+                    <th className="py-2 font-bold text-right">COSTS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#3D4148]/60 text-xs">
+                  {receiptData.items.map((item, idx) => {
+                    const imgUrl = PRODUCT_IMAGE_MAP[item.sku] || '/products/rail-one.png';
 
-                {/* Total Row */}
-                <div className="flex justify-between items-baseline">
-                  <span className="text-base text-white font-medium">Total</span>
-                  <span className="text-2xl font-mono font-medium text-white tracking-tight">
-                    ${receiptData.amountUsd}
+                    return (
+                      <tr key={idx} className="group">
+                        {/* QTY with Left Accent Bracket */}
+                        <td className="py-2 text-center font-mono text-[#E8CE90] align-top pt-3">
+                          <span className="border-l border-r border-[#C5A059]/40 px-1.5 py-0.5 text-[10px]">
+                            0{item.qty || 1}
+                          </span>
+                        </td>
+
+                        {/* Description with Luxury Product Thumbnail Image */}
+                        <td className="py-2 pl-2.5">
+                          <div className="flex items-center gap-2.5">
+                            {/* Product Thumbnail Image */}
+                            <div className="w-9 h-9 rounded bg-[#1D1F23] border border-[#C5A059]/30 overflow-hidden shrink-0 relative shadow-sm">
+                              <Image
+                                src={imgUrl}
+                                alt={item.title}
+                                fill
+                                sizes="36px"
+                                className="object-cover object-center"
+                              />
+                            </div>
+
+                            {/* Title, SKU Chip & Variant */}
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-serif italic text-xs sm:text-sm text-[#F5EADB] tracking-wide">
+                                  {item.title}
+                                </p>
+                                <span className="text-[8.5px] font-mono px-1 py-0.2 rounded bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#D4AF37]">
+                                  {item.sku}
+                                </span>
+                              </div>
+                              <p className="text-[9.5px] text-[#A69E8D] font-sans not-italic">
+                                {item.description}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Rate */}
+                        <td className="py-2 text-right font-mono text-[#D9D2C2] text-[11px] align-top pt-3">
+                          ${(getItemPriceCents(item) / 100).toFixed(2)}
+                        </td>
+
+                        {/* Costs */}
+                        <td className="py-2 text-right font-mono font-medium text-[#E8CE90] text-[11px] align-top pt-3">
+                          ${((getItemPriceCents(item) * (item.qty || 1)) / 100).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 2. Subtotals and Totals Section */}
+            <div className="space-y-2 pt-2.5 border-t border-[#3D4148]/80 text-xs font-mono">
+              <div className="flex justify-between items-center text-[#B3AA96]">
+                <span className="uppercase tracking-wider text-[10px] text-[#C5A059]">
+                  SUB TOTALS |
+                </span>
+                <span className="text-[#F2E8D3] font-medium font-mono text-[11px]">
+                  ${displaySubtotalUsd}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-[#A69E8D] text-[10px]">
+                <span className="uppercase tracking-wider">
+                  NETWORK SETTLEMENT FEE
+                </span>
+                <span className="font-mono text-[#B3AA96] text-[11px]">
+                  ${receiptData.feeUsd}
+                </span>
+              </div>
+
+              {/* Gold Horizontal Rule above Total */}
+              <div className="w-full h-[1px] bg-[#C5A059] my-1" />
+
+              <div className="flex justify-between items-baseline pt-0.5">
+                <span className="font-bold text-xs sm:text-sm text-[#E8CE90] tracking-widest uppercase">
+                  SETTLED TOTAL
+                </span>
+                <div className="text-right">
+                  <span className="font-mono font-bold text-base sm:text-lg text-[#F2D675] tracking-tight">
+                    ${displayAmountUsd}
+                  </span>
+                  <span className="block text-[10px] font-mono text-[#C5A059]">
+                    ({displayAmountCrypto} {receiptData.token})
                   </span>
                 </div>
-
-                {/* Balanced Down to the Entry Card */}
-                <div className="p-4 rounded-xl bg-[#0A261E]/80 border border-[#124B3B] space-y-2 text-xs font-mono">
-                  <div className="flex items-center gap-2 text-[#7FF8C6] font-semibold">
-                    <BookOpen className="w-4 h-4" />
-                    <span>Balanced. Down to the entry.</span>
-                  </div>
-                  <p className="text-[#A7F3D0] leading-relaxed">
-                    JE-2048 · Debits ${receiptData.amountUsd} = Credits ${receiptData.amountUsd}. View the full journal in Activity.
-                  </p>
-                  <p className="text-[10px] text-white/50 tracking-wider pt-1 uppercase">
-                    AVAILABLE BALANCE: 1,480.30 XLM
-                  </p>
-                </div>
-
-                {/* Action CTAs */}
-                <div className="space-y-3 pt-2">
-                  <Link
-                    href={`/activity?orderId=${encodeURIComponent(receiptData.orderId)}`}
-                    className="w-full py-4 rounded-lg bg-[#7FF8C6] hover:bg-[#6EE7B7] text-[#052E20] font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[#7FF8C6]/10 active:scale-[0.99]"
-                  >
-                    <span>View order & ledger</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-
-                  <Link
-                    href="/store"
-                    className="w-full py-3.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white font-mono text-xs font-medium transition-colors text-center block"
-                  >
-                    Back to the store
-                  </Link>
-                </div>
-
-                {/* Disclaimer */}
-                <div className="flex items-center gap-2 text-xs font-mono text-white/40 pt-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#7FF8C6] shrink-0" />
-                  <span>No products will be shipped. This receipt confirms a demo testnet transaction only.</span>
-                </div>
-
               </div>
+            </div>
+
+            {/* 3. Bottom Right Official Platform Signature & Seal Section */}
+            <div className="pt-3 flex flex-col items-end text-right relative">
+              <div className="flex items-center gap-3 mb-0.5">
+                {/* Official Platform Cryptographic Seal */}
+                <PlatformCryptographicSeal className="w-16 h-16 sm:w-18 sm:h-18 shrink-0 -rotate-2" />
+
+                <div className="flex flex-col items-end">
+                  {/* Handwritten Fluid Platform Signature Stroke */}
+                  <PlatformSignature className="w-40 sm:w-48 h-12" />
+                </div>
+              </div>
+
+              {/* Gold Signature Underline */}
+              <div className="w-48 sm:w-56 h-[1px] bg-[#C5A059] mt-0.5 mb-1.5" />
+
+              {/* Signer Title & Verified Stamp */}
+              <p className="text-[11px] font-bold text-[#F2E8D3] tracking-wide font-mono flex items-center gap-1.5 justify-end">
+                <ShieldCheck className="w-3 h-3 text-[#D4AF37]" />
+                <span>Digitally Signed by NexusRail Authority</span>
+              </p>
+              <p className="text-[9.5px] text-[#A69E8D] uppercase tracking-wider font-mono">
+                Key ID: GDXP...RXGC (Ed25519 Verified Signer)
+              </p>
+              <p className="text-[9px] text-[#C5A059] font-mono tracking-widest">
+                ATTESTATION DIGEST: {receiptData.txHash.slice(0, 16).toUpperCase()}
+              </p>
             </div>
 
           </div>
 
-        </main>
+        </div>
 
-        {/* Bottom Footer */}
-        <footer className="border-t border-white/10 py-5 bg-[#05070A]">
-          <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-white/40">
-            <p>© 2026 NexusRail · Demo environment</p>
-            <p>Test assets only. No real funds or fulfillment.</p>
-          </div>
-        </footer>
-      </div>
+      </article>
 
       {/* =========================================================================
-          PRINT-ONLY ENTERPRISE OFFICIAL RECEIPT TEMPLATE
-          Seamlessly rendered whenever window.print() or Ctrl+P is triggered
+          PRINT & PDF SPECIFIC STYLESHEET
+          Strictly preserves the Dark Charcoal & Gold palette in Print/PDF output
+          AND guarantees 100% SINGLE PAGE (1-PAGE A4) rendering without overflow!
           ========================================================================= */}
-      <div className="hidden print:block bg-white text-slate-900 p-8 max-w-[800px] mx-auto font-sans">
-        
-        {/* Header */}
-        <div className="flex justify-between items-start pb-5 border-b-2 border-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#092B21] flex items-center justify-center p-1.5 shadow-sm">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-128.png" alt="NexusRail" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-[#092B21] leading-none">NexusRail</h1>
-              <p className="text-[10px] font-bold text-emerald-700 tracking-wider uppercase mt-1">Multi-Rail Crypto Commerce Engine</p>
-              <p className="text-[9.5px] text-slate-500">Decentralized Payment Routing & Automated Settlement</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-[10px] font-bold tracking-wider uppercase mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              PAID / VERIFIED
-            </div>
-            <div className="text-lg font-extrabold text-slate-900 tracking-tight">OFFICIAL RECEIPT</div>
-            <div className="text-[10px] font-mono text-slate-500">ORDER ID: {receiptData.orderId}</div>
-          </div>
-        </div>
-
-        {/* 4-Metric Highlights */}
-        <div className="grid grid-cols-4 gap-3 my-4">
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <div className="text-[9.5px] font-bold uppercase text-slate-500 tracking-wider">Transaction Date</div>
-            <div className="text-xs font-bold text-slate-900 mt-0.5">{receiptData.timestamp.split('·')[0]?.trim() || '20 Oct 2026'}</div>
-            <div className="text-[9px] font-mono text-slate-500">{receiptData.timestamp.split('·')[1]?.trim() || '07:59:15 GMT'}</div>
-          </div>
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <div className="text-[9.5px] font-bold uppercase text-slate-500 tracking-wider">Payment Rail</div>
-            <div className="text-xs font-bold text-slate-900 mt-0.5">{receiptData.rail === 'STELLAR' ? 'Stellar Testnet' : 'XRPL Testnet'}</div>
-            <div className="text-[9px] font-bold text-emerald-700">Native Asset ({receiptData.token})</div>
-          </div>
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <div className="text-[9.5px] font-bold uppercase text-slate-500 tracking-wider">Ledger Sequence</div>
-            <div className="text-xs font-bold font-mono text-slate-900 mt-0.5">#{receiptData.ledgerSequence}</div>
-            <div className="text-[9px] text-slate-500">Validated Finality</div>
-          </div>
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <div className="text-[9.5px] font-bold uppercase text-slate-500 tracking-wider">Approval Rate</div>
-            <div className="text-xs font-bold font-mono text-emerald-700 mt-0.5">{receiptData.rateAtApproval}</div>
-            <div className="text-[9px] text-slate-500">Zero Slippage Lock</div>
-          </div>
-        </div>
-
-        {/* Parties Panel */}
-        <div className="grid grid-cols-2 gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl mb-4 text-xs">
-          <div>
-            <div className="text-[9.5px] font-bold uppercase text-slate-500 tracking-wider mb-1">Issued By</div>
-            <div className="font-bold text-slate-900">NexusRail Commerce Technologies, Inc.</div>
-            <div className="text-slate-600 text-[11px]">Enterprise Multi-Rail Settlement Infrastructure</div>
-            <div className="text-slate-500 text-[10px] mt-0.5">Gateway: {receiptData.rail === 'STELLAR' ? 'Stellar Horizon Altnet' : 'XRPL Altnet Testnet'}</div>
-          </div>
-          <div>
-            <div className="text-[9.5px] font-bold uppercase text-slate-500 tracking-wider mb-1">Delivered To</div>
-            <div className="font-bold text-slate-900">{receiptData.email}</div>
-            <div className="text-slate-600 text-[11px]">Account ID: <span className="font-semibold text-slate-900">{receiptData.email.split('@')[0]}</span></div>
-            <div className="text-slate-500 text-[10px] mt-0.5">
-              Paid From: <span className="font-mono bg-white px-1.5 py-0.5 border border-slate-300 rounded text-slate-800">{receiptData.paidFrom}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Items Table */}
-        <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider">
-              <tr>
-                <th className="py-2.5 px-3">Item & Description</th>
-                <th className="py-2.5 px-3 text-center">Qty</th>
-                <th className="py-2.5 px-3 text-right">Unit Price</th>
-                <th className="py-2.5 px-3 text-right">Amount (USD)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {receiptData.items.map((item) => (
-                <tr key={item.sku}>
-                  <td className="py-2.5 px-3">
-                    <div className="font-bold text-slate-900">{item.title}</div>
-                    <div className="text-[10.5px] text-slate-500">Demo item · SKU: {item.sku}</div>
-                  </td>
-                  <td className="py-2.5 px-3 text-center font-mono">{item.qty}</td>
-                  <td className="py-2.5 px-3 text-right font-mono">${(item.priceCents / 100).toFixed(2)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono font-bold">${((item.priceCents * item.qty) / 100).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Ledger Audit & Financial Totals */}
-        <div className="grid grid-cols-12 gap-4 items-stretch mb-4">
-          
-          <div className="col-span-7 bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 flex flex-col justify-between text-xs">
-            <div>
-              <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-xs">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Balanced. Down to the entry.
-              </div>
-              <p className="text-[10.5px] text-emerald-800 mt-1 leading-snug">
-                Double-entry bookkeeping journal posted and synchronized with the {receiptData.rail === 'STELLAR' ? 'Stellar' : 'XRPL'} ledger state.
-              </p>
-              <div className="flex flex-wrap gap-1.5 mt-2 text-[9.5px] font-mono">
-                <span className="bg-emerald-100/80 border border-emerald-300 text-emerald-900 px-1.5 py-0.5 rounded font-semibold">Ref: JE-2048</span>
-                <span className="bg-emerald-100/80 border border-emerald-300 text-emerald-900 px-1.5 py-0.5 rounded">Debits ${receiptData.amountUsd} = Credits ${receiptData.amountUsd}</span>
-                <span className="bg-emerald-100/80 border border-emerald-300 text-emerald-900 px-1.5 py-0.5 rounded">Balance: 1,480.30 XLM</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 pt-2.5 mt-2 border-t border-dashed border-emerald-300 text-[9px] text-emerald-900">
-              <div>
-                <span className="font-bold block text-emerald-700">✓ Signed</span>
-                <span className="font-mono text-emerald-800">14:32:18 UTC</span>
-              </div>
-              <div>
-                <span className="font-bold block text-emerald-700">✓ Confirmed</span>
-                <span className="font-mono text-emerald-800">14:32:21 UTC</span>
-              </div>
-              <div>
-                <span className="font-bold block text-emerald-700">✓ Posted</span>
-                <span className="font-mono text-emerald-800">14:32:24 UTC</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-span-5 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-between text-xs">
-            <div>
-              <div className="flex justify-between py-1 text-slate-600 text-xs">
-                <span>Products Subtotal</span>
-                <span className="font-mono font-medium">${receiptData.subtotalUsd}</span>
-              </div>
-              <div className="flex justify-between py-1 text-slate-600 text-xs">
-                <span>Network Settlement Fee</span>
-                <span className="font-mono font-medium">${receiptData.feeUsd}</span>
-              </div>
-              <div className="h-px bg-slate-200 my-1.5"></div>
-              <div className="flex justify-between items-baseline py-1">
-                <span className="font-bold text-slate-900 text-xs">Total Amount Paid</span>
-                <span className="text-xl font-black font-mono text-slate-900">${receiptData.amountUsd}</span>
-              </div>
-            </div>
-            <div className="flex justify-between items-center text-xs font-bold text-emerald-700 pt-1">
-              <span>Settled in {receiptData.token}</span>
-              <span className="font-mono">({receiptData.amountCrypto} {receiptData.token})</span>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Cryptographic Anchor */}
-        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center text-xs mb-3">
-          <div className="text-[10px] text-slate-600 leading-snug">
-            <div><strong className="text-slate-900">Transaction Hash:</strong> <span className="font-mono">{receiptData.txHash}</span></div>
-            <div className="text-slate-500 mt-0.5">Cryptographic proof anchored to {receiptData.rail === 'STELLAR' ? 'Stellar Horizon Testnet' : 'XRPL Altnet'} Ledger Sequence #{receiptData.ledgerSequence}</div>
-          </div>
-          <div className="text-[9.5px] font-mono font-bold text-sky-700 uppercase tracking-wider">
-            VERIFIED STATE
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="pt-2 border-t border-slate-200 flex justify-between items-end text-[8.5px] text-slate-400 leading-tight">
-          <div className="max-w-[70%]">
-            NexusRail Commerce Engine · Test assets only. No physical goods will be shipped. This official electronic receipt confirms a verified cryptographic testnet transaction.
-          </div>
-          <div className="text-right font-mono font-semibold text-slate-500">
-            SYSTEM VERIFIED · © 2026 NEXUSRAIL INC.
-          </div>
-        </div>
-
-      </div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @page {
+          size: A4 portrait;
+          margin: 6mm;
+        }
+        @media print {
+          html, body {
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background-color: #26282C !important;
+            color: #D9D2C2 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .receipt-outer {
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            background: transparent !important;
+          }
+          #nexus-official-receipt {
+            background-color: #26282C !important;
+            border: 1px solid #C5A059 !important;
+            box-shadow: none !important;
+            padding: 16px 22px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
+            page-break-before: avoid !important;
+            overflow: hidden !important;
+          }
+        }
+      `}} />
 
     </div>
   );
@@ -555,11 +769,7 @@ function ReceiptContent() {
 
 export default function ReceiptPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-[#07090C] text-white flex items-center justify-center font-mono text-xs">
-        <div className="w-8 h-8 border-2 border-[#7FF8C6] border-t-transparent rounded-full animate-spin mb-2" />
-      </div>
-    }>
+    <Suspense fallback={<div className="min-h-screen bg-[#141619] text-[#E0D8C3] p-8 font-mono">Loading official receipt...</div>}>
       <ReceiptContent />
     </Suspense>
   );

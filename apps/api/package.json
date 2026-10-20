@@ -5,10 +5,10 @@
   "type": "module",
   "main": "./dist/server.js",
   "scripts": {
-    "dev": "tsx watch --node-options=\"--experimental-require-module\" src/server.ts",
+    "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "test": "node --import tsx --test --test-reporter spec \"test/**/*.test.ts\"",
-    "start": "node --experimental-require-module dist/server.js"
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@nexusrail/shared": "workspace:*",

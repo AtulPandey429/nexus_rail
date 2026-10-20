@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { SmoothScroll } from '@/components/SmoothScroll';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
@@ -36,8 +37,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.className} bg-[var(--background)] text-[var(--foreground)] antialiased selection:bg-rail-emerald/30 min-h-screen flex flex-col`}>
+        {/* Subtle Cinematic Film Grain Texture (Adapted from atul-portfolio) */}
+        <div className="site-grain pointer-events-none fixed inset-0 z-[1]" aria-hidden="true" />
         <ThemeProvider>
-          <AppShell>{children}</AppShell>
+          <SmoothScroll>
+            <AppShell>{children}</AppShell>
+          </SmoothScroll>
         </ThemeProvider>
       </body>
     </html>

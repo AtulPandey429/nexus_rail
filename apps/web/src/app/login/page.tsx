@@ -2,17 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Script from 'next/script';
 import { useRouter } from 'next/navigation';
 import {
   Wallet,
   Mail,
   ShieldCheck,
-  Key,
-  ArrowRight,
   AlertCircle,
   CheckCircle2,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react';
 import { notifySession } from '@/lib/shop';
 import { GoogleIcon } from '@/components/WalletIcons';
@@ -31,20 +29,11 @@ function LoginFormContent() {
   const [authSuccess, setAuthSuccess] = useState('');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
-  // Manual Public Key / Passkey modal
-  const [showPasskeyModal, setShowPasskeyModal] = useState(false);
-  const [passkeyAddress, setPasskeyAddress] = useState('');
-  const [passkeyChain, setPasskeyChain] = useState<'stellar' | 'xrpl'>('stellar');
-
-  // Google OAuth Dialog
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [googleEmailInput, setGoogleEmailInput] = useState('');
-
   const handleSuccess = (user: any, token: string) => {
     localStorage.setItem('nexus_token', token);
     localStorage.setItem('nexus_user', JSON.stringify(user));
     notifySession();
-    setAuthSuccess(`Welcome, ${user.email || user.walletAddress?.slice(0, 8) || 'Traveler'}!`);
+    setAuthSuccess(`Welcome, ${user.name || user.email || user.walletAddress?.slice(0, 8) || 'Traveler'}!`);
     setTimeout(() => {
       if (user.role === 'admin') {
         router.push('/admin');
@@ -54,7 +43,7 @@ function LoginFormContent() {
     }, 600);
   };
 
-  // Email Submit (Auto-Login or Auto-Register as stated in Figma: "New here? An account is created automatically")
+  // Email Submit (Auto-Login or Auto-Register)
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
@@ -62,7 +51,6 @@ function LoginFormContent() {
     setIsLoading(true);
     setErrorMsg('');
 
-    // Default demo password if user is logging in with quick email flow
     const authPassword = password || 'NexusRail2026!';
 
     try {
@@ -79,7 +67,7 @@ function LoginFormContent() {
         return;
       }
 
-      // 2. If account does not exist, automatically register ("An account is created automatically")
+      // 2. If account does not exist, automatically register
       const regRes = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,7 +80,6 @@ function LoginFormContent() {
         return;
       }
 
-      // If user had existing account with custom password, prompt for password
       if (!showPasswordInput) {
         setShowPasswordInput(true);
         setErrorMsg('Please enter your existing password to sign in.');
@@ -106,29 +93,34 @@ function LoginFormContent() {
     }
   };
 
-  // Google Sign-In Handler
+  // Official Google OAuth / OIDC Flow (Requirement 2)
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setErrorMsg('');
 
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
+    // 1. If Google Identity Services library is loaded and client ID exists
     if (googleClientId && typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
       try {
         (window as any).google.accounts.id.initialize({
           client_id: googleClientId,
           callback: async (response: any) => {
-            if (response.credential) {
-              const res = await fetch('/api/v1/auth/google', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ credential: response.credential }),
-              });
-              const data = await res.json();
-              if (data.success && data.user && data.token) {
-                handleSuccess(data.user, data.token);
-              } else {
-                setErrorMsg(data.error || 'Google login failed.');
+            if (response?.credential) {
+              try {
+                const res = await fetch('/api/v1/auth/google', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ credential: response.credential }),
+                });
+                const data = await res.json();
+                if (data.success && data.user && data.token) {
+                  handleSuccess(data.user, data.token);
+                } else {
+                  setErrorMsg(data.error || 'Google login failed on server verification.');
+                }
+              } catch {
+                setErrorMsg('Network error verifying Google credentials.');
               }
             }
           },
@@ -141,66 +133,58 @@ function LoginFormContent() {
       }
     }
 
-    setShowGoogleModal(true);
+    // 2. Standard Google OAuth 2.0 Web Redirection
+    if (googleClientId) {
+      const redirectUri = `${window.location.origin}/auth/callback`;
+      const scope = encodeURIComponent('openid email profile');
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&response_type=token%20id_token&scope=${scope}&nonce=nexus_${Date.now()}&prompt=select_account`;
+
+      window.location.href = authUrl;
+      return;
+    }
+
+    // 3. Informative configuration notice if running in local development without Client ID
     setIsLoading(false);
-  };
-
-  const handleGoogleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!googleEmailInput.trim()) return;
-
-    setIsLoading(true);
-    setErrorMsg('');
-    try {
-      const res = await fetch('/api/v1/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: googleEmailInput.trim() }),
-      });
-      const data = await res.json();
-      if (data.success && data.user && data.token) {
-        setShowGoogleModal(false);
-        handleSuccess(data.user, data.token);
-      } else {
-        setErrorMsg(data.error || 'Google authentication failed.');
-      }
-    } catch {
-      setErrorMsg('Failed to authenticate via Google.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Passkey / Public Key Submission
-  const handlePasskeySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = passkeyAddress.trim();
-    if (!clean) return;
-
-    setIsLoading(true);
-    setErrorMsg('');
-    try {
-      const res = await fetch('/api/v1/auth/manual-wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: clean, chain: passkeyChain }),
-      });
-      const data = await res.json();
-      if (data.success && data.user && data.token) {
-        setShowPasskeyModal(false);
-        handleSuccess(data.user, data.token);
-      } else {
-        setErrorMsg(data.error || 'Passkey verification failed.');
-      }
-    } catch {
-      setErrorMsg('Failed to verify passkey.');
-    } finally {
-      setIsLoading(false);
-    }
+    setErrorMsg(
+      'Google OAuth requires NEXT_PUBLIC_GOOGLE_CLIENT_ID in .env.local to open the Google account consent screen. Please use Email or Wallet Connect in the meantime.'
+    );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#07090E] text-slate-900 dark:text-white flex flex-col justify-between selection:bg-rail-emerald/30 transition-colors duration-200">
+    <div className="min-h-[calc(100vh-80px)] bg-[var(--background)] text-[var(--foreground)] flex flex-col justify-between selection:bg-[var(--gold)]/30 transition-colors duration-200">
+      {/* Official Google Identity Services Script */}
+      <Script
+        src="https://accounts.google.com/gsi/client"
+        strategy="lazyOnload"
+        onLoad={() => {
+          const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+          if (clientId && (window as any).google?.accounts?.id) {
+            try {
+              (window as any).google.accounts.id.initialize({
+                client_id: clientId,
+                callback: async (response: any) => {
+                  if (response?.credential) {
+                    const res = await fetch('/api/v1/auth/google', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ credential: response.credential }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.user && data.token) {
+                      handleSuccess(data.user, data.token);
+                    }
+                  }
+                },
+              });
+            } catch (err) {
+              console.warn('Google GSI lazy load init:', err);
+            }
+          }
+        }}
+      />
+
       {/* Wallet Modal */}
       <WalletConnectModal
         isOpen={isWalletModalOpen}
@@ -218,87 +202,73 @@ function LoginFormContent() {
         }}
       />
 
-      {/* Main 2-Column Split View (Figma Screen 2) */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-[calc(100vh-48px)]">
-        
-        {/* LEFT COLUMN: Hero Brand Narrative (40% width / 5 cols) */}
-        <div className="lg:col-span-5 bg-white dark:bg-[#05070A] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-[#151921] p-6 sm:p-10 lg:p-16 flex flex-col justify-between relative overflow-hidden">
-          {/* Subtle geometric grid background */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#10141D_1px,transparent_1px),linear-gradient(to_bottom,#10141D_1px,transparent_1px)] bg-[size:32px_32px] opacity-10 dark:opacity-25 pointer-events-none" />
-
-          {/* Top Brand Tag */}
+      {/* Main 2-Column Split View - Unified Seamless Background */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-full bg-transparent">
+        {/* LEFT COLUMN: Hero Brand Narrative */}
+        <div className="lg:col-span-5 bg-transparent p-6 sm:p-10 lg:p-16 flex flex-col justify-between relative">
           <div className="space-y-6 relative z-10">
-            <Link href="/" className="inline-flex items-center gap-2.5 text-slate-900 dark:text-white font-bold tracking-tight text-lg group">
+            <Link href="/" className="inline-flex items-center gap-2.5 text-[var(--foreground)] font-bold tracking-tight text-lg group">
               <NexusLogo size={28} glow className="group-hover:scale-105 transition-transform shadow-md" />
               <span className="tracking-tighter font-mono">nexusrail</span>
             </Link>
 
             <div className="space-y-4 pt-6 sm:pt-8">
-              <div className="inline-block px-3 py-1 rounded-full border border-rail-emerald/40 bg-rail-emerald/5 text-[10px] font-mono tracking-widest text-rail-emerald uppercase">
-                THE CONNECTED COMMERCE DEMO
+              <div className="inline-block px-3 py-1 rounded-full border border-[var(--gold)]/40 bg-[var(--gold)]/10 text-[10px] font-mono tracking-widest text-[var(--gold)] uppercase font-semibold">
+                THE CONNECTED COMMERCE PLATFORM
               </div>
 
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.15]">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[var(--foreground)] leading-[1.15]">
                 Your account.<br />
                 Your assets.<br />
                 Your next move.
               </h1>
 
-              <p className="text-sm text-slate-600 dark:text-[#8A93A6] leading-relaxed max-w-md pt-2">
+              <p className="text-sm text-[var(--muted)] leading-relaxed max-w-md pt-2">
                 A familiar way in. A better way to move between shopping, payments and everything onchain.
               </p>
             </div>
           </div>
 
-          {/* Center Graphic Wireframe Illustration */}
           <div className="my-10 relative z-10 flex items-center justify-center">
             <div className="relative w-48 h-48 flex items-center justify-center">
-              {/* Concentric grid rings */}
-              <div className="absolute inset-0 rounded-3xl border border-slate-300 dark:border-white/5 rotate-12" />
-              <div className="absolute inset-2 rounded-3xl border border-slate-300 dark:border-white/5 -rotate-6" />
-              <NexusLogo size={88} glow className="shadow-[0_0_40px_rgba(0,229,163,0.3)] hover:scale-105 transition-transform duration-500 z-10" />
+              <div className="absolute inset-0 rounded-3xl border border-[var(--border-highlight)] rotate-12" />
+              <div className="absolute inset-2 rounded-3xl border border-[var(--border-highlight)] -rotate-6" />
+              <NexusLogo size={88} glow className="shadow-[0_0_40px_rgba(212,175,55,0.25)] hover:scale-105 transition-transform duration-500 z-10" />
             </div>
           </div>
 
-          {/* Bottom Security Note */}
-          <div className="relative z-10 border-t border-[#151921] pt-6 space-y-1">
-            <p className="text-xs font-mono text-white font-medium">A safe place to explore:</p>
-            <p className="text-xs text-[#8A93A6]">Test assets only. No real funds at risk.</p>
+          <div className="relative z-10 border-t border-[var(--border)] pt-6 space-y-1">
+            <p className="text-xs font-mono text-[var(--foreground)] font-medium">A safe place to explore:</p>
+            <p className="text-xs text-[var(--muted)]">Test assets only. No real funds at risk.</p>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Connection & Authentication Card (60% width / 7 cols) */}
-        <div className="lg:col-span-7 bg-slate-50 dark:bg-[#07090E] p-6 sm:p-10 lg:p-16 flex flex-col justify-between">
-          
-          {/* Top Navigation Row */}
+        {/* RIGHT COLUMN: Connection & Authentication Card */}
+        <div className="lg:col-span-7 bg-transparent p-6 sm:p-10 lg:p-16 flex flex-col justify-between">
           <div className="flex justify-end">
             <Link
               href="/store"
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#8A93A6] hover:text-slate-900 dark:hover:text-white transition-colors font-mono"
+              className="inline-flex items-center gap-1.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)] transition-colors font-mono"
             >
-              <span>&larr; Back to demo store</span>
+              <span>&larr; Back to store</span>
             </Link>
           </div>
 
-          {/* Main Centered Form Container */}
-          <div className="max-w-md w-full mx-auto my-auto space-y-6 py-8">
-            
-            {/* Header Titles */}
+          <div className="nexus-glass-card max-w-md w-full mx-auto my-auto space-y-6 p-6 sm:p-8 rounded-3xl shadow-xl">
             <div className="space-y-1.5">
-              <span className="text-[11px] font-mono tracking-widest uppercase text-rail-emerald font-semibold">
+              <span className="text-[11px] font-mono tracking-widest uppercase text-[var(--gold)] font-semibold">
                 WELCOME TO NEXUSRAIL
               </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--foreground)] tracking-tight">
                 Make your connection.
               </h2>
-              <p className="text-xs text-slate-600 dark:text-[#8A93A6]">
+              <p className="text-xs text-[var(--muted)]">
                 Sign in or create an account. Your journey starts here.
               </p>
             </div>
 
-            {/* Error / Success Notifications */}
             {errorMsg && (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2.5">
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                   <span className="font-mono">{errorMsg}</span>
@@ -306,7 +276,7 @@ function LoginFormContent() {
                 <button
                   type="button"
                   onClick={() => setErrorMsg('')}
-                  className="text-xs font-mono text-rose-400 hover:underline"
+                  className="text-xs font-mono text-rose-400 hover:underline cursor-pointer"
                 >
                   Dismiss
                 </button>
@@ -314,88 +284,75 @@ function LoginFormContent() {
             )}
 
             {authSuccess && (
-              <div className="p-3.5 rounded-xl bg-rail-emerald/15 border border-rail-emerald/40 text-rail-emerald text-xs flex items-center gap-2.5">
+              <div className="p-3.5 rounded-xl bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] text-xs flex items-center gap-2.5">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span className="font-mono font-medium">{authSuccess}</span>
               </div>
             )}
 
-            {/* PRIMARY ACTION: Large Emerald "Connect a wallet" button */}
+            {/* PRIMARY ACTION: Connect a Web3 Wallet */}
             <div className="space-y-2">
               <button
                 type="button"
                 onClick={() => setIsWalletModalOpen(true)}
-                className="w-full py-4 px-6 rounded-2xl bg-rail-emerald hover:bg-rail-mint text-[#05070A] font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-rail-emerald/25 hover:shadow-xl hover:scale-[1.01] active:scale-95"
+                className="w-full py-4 px-6 rounded-2xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-[#08090C] font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-[var(--gold)]/20 hover:shadow-xl hover:scale-[1.01] active:scale-95 cursor-pointer"
               >
                 <Wallet className="w-4 h-4" />
                 <span>Connect a wallet</span>
               </button>
 
-              <p className="text-[11px] font-mono text-center text-slate-500 dark:text-[#8A93A6]">
-                Freighter &bull; GemWallet &bull; Xaman &bull; EVM / MetaMask
+              <p className="text-[11px] font-mono text-center text-[var(--muted)]">
+                Stellar (Freighter · Albedo) &bull; XRPL (GemWallet · Xaman)
               </p>
             </div>
 
             {/* Divider: OR CONTINUE WITH */}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200 dark:border-[#1C2331]" />
+                <div className="w-full border-t border-[var(--border)]" />
               </div>
               <div className="relative flex justify-center text-[10px] uppercase font-mono tracking-wider">
-                <span className="bg-slate-50 dark:bg-[#07090E] px-3 text-slate-400 dark:text-[#5A6478]">OR CONTINUE WITH</span>
+                <span className="bg-[var(--card)] px-3 text-[var(--muted)]">OR CONTINUE WITH</span>
               </div>
             </div>
 
-            {/* Social Row: Google */}
-            <div className="grid grid-cols-1 gap-3">
+            {/* Official Google OAuth Action Button */}
+            <div>
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
-                className="py-3 px-4 rounded-xl bg-white dark:bg-[#0E131E] hover:bg-slate-100 dark:hover:bg-[#141B2B] border border-slate-300 dark:border-[#1C2331] text-xs font-mono text-slate-800 dark:text-white flex items-center justify-center gap-2.5 transition-all shadow-sm hover:scale-[1.01] active:scale-95"
+                className="w-full py-3 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--border-highlight)] text-xs font-mono text-[var(--foreground)] flex items-center justify-center gap-2.5 transition-all shadow-sm hover:scale-[1.01] active:scale-95 cursor-pointer"
               >
                 <GoogleIcon className="w-4 h-4" />
-                <span>Google</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg('Apple Sign-In is coming in the next build. Please use Google, Email, or Wallet.');
-                }}
-                className="py-3 px-4 rounded-xl bg-[#0E131E] hover:bg-[#141B2B] border border-[#1C2331] hover:border-[#2A3449] text-xs font-mono text-white flex items-center justify-center gap-2.5 transition-all"
-              >
-                <svg className="w-4 h-4 fill-white" viewBox="0 0 24 24">
-                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.66-.82 1.11-1.96.99-3.1-.95.04-2.1.64-2.77 1.42-.59.68-1.11 1.78-.97 2.87 1.06.08 2.15-.55 2.75-1.19z" />
-                </svg>
-                <span>Apple</span>
+                <span>Continue with Google</span>
               </button>
             </div>
 
             {/* Email Form */}
             <form onSubmit={handleEmailSubmit} className="space-y-3 pt-2">
               <div className="space-y-1.5">
-                <label className="text-[11px] font-mono text-[#8A93A6] block">Email address</label>
+                <label className="text-[11px] font-mono text-[var(--muted)] block">Email address</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full px-4 py-3 rounded-xl bg-[#0E131E] border border-[#1C2331] text-xs font-mono text-white placeholder-[#454E60] focus:outline-none focus:border-rail-emerald transition-colors"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] text-xs font-mono text-[var(--foreground)] placeholder-[var(--muted)]/50 focus:outline-none focus:border-[var(--gold)] transition-colors"
                 />
               </div>
 
               {showPasswordInput && (
                 <div className="space-y-1.5 animate-in fade-in duration-200">
-                  <label className="text-[11px] font-mono text-[#8A93A6] block">Password</label>
+                  <label className="text-[11px] font-mono text-[var(--muted)] block">Password</label>
                   <input
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-4 py-3 rounded-xl bg-[#0E131E] border border-[#1C2331] text-xs font-mono text-white placeholder-[#454E60] focus:outline-none focus:border-rail-emerald transition-colors"
+                    className="w-full px-4 py-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] text-xs font-mono text-[var(--foreground)] placeholder-[var(--muted)]/50 focus:outline-none focus:border-[var(--gold)] transition-colors"
                   />
                 </div>
               )}
@@ -403,41 +360,28 @@ function LoginFormContent() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#0E131E] hover:bg-[#141B2B] border border-[#1C2331] hover:border-rail-emerald/60 text-white text-xs font-mono font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                className="w-full py-3.5 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)]/60 text-[var(--foreground)] text-xs font-mono font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isLoading ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-rail-emerald" />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[var(--gold)]" />
                 ) : (
                   <>
                     <span>Continue with email</span>
-                    <Mail className="w-3.5 h-3.5 text-[#8A93A6]" />
+                    <Mail className="w-3.5 h-3.5 text-[var(--muted)]" />
                   </>
                 )}
               </button>
             </form>
 
-            {/* Use Passkey / Cold Storage Key Instead */}
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                onClick={() => setShowPasskeyModal(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-mono text-[#8A93A6] hover:text-white transition-colors"
-              >
-                <Key className="w-3.5 h-3.5 text-rail-emerald" />
-                <span>Use a passkey instead</span>
-              </button>
-            </div>
-
             {/* Security Guarantee Box */}
-            <div className="p-3.5 rounded-xl bg-[#0E131E]/60 border border-[#1C2331] text-[11px] text-[#8A93A6] leading-relaxed flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-rail-emerald shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] text-[11px] text-[var(--muted)] leading-relaxed flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0 mt-0.5" />
               <span>
-                We never ask for your seed phrase or private keys. Wallet sign-in requests a signature, not a payment.
+                We never ask for your seed phrase or private keys. Wallet sign-in requests an onchain signature, not a payment.
               </span>
             </div>
 
-            {/* Terms Notice */}
-            <p className="text-[10px] text-[#5A6478] text-center leading-relaxed font-mono">
+            <p className="text-[10px] text-[var(--muted)]/70 text-center leading-relaxed font-mono">
               By continuing, you agree to the Terms of Service and Privacy Policy. New here? An account is created automatically.
             </p>
           </div>
@@ -445,147 +389,6 @@ function LoginFormContent() {
           <div />
         </div>
       </div>
-
-      {/* BOTTOM FOOTER STATUS BAR (Exact Figma Screen 2 Bottom Bar) */}
-      <footer className="h-12 border-t border-[#151921] px-6 sm:px-12 flex flex-col sm:flex-row items-center justify-between text-[11px] font-mono text-[#5A6478] bg-[#05070A]">
-        <div>&copy; 2026 NexusRail | Beta environment</div>
-        <div className="hidden md:block">Test assets only. No real funds or fulfillment.</div>
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-rail-emerald animate-pulse" />
-          <span>Systems: operational</span>
-        </div>
-      </footer>
-
-      {/* Google Sign-In Dialog */}
-      {showGoogleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="w-full max-w-sm rounded-3xl bg-[#0A0D14] border border-[#1C2331] p-6 space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <GoogleIcon className="w-5 h-5" />
-                <h3 className="font-bold text-sm text-white">Google Sign-In</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGoogleModal(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                &times;
-              </button>
-            </div>
-
-            <p className="text-xs text-[#8A93A6] font-mono leading-relaxed">
-              Enter your Google account email to link your profile with NexusRail.
-            </p>
-
-            <form onSubmit={handleGoogleEmailSubmit} className="space-y-3">
-              <input
-                type="email"
-                required
-                value={googleEmailInput}
-                onChange={(e) => setGoogleEmailInput(e.target.value)}
-                placeholder="yourname@gmail.com"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0E131E] border border-[#1C2331] text-xs font-mono text-white placeholder-[#454E60] focus:outline-none focus:border-rail-emerald"
-              />
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleModal(false)}
-                  className="flex-1 py-2 rounded-xl bg-[#0E131E] border border-[#1C2331] text-xs font-mono text-[#8A93A6] hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !googleEmailInput.trim()}
-                  className="flex-1 py-2 rounded-xl bg-white text-gray-900 text-xs font-mono font-bold hover:bg-gray-100"
-                >
-                  Continue
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Passkey / Manual Public Key Modal */}
-      {showPasskeyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl bg-[#0A0D14] border border-[#1C2331] p-6 space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Key className="w-5 h-5 text-rail-emerald" />
-                <h3 className="font-bold text-sm text-white">Use a Passkey / Public Key</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPasskeyModal(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                &times;
-              </button>
-            </div>
-
-            <p className="text-xs text-[#8A93A6] leading-relaxed">
-              Connect your self-custody cold storage, ledger, or passkey public address without mock IDs.
-            </p>
-
-            <form onSubmit={handlePasskeySubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                <button
-                  type="button"
-                  onClick={() => setPasskeyChain('stellar')}
-                  className={`py-1.5 px-3 rounded-lg border ${
-                    passkeyChain === 'stellar'
-                      ? 'bg-stellar-cyan/15 text-stellar-cyan border-stellar-cyan font-bold'
-                      : 'bg-[#0E131E] text-[#8A93A6] border-[#1C2331]'
-                  }`}
-                >
-                  Stellar (G...)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPasskeyChain('xrpl')}
-                  className={`py-1.5 px-3 rounded-lg border ${
-                    passkeyChain === 'xrpl'
-                      ? 'bg-xrpl-blue/15 text-xrpl-blue border-xrpl-blue font-bold'
-                      : 'bg-[#0E131E] text-[#8A93A6] border-[#1C2331]'
-                  }`}
-                >
-                  XRPL (r...)
-                </button>
-              </div>
-
-              <input
-                type="text"
-                required
-                value={passkeyAddress}
-                onChange={(e) => setPasskeyAddress(e.target.value)}
-                placeholder={passkeyChain === 'stellar' ? 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' : 'rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0E131E] border border-[#1C2331] text-xs font-mono text-white placeholder-[#454E60] focus:outline-none focus:border-rail-emerald"
-              />
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPasskeyModal(false)}
-                  className="flex-1 py-2 rounded-xl bg-[#0E131E] border border-[#1C2331] text-xs font-mono text-[#8A93A6] hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !passkeyAddress.trim()}
-                  className="flex-1 py-2 rounded-xl bg-rail-emerald text-[#05070A] text-xs font-mono font-bold hover:brightness-110"
-                >
-                  Verify Key
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -594,8 +397,8 @@ export default function LoginPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="min-h-screen bg-[#07090E] text-white flex items-center justify-center p-4">
-          <div className="p-6 rounded-2xl bg-[#0E131E] border border-[#1C2331] text-xs font-mono text-[#8A93A6] animate-pulse">
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center p-4">
+          <div className="nexus-glass-card p-6 rounded-2xl border border-[var(--border)] text-xs font-mono text-[var(--muted)] animate-pulse">
             Loading NexusRail Gateway...
           </div>
         </div>

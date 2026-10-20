@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import {
   fetchCartLines,
+  clearCart,
   CartLine,
   readSession,
   SessionUser,
@@ -52,7 +53,7 @@ const DEFAULT_ITEMS: CartLine[] = [
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const paramOrderId = searchParams.get('orderId') || 'NR-1048';
+  const paramOrderId = searchParams.get('orderId') || '#NR8K2P9X';
 
   const [orderId, setOrderId] = useState(paramOrderId);
   const [items, setItems] = useState<CartLine[]>([]);
@@ -85,8 +86,8 @@ function CheckoutContent() {
     sync();
 
     fetchCartLines()
-      .then((lines) => setItems(lines.length > 0 ? lines : DEFAULT_ITEMS))
-      .catch(() => setItems(DEFAULT_ITEMS));
+      .then((lines) => setItems(lines))
+      .catch(() => setItems([]));
 
     checkFreighterInstalled().then(setHasFreighter);
     checkGemWalletInstalled().then(setHasGemWallet);
@@ -217,6 +218,9 @@ function CheckoutContent() {
         localStorage.setItem(`nexus_receipt_${orderId}`, JSON.stringify(receiptData));
       }
 
+      // Clear active cart upon confirmed payment verification
+      await clearCart();
+
       // Route to Screen 8 (Receipt)
       router.push(`/receipt?orderId=${encodeURIComponent(orderId)}`);
     } catch (err) {
@@ -226,29 +230,29 @@ function CheckoutContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#07090C] text-slate-900 dark:text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black transition-colors duration-200">
+    <div className="min-h-screen bg-transparent text-[var(--foreground)] font-sans antialiased selection:bg-[var(--gold)]/30 selection:text-black transition-colors duration-200">
       
       {/* Main Container */}
       <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
         
         {/* Step Progress Breadcrumb */}
         <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono mb-8 overflow-x-auto pb-1">
-          <Link href="/cart" className="flex items-center gap-1.5 text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0">
-            <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-[#092B21] border border-emerald-400 dark:border-[#165D46] text-emerald-700 dark:text-[#7FF8C6] flex items-center justify-center text-[10px] font-bold">
+          <Link href="/cart" className="flex items-center gap-1.5 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors shrink-0">
+            <span className="w-4 h-4 rounded-full nexus-glass-surface border border-[var(--gold)]/40 text-[var(--gold)] flex items-center justify-center text-[10px] font-bold">
               ✓
             </span>
             <span>Cart</span>
           </Link>
-          <span className="text-slate-300 dark:text-white/20">──────</span>
-          <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-semibold shrink-0">
-            <span className="w-4 h-4 rounded-full bg-[#7FF8C6] text-[#052E20] flex items-center justify-center text-[10px] font-bold">
+          <span className="text-[var(--border)]">──────</span>
+          <div className="flex items-center gap-1.5 text-[var(--foreground)] font-semibold shrink-0">
+            <span className="w-4 h-4 rounded-full bg-[var(--gold)] text-black flex items-center justify-center text-[10px] font-bold">
               2
             </span>
             <span>Checkout</span>
           </div>
-          <span className="text-slate-300 dark:text-white/20">──────</span>
-          <div className="flex items-center gap-1.5 text-slate-400 dark:text-white/30 shrink-0">
-            <span className="w-4 h-4 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 flex items-center justify-center text-[10px]">
+          <span className="text-[var(--border)]">──────</span>
+          <div className="flex items-center gap-1.5 text-[var(--muted)] shrink-0">
+            <span className="w-4 h-4 rounded-full nexus-glass-surface border border-[var(--border)] flex items-center justify-center text-[10px]">
               3
             </span>
             <span>Receipt</span>
@@ -257,16 +261,16 @@ function CheckoutContent() {
 
         {/* Page Title & Order Badge */}
         <div className="flex items-center gap-3 mb-8">
-          <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-bold text-[var(--foreground)] tracking-tight">
             Checkout
           </h1>
-          <span className="px-2.5 py-1 rounded bg-slate-200 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-white/50 text-xs font-mono font-bold">
+          <span className="px-2.5 py-1 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--gold)] text-xs font-mono font-bold">
             {orderId}
           </span>
         </div>
 
         {errorMsg && (
-          <div className="mb-6 p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
+          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-mono">
             {errorMsg}
           </div>
         )}
@@ -278,13 +282,13 @@ function CheckoutContent() {
           <div className="lg:col-span-7 space-y-8">
             
             {/* Step 01: Contact */}
-            <div className="space-y-3 pb-6 border-b border-white/10">
+            <div className="space-y-3 pb-6 border-b border-[var(--border)]">
               <div className="flex items-center justify-between text-xs font-mono">
-                <span className="tracking-widest uppercase text-white/40">01 / CONTACT</span>
+                <span className="tracking-widest uppercase text-[var(--muted)]">01 / CONTACT</span>
                 <button
                   type="button"
                   onClick={() => setIsEditingEmail(!isEditingEmail)}
-                  className="text-white/60 hover:text-white transition-colors underline decoration-white/20"
+                  className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors underline decoration-[var(--border)] cursor-pointer"
                 >
                   {isEditingEmail ? 'Save' : 'Edit'}
                 </button>
@@ -295,22 +299,22 @@ function CheckoutContent() {
                   type="email"
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
-                  className="w-full max-w-md px-3 py-2 rounded bg-[#10141A] border border-white/15 text-sm font-mono text-white focus:outline-none focus:border-[#7FF8C6]"
+                  className="w-full max-w-md px-3 py-2 rounded-xl nexus-glass-surface border border-[var(--border)] text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--border-focus)]"
                 />
               ) : (
-                <p className="text-base font-normal text-white">
+                <p className="text-base font-normal text-[var(--foreground)]">
                   {customerEmail}
                 </p>
               )}
 
-              <p className="text-xs text-white/40">
+              <p className="text-xs text-[var(--muted)]">
                 Receipt only. No shipping or physical fulfillment.
               </p>
             </div>
 
             {/* Step 02: Choose Your Payment Rail */}
-            <div className="space-y-4 pb-6 border-b border-white/10">
-              <p className="text-xs font-mono tracking-widest uppercase text-white/40">
+            <div className="space-y-4 pb-6 border-b border-[var(--border)]">
+              <p className="text-xs font-mono tracking-widest uppercase text-[var(--muted)]">
                 02 / CHOOSE YOUR PAYMENT RAIL
               </p>
 
@@ -321,36 +325,36 @@ function CheckoutContent() {
                 <button
                   type="button"
                   onClick={() => setSelectedRail('STELLAR')}
-                  className={`p-5 rounded-xl border text-left transition-all relative ${
+                  className={`p-5 rounded-2xl border text-left transition-all relative cursor-pointer ${
                     selectedRail === 'STELLAR'
-                      ? 'bg-[#0D1914] border-[#7FF8C6]/60 shadow-lg shadow-[#7FF8C6]/5 ring-1 ring-[#7FF8C6]/30'
-                      : 'bg-[#10141A] border-white/10 hover:border-white/20'
+                      ? 'nexus-glass-card border-[var(--gold)] shadow-lg shadow-[var(--gold)]/10 ring-1 ring-[var(--gold)]/40'
+                      : 'nexus-glass-surface border-[var(--border)] hover:border-[var(--border-highlight)]'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                        selectedRail === 'STELLAR' ? 'border-[#7FF8C6]' : 'border-white/30'
+                        selectedRail === 'STELLAR' ? 'border-[var(--gold)]' : 'border-[var(--border)]'
                       }`}>
-                        {selectedRail === 'STELLAR' && <span className="w-1.5 h-1.5 rounded-full bg-[#7FF8C6]" />}
+                        {selectedRail === 'STELLAR' && <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />}
                       </span>
-                      <span className="text-sm font-semibold text-white">Stellar</span>
+                      <span className="text-sm font-semibold text-[var(--foreground)]">Stellar</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-[#092B21] border border-[#165D46] text-[#7FF8C6] text-[10px] font-mono">
+                    <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold-bright)] text-[10px] font-mono font-bold">
                       TESTNET
                     </span>
                   </div>
 
-                  <p className="text-2xl font-mono font-medium text-white tracking-tight mt-3">
+                  <p className="text-2xl font-mono font-medium text-[var(--foreground)] tracking-tight mt-3">
                     {stellarTotalCrypto} XLM
                   </p>
 
-                  <p className="text-xs font-mono text-white/50 mt-1">
+                  <p className="text-xs font-mono text-[var(--muted)] mt-1">
                     Balance 3,480.50 XLM · Fee $0.02
                   </p>
 
-                  <p className="text-xs font-mono text-[#7FF8C6] mt-3 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#7FF8C6]" />
+                  <p className="text-xs font-mono text-[var(--gold)] mt-3 flex items-center gap-1.5 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
                     Recommended · Wallet ready
                   </p>
                 </button>
@@ -359,64 +363,64 @@ function CheckoutContent() {
                 <button
                   type="button"
                   onClick={() => setSelectedRail('XRPL')}
-                  className={`p-5 rounded-xl border text-left transition-all relative ${
+                  className={`p-5 rounded-2xl border text-left transition-all relative cursor-pointer ${
                     selectedRail === 'XRPL'
-                      ? 'bg-[#0E1524] border-[#0081F2]/60 shadow-lg shadow-[#0081F2]/5 ring-1 ring-[#0081F2]/30'
-                      : 'bg-[#10141A] border-white/10 hover:border-white/20'
+                      ? 'nexus-glass-card border-[#0081F2] shadow-lg shadow-[#0081F2]/10 ring-1 ring-[#0081F2]/40'
+                      : 'nexus-glass-surface border-[var(--border)] hover:border-[var(--border-highlight)]'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                        selectedRail === 'XRPL' ? 'border-[#0081F2]' : 'border-white/30'
+                        selectedRail === 'XRPL' ? 'border-[#0081F2]' : 'border-[var(--border)]'
                       }`}>
                         {selectedRail === 'XRPL' && <span className="w-1.5 h-1.5 rounded-full bg-[#0081F2]" />}
                       </span>
-                      <span className="text-sm font-semibold text-white">XRPL</span>
+                      <span className="text-sm font-semibold text-[var(--foreground)]">XRPL</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-[#0B1E3B] border border-[#143B73] text-[#60A5FA] text-[10px] font-mono">
+                    <span className="px-2 py-0.5 rounded bg-[#0081F2]/15 border border-[#0081F2]/40 text-[#60A5FA] text-[10px] font-mono font-bold">
                       TESTNET
                     </span>
                   </div>
 
-                  <p className="text-2xl font-mono font-medium text-white tracking-tight mt-3">
+                  <p className="text-2xl font-mono font-medium text-[var(--foreground)] tracking-tight mt-3">
                     {xrplTotalCrypto} XRP
                   </p>
 
-                  <p className="text-xs font-mono text-white/50 mt-1">
+                  <p className="text-xs font-mono text-[var(--muted)] mt-1">
                     Balance 500.00 XRP · Fee &lt; $0.01
                   </p>
 
-                  <p className="text-xs font-mono text-amber-400 mt-3 flex items-center gap-1">
+                  <p className="text-xs font-mono text-amber-500 mt-3 flex items-center gap-1 font-semibold">
                     Insufficient XRP · Add test funds ↗
                   </p>
                 </button>
 
                 {/* Card 3: EVM (Coming Soon) */}
-                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between opacity-50 cursor-not-allowed">
-                  <span className="text-xs font-mono text-white/40">EVM</span>
-                  <span className="text-[10px] font-mono text-white/30 uppercase tracking-wider">COMING SOON</span>
+                <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center justify-between opacity-50 cursor-not-allowed">
+                  <span className="text-xs font-mono text-[var(--muted)]">EVM</span>
+                  <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider">COMING SOON</span>
                 </div>
 
                 {/* Card 4: Solana (Coming Soon) */}
-                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between opacity-50 cursor-not-allowed">
-                  <span className="text-xs font-mono text-white/40">Solana</span>
-                  <span className="text-[10px] font-mono text-white/30 uppercase tracking-wider">COMING SOON</span>
+                <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center justify-between opacity-50 cursor-not-allowed">
+                  <span className="text-xs font-mono text-[var(--muted)]">Solana</span>
+                  <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider">COMING SOON</span>
                 </div>
 
               </div>
 
               {/* Connected Wallet Row */}
-              <div className="p-4 rounded-xl bg-[#090B0E] border border-white/10 flex items-center justify-between">
+              <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#161C24] border border-white/10 flex items-center justify-center text-white/70">
-                    <Wallet className="w-4 h-4 text-[#7FF8C6]" />
+                  <div className="w-8 h-8 rounded-lg nexus-glass-card border border-[var(--border)] flex items-center justify-center text-[var(--foreground)]">
+                    <Wallet className="w-4 h-4 text-[var(--gold)]" />
                   </div>
                   <div>
-                    <p className="text-xs font-mono text-white font-medium">
+                    <p className="text-xs font-mono text-[var(--foreground)] font-medium">
                       {selectedRail === 'STELLAR' ? 'Freighter · Stellar testnet' : 'GemWallet · XRPL testnet'}
                     </p>
-                    <p className="text-[11px] font-mono text-white/40">
+                    <p className="text-[11px] font-mono text-[var(--muted)]">
                       {user?.walletAddress || (selectedRail === 'STELLAR' ? 'GCKF...7Q2M' : 'rNXs...9b3K')}
                     </p>
                   </div>
@@ -425,7 +429,7 @@ function CheckoutContent() {
                 <button
                   type="button"
                   onClick={() => setIsWalletModalOpen(true)}
-                  className="text-xs font-mono text-white/60 hover:text-white transition-colors underline decoration-white/20"
+                  className="text-xs font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors underline decoration-[var(--border)] cursor-pointer"
                 >
                   Change
                 </button>
@@ -436,38 +440,38 @@ function CheckoutContent() {
             {/* Step 03: Review the Quote */}
             <div className="space-y-4">
               <div className="flex items-center justify-between text-xs font-mono">
-                <span className="tracking-widest uppercase text-white/40">03 / REVIEW THE QUOTE</span>
-                <span className="px-2 py-0.5 rounded bg-[#092B21] border border-[#165D46] text-[#7FF8C6] text-[10px]">
+                <span className="tracking-widest uppercase text-[var(--muted)]">03 / REVIEW THE QUOTE</span>
+                <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold-bright)] text-[10px] font-bold">
                   FRESH · 2S AGO
                 </span>
               </div>
 
               {/* Rate Breakdown Table */}
-              <div className="space-y-3 text-xs font-mono divide-y divide-white/5">
+              <div className="space-y-3 text-xs font-mono divide-y divide-[var(--border)]">
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-white/50">Demo exchange rate</span>
-                  <span className="text-white font-medium">{activeRateStr}</span>
+                  <span className="text-[var(--muted)]">Testnet live exchange rate</span>
+                  <span className="text-[var(--foreground)] font-medium">{activeRateStr}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-white/50">Order payment</span>
-                  <span className="text-white font-medium">{activeOrderCrypto} {activeToken}</span>
+                  <span className="text-[var(--muted)]">Order payment</span>
+                  <span className="text-[var(--foreground)] font-medium">{activeOrderCrypto} {activeToken}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-white/50">Network fee</span>
-                  <span className="text-white font-medium">{activeFeeCrypto} {activeToken} / $0.02</span>
+                  <span className="text-[var(--muted)]">Network fee</span>
+                  <span className="text-[var(--foreground)] font-medium">{activeFeeCrypto} {activeToken} / $0.02</span>
                 </div>
               </div>
 
               {/* Total to Authorize */}
-              <div className="pt-3 border-t border-white/10 flex justify-between items-baseline">
-                <span className="text-sm font-medium text-white">Total to authorize</span>
-                <span className="text-2xl font-mono font-medium text-white tracking-tight">
+              <div className="pt-3 border-t border-[var(--border)] flex justify-between items-baseline">
+                <span className="text-sm font-medium text-[var(--foreground)]">Total to authorize</span>
+                <span className="text-2xl font-mono font-medium text-[var(--gold-bright)] tracking-tight">
                   {activeTotalCrypto} {activeToken}
                 </span>
               </div>
 
               {/* Metadata quote expiration line */}
-              <p className="text-[11px] font-mono text-white/40 tracking-wider">
+              <p className="text-[11px] font-mono text-[var(--muted)] tracking-wider">
                 QT-8822 · PROVIDER RATE · EXPIRES IN {quoteSecondsLeft}S
               </p>
 
@@ -476,7 +480,7 @@ function CheckoutContent() {
                 type="button"
                 onClick={() => setShowSafetyCenter(true)}
                 disabled={isProcessing}
-                className="w-full py-4 rounded-lg bg-[#7FF8C6] hover:bg-[#6EE7B7] text-[#052E20] font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[#7FF8C6]/10 active:scale-[0.99] disabled:opacity-50 mt-2"
+                className="w-full py-4 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[var(--gold)]/20 active:scale-[0.99] disabled:opacity-50 mt-2 cursor-pointer"
               >
                 {isProcessing ? (
                   <span>Signing transaction on {selectedRail}...</span>
@@ -489,8 +493,8 @@ function CheckoutContent() {
               </button>
 
               {/* Readiness subtext */}
-              <p className="text-xs font-mono text-white/40 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full border border-white/30 animate-pulse" />
+              <p className="text-xs font-mono text-[var(--muted)] flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full border border-[var(--border)] animate-pulse" />
                 <span>Ready for wallet approval. No transaction has been submitted.</span>
               </p>
 
@@ -500,17 +504,17 @@ function CheckoutContent() {
 
           {/* Right Column: Your Order (5 cols) */}
           <div className="lg:col-span-5">
-            <div className="rounded-xl bg-white dark:bg-[#10141A] border border-slate-200 dark:border-white/10 p-5 sm:p-7 shadow-xl space-y-6">
+            <div className="rounded-2xl nexus-glass-card p-5 sm:p-7 shadow-xl space-y-6">
               
-              <h2 className="text-xl font-medium text-slate-900 dark:text-white tracking-tight">
+              <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
                 Your order
               </h2>
 
               {/* Items List */}
-              <div className="space-y-4 divide-y divide-slate-100 dark:divide-white/10">
+              <div className="space-y-4 divide-y divide-[var(--border)]">
                 {items.map((item) => (
                   <div key={item.sku} className="pt-4 first:pt-0 flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-lg bg-slate-100 dark:bg-[#111620] border border-slate-200 dark:border-white/10 overflow-hidden relative shrink-0">
+                    <div className="w-14 h-14 rounded-xl nexus-glass-surface border border-[var(--border)] overflow-hidden relative shrink-0">
                       <Image
                         src={PRODUCT_IMAGE_MAP[item.sku] || '/products/rail-one.png'}
                         alt={item.title}
@@ -520,10 +524,10 @@ function CheckoutContent() {
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.title}</p>
-                      <p className="text-xs font-mono text-slate-500 dark:text-white/40 mt-0.5">Qty {item.qty}</p>
+                      <p className="text-sm font-medium text-[var(--foreground)] truncate">{item.title}</p>
+                      <p className="text-xs font-mono text-[var(--muted)] mt-0.5">Qty {item.qty}</p>
                     </div>
-                    <span className="text-sm font-mono text-slate-900 dark:text-white font-bold">
+                    <span className="text-sm font-mono text-[var(--foreground)] font-bold">
                       ${((item.priceCents * item.qty) / 100).toFixed(2)}
                     </span>
                   </div>
@@ -531,49 +535,49 @@ function CheckoutContent() {
               </div>
 
               {/* Financial Breakdown */}
-              <div className="space-y-3 py-4 border-t border-b border-slate-100 dark:border-white/10 text-xs font-mono">
-                <div className="flex justify-between text-slate-600 dark:text-white/60">
+              <div className="space-y-3 py-4 border-t border-b border-[var(--border)] text-xs font-mono">
+                <div className="flex justify-between text-[var(--muted)]">
                   <span>Subtotal</span>
-                  <span className="text-slate-900 dark:text-white font-bold">${rawSubtotalUsd.toFixed(2)}</span>
+                  <span className="text-[var(--foreground)] font-bold">${rawSubtotalUsd.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600 dark:text-white/60">
+                <div className="flex justify-between text-[var(--muted)]">
                   <span>Shipping</span>
-                  <span className="text-slate-900 dark:text-white font-bold">Free</span>
+                  <span className="text-[var(--foreground)] font-bold">Free</span>
                 </div>
-                <div className="flex justify-between text-white/60">
+                <div className="flex justify-between text-[var(--muted)]">
                   <span>Network fee</span>
-                  <span className="text-white">${networkFeeUsd.toFixed(2)}</span>
+                  <span className="text-[var(--foreground)]">${networkFeeUsd.toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Total USD */}
               <div className="flex justify-between items-baseline">
-                <span className="text-base text-white font-medium">Total / USD</span>
-                <span className="text-2xl font-mono font-medium text-white tracking-tight">
+                <span className="text-base text-[var(--foreground)] font-medium">Total / USD</span>
+                <span className="text-2xl font-mono font-bold text-[var(--gold-bright)] tracking-tight">
                   ${totalUsd.toFixed(2)}
                 </span>
               </div>
 
               {/* Guarantee Box */}
-              <div className="p-3.5 rounded-lg bg-[#0A261E]/80 border border-[#124B3B] flex items-center gap-2.5 text-xs font-mono text-[#7FF8C6]">
-                <ShieldCheck className="w-4 h-4 text-[#7FF8C6] shrink-0" />
-                <span className="text-[#A7F3D0] leading-relaxed">
+              <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--gold)]/40 flex items-center gap-2.5 text-xs font-mono text-[var(--gold)]">
+                <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
+                <span className="text-[var(--foreground)]/90 leading-relaxed">
                   Testnet transaction only. Test XLM has no monetary value.
                 </span>
               </div>
 
               {/* 3-Point Assurance Checklist */}
-              <div className="space-y-2.5 text-xs font-mono text-white/50 pt-2 border-t border-white/5">
-                <div className="flex items-center gap-2 text-white/70">
-                  <Check className="w-3.5 h-3.5 text-[#7FF8C6]" />
+              <div className="space-y-2.5 text-xs font-mono text-[var(--muted)] pt-2 border-t border-[var(--border)]">
+                <div className="flex items-center gap-2 text-[var(--foreground)]">
+                  <Check className="w-3.5 h-3.5 text-[var(--gold)]" />
                   <span>Approve in your wallet</span>
                 </div>
-                <div className="flex items-center gap-2 text-white/70">
-                  <Check className="w-3.5 h-3.5 text-[#7FF8C6]" />
+                <div className="flex items-center gap-2 text-[var(--foreground)]">
+                  <Check className="w-3.5 h-3.5 text-[var(--gold)]" />
                   <span>We verify the transaction on the ledger</span>
                 </div>
-                <div className="flex items-center gap-2 text-white/70">
-                  <Check className="w-3.5 h-3.5 text-[#7FF8C6]" />
+                <div className="flex items-center gap-2 text-[var(--foreground)]">
+                  <Check className="w-3.5 h-3.5 text-[var(--gold)]" />
                   <span>Your receipt and ledger balance update instantly</span>
                 </div>
               </div>
@@ -616,14 +620,6 @@ function CheckoutContent() {
         isOpen={isWalletModalOpen}
         onClose={() => setIsWalletModalOpen(false)}
       />
-
-      {/* Bottom Footer */}
-      <footer className="border-t border-white/10 py-5 bg-[#05070A]">
-        <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-white/40">
-          <p>© 2026 NexusRail · Demo environment</p>
-          <p>Test assets only. No real funds or fulfillment.</p>
-        </div>
-      </footer>
 
     </div>
   );

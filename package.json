@@ -18,10 +18,16 @@
     "test": "npm run test --workspace=apps/api"
   },
   "devDependencies": {
+    "next": "^15.2.3",
     "typescript": "^5.7.2"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
     "mongodb": "^7.7.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

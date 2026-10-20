@@ -82,27 +82,11 @@ export default function CartPage() {
     return onSessionChange(sync);
   }, []);
 
-  // Load cart lines or initialize with Figma demo essentials if empty
+  // Load cart lines without unauthorized auto-seeding
   const loadCart = async () => {
     try {
       const lines = await fetchCartLines();
-      if (lines.length > 0) {
-        setItems(lines);
-      } else {
-        // Initialize with default Figma demo essentials so user experiences the exact reference state
-        for (const def of FIGMA_DEFAULT_ITEMS) {
-          await setCartQty(def.sku, def.qty);
-        }
-        const initialized = await fetchCartLines();
-        setItems(initialized.length > 0 ? initialized : (FIGMA_DEFAULT_ITEMS.map((d) => ({
-          sku: d.sku,
-          title: d.title,
-          description: d.variant,
-          priceCents: d.priceCents,
-          qty: d.qty,
-          priced: true,
-        })) as CartLine[]));
-      }
+      setItems(lines);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not fetch cart items');
@@ -183,7 +167,8 @@ export default function CartPage() {
     try {
       const order = await createOrderFromCart(items, 'MULTI');
       const orderTitle = items.map((i) => i.title).join(', ');
-      router.push(`/checkout?orderId=${encodeURIComponent(order.id)}&title=${encodeURIComponent(orderTitle)}`);
+      const publicRef = order.orderNumber || order.id;
+      router.push(`/checkout?orderId=${encodeURIComponent(publicRef)}&title=${encodeURIComponent(orderTitle)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not initiate checkout');
       setBusy(false);
@@ -203,20 +188,20 @@ export default function CartPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#07090C] text-slate-900 dark:text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black transition-colors duration-200">
+    <div className="min-h-screen bg-transparent text-[var(--foreground)] font-sans antialiased selection:bg-[var(--gold)]/30 selection:text-[var(--foreground)]">
       
       {/* Main Container */}
       <main className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
         
         {/* Breadcrumb Header */}
         <div className="mb-8">
-          <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-slate-400 dark:text-white/40 font-semibold">
+          <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-[var(--gold)] font-semibold">
             STORE / YOUR CART
           </p>
-          <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-bold text-slate-900 dark:text-white tracking-tight mt-2">
+          <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-bold text-[var(--foreground)] tracking-tight mt-2">
             A few good choices.
           </h1>
-          <p className="text-sm sm:text-base text-slate-600 dark:text-white/50 mt-1.5 font-normal">
+          <p className="text-sm sm:text-base text-[var(--muted)] mt-1.5 font-normal">
             Three considered essentials. One connected checkout.
           </p>
         </div>
@@ -229,17 +214,17 @@ export default function CartPage() {
 
         {loading ? (
           <div className="py-24 text-center">
-            <div className="w-8 h-8 border-2 border-[#7FF8C6] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-xs font-mono text-white/40">Loading cart lines...</p>
+            <div className="w-8 h-8 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-xs font-mono text-[var(--muted)]">Loading cart lines...</p>
           </div>
         ) : items.length === 0 ? (
           /* Empty Bag State */
-          <div className="max-w-xl mx-auto py-16 px-6 text-center border border-white/10 rounded-2xl bg-[#0E1218]">
-            <div className="w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-white/40 mb-4">
+          <div className="max-w-xl mx-auto py-16 px-6 text-center border border-[var(--border)] rounded-2xl nexus-glass-card">
+            <div className="w-14 h-14 rounded-full nexus-glass-surface border border-[var(--border)] flex items-center justify-center mx-auto text-[var(--muted)] mb-4">
               <ShoppingBag className="w-6 h-6" />
             </div>
-            <h2 className="text-xl font-bold text-white">Your cart is empty</h2>
-            <p className="text-xs text-white/50 mt-2 max-w-sm mx-auto">
+            <h2 className="text-xl font-bold text-[var(--foreground)]">Your cart is empty</h2>
+            <p className="text-xs text-[var(--muted)] mt-2 max-w-sm mx-auto">
               Explore the NexusRail collection to select hardware signers, workspace objects, and testnet essentials.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -248,34 +233,34 @@ export default function CartPage() {
                 onClick={() => {
                   FIGMA_DEFAULT_ITEMS.forEach((i) => addSkuToCart(i.sku));
                 }}
-                className="px-4 py-2 rounded-lg bg-white/10 border border-white/15 text-xs font-mono text-white hover:bg-white/20 transition-all"
+                className="px-4 py-2 rounded-lg nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--foreground)] hover:border-[var(--gold)]/50 transition-all cursor-pointer"
               >
-                Restore 3 Demo Essentials
+                Restore 3 Curated Essentials
               </button>
               <Link
                 href="/store"
-                className="px-4 py-2 rounded-lg bg-[#7FF8C6] text-[#052E20] text-xs font-mono font-bold hover:bg-[#6EE7B7] transition-all"
+                className="px-4 py-2 rounded-lg bg-[var(--gold)] text-black text-xs font-mono font-bold hover:bg-[var(--gold-bright)] transition-all cursor-pointer"
               >
                 Go to Store &rarr;
               </Link>
             </div>
           </div>
         ) : (
-          /* Two-Column Grid matching Figma Screen 4 */
+          /* Two-Column Grid */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-12 items-start">
             
             {/* Left Products Column (7.5 cols) */}
             <div className="lg:col-span-7 xl:col-span-8">
               
               {/* Table Column Headers */}
-              <div className="grid grid-cols-12 pb-3 border-b border-white/10 text-[11px] font-mono tracking-widest text-white/40 uppercase">
+              <div className="grid grid-cols-12 pb-3 border-b border-[var(--border)] text-[11px] font-mono tracking-widest text-[var(--muted)] uppercase">
                 <span className="col-span-7 sm:col-span-8">PRODUCT</span>
                 <span className="col-span-3 sm:col-span-2 text-center">QUANTITY</span>
                 <span className="col-span-2 text-right">TOTAL / USD</span>
               </div>
 
               {/* Product Rows */}
-              <div className="divide-y divide-white/10">
+              <div className="divide-y divide-[var(--border)]">
                 {items.map((item) => {
                   const { category, variant } = getItemDetails(item.sku, item.title);
                   const imgUrl = PRODUCT_IMAGE_MAP[item.sku] || '/products/rail-one.png';
@@ -285,9 +270,9 @@ export default function CartPage() {
                       key={item.sku}
                       className="py-6 sm:py-7 grid grid-cols-12 gap-4 items-center group transition-colors"
                     >
-                      {/* Product Thumbnail + Info (Cols 7 or 8) */}
+                      {/* Product Thumbnail + Info */}
                       <div className="col-span-7 sm:col-span-8 flex items-center gap-4 sm:gap-5">
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-[#111620] border border-white/10 overflow-hidden relative shrink-0">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl nexus-glass-surface border border-[var(--border)] overflow-hidden relative shrink-0">
                           <Image
                             src={imgUrl}
                             alt={item.title}
@@ -297,43 +282,43 @@ export default function CartPage() {
                           />
                         </div>
                         <div>
-                          <p className="text-[10px] font-mono tracking-[0.2em] text-white/40 uppercase">
+                          <p className="text-[10px] font-mono tracking-[0.2em] text-[var(--gold)] uppercase font-semibold">
                             {category}
                           </p>
-                          <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight mt-0.5">
+                          <h3 className="text-base sm:text-lg font-semibold text-[var(--foreground)] tracking-tight mt-0.5">
                             {item.title}
                           </h3>
-                          <p className="text-xs text-white/50 mt-0.5">
+                          <p className="text-xs text-[var(--muted)] mt-0.5">
                             {variant}
                           </p>
                           <button
                             type="button"
                             onClick={() => handleRemove(item.sku)}
-                            className="text-xs text-white/40 hover:text-rose-400 transition-colors mt-2.5 block text-left underline decoration-white/20 underline-offset-4 hover:decoration-rose-400"
+                            className="text-xs text-[var(--muted)] hover:text-rose-500 transition-colors mt-2.5 block text-left underline decoration-[var(--border)] underline-offset-4 hover:decoration-rose-500 cursor-pointer"
                           >
                             Remove
                           </button>
                         </div>
                       </div>
 
-                      {/* Quantity Stepper (Cols 3 or 2) */}
+                      {/* Quantity Stepper */}
                       <div className="col-span-3 sm:col-span-2 flex justify-center">
-                        <div className="flex items-center rounded border border-white/15 bg-[#10141A] px-2 py-1 gap-2.5">
+                        <div className="flex items-center rounded-lg border border-[var(--border)] nexus-glass-surface px-2.5 py-1 gap-2.5">
                           <button
                             type="button"
                             onClick={() => handleQtyChange(item.sku, item.qty - 1)}
-                            className="w-5 h-5 flex items-center justify-center text-white/50 hover:text-white transition-colors"
+                            className="w-5 h-5 flex items-center justify-center text-[var(--muted)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
                             aria-label="Decrease quantity"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="w-5 text-center text-xs font-mono font-medium text-white">
+                          <span className="w-5 text-center text-xs font-mono font-medium text-[var(--foreground)]">
                             {item.qty}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleQtyChange(item.sku, item.qty + 1)}
-                            className="w-5 h-5 flex items-center justify-center text-white/50 hover:text-white transition-colors"
+                            className="w-5 h-5 flex items-center justify-center text-[var(--muted)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
                             aria-label="Increase quantity"
                           >
                             <Plus className="w-3 h-3" />
@@ -341,9 +326,9 @@ export default function CartPage() {
                         </div>
                       </div>
 
-                      {/* Line Item Total (Cols 2) */}
+                      {/* Line Item Total */}
                       <div className="col-span-2 text-right">
-                        <span className="text-sm sm:text-base font-mono font-medium text-white tracking-tight">
+                        <span className="text-sm sm:text-base font-mono font-medium text-[var(--foreground)] tracking-tight">
                           ${((item.priceCents * item.qty) / 100).toFixed(2)}
                         </span>
                       </div>
@@ -353,68 +338,68 @@ export default function CartPage() {
               </div>
 
               {/* Promo Code Input Form */}
-              <div className="pt-8 border-t border-white/10">
+              <div className="pt-8 border-t border-[var(--border)]">
                 <form onSubmit={handleApplyPromo} className="flex flex-wrap items-center gap-3">
                   <input
                     type="text"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
                     placeholder="Promo code"
-                    className="w-64 sm:w-72 px-4 py-2.5 rounded bg-[#10141A] border border-white/15 text-xs font-mono text-white placeholder-white/30 focus:outline-none focus:border-[#7FF8C6]/60 transition-colors uppercase"
+                    className="w-64 sm:w-72 px-4 py-2.5 rounded-xl nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--foreground)] placeholder-[var(--muted)]/50 focus:outline-none focus:border-[var(--border-focus)] transition-colors uppercase"
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2.5 rounded bg-white/[0.06] border border-white/15 hover:bg-white/[0.12] text-xs font-mono text-white transition-colors font-medium"
+                    className="px-4 py-2.5 rounded-xl nexus-glass-surface hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)]/50 text-xs font-mono text-[var(--foreground)] transition-colors font-medium cursor-pointer"
                   >
                     Apply code
                   </button>
                 </form>
                 {appliedPromo && (
-                  <p className="text-[11px] font-mono text-[#7FF8C6] mt-2 flex items-center gap-1.5">
+                  <p className="text-[11px] font-mono text-[var(--gold)] mt-2 flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5" />
                     Promo code &quot;{appliedPromo}&quot; applied: 10% discount deducted from total.
                   </p>
                 )}
                 {promoError && (
-                  <p className="text-[11px] font-mono text-rose-400 mt-2">
+                  <p className="text-[11px] font-mono text-rose-500 mt-2">
                     {promoError}
                   </p>
                 )}
               </div>
 
-              {/* Demo Notice Green Banner */}
-              <div className="mt-8 p-3.5 sm:p-4 rounded-lg bg-[#092B21]/70 border border-[#104D38] flex items-center gap-3 text-xs font-mono text-[#7FF8C6]">
-                <ShieldCheck className="w-4 h-4 text-[#7FF8C6] shrink-0" />
-                <span className="text-[#A7F3D0] leading-relaxed">
-                  No shipping address needed. This is a demo order; no physical products will be sent.
+              {/* Order Notice Gold / Charcoal Banner */}
+              <div className="mt-8 p-3.5 sm:p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center gap-3 text-xs font-mono text-[var(--muted)]">
+                <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
+                <span className="text-[var(--foreground)]/90 leading-relaxed">
+                  Direct testnet verification. Instant ledger settlement across Stellar Horizon and XRPL Altnet.
                 </span>
               </div>
             </div>
 
             {/* Right Order Summary Column (4.5 cols) */}
             <div className="lg:col-span-5 xl:col-span-4">
-              <div className="rounded-xl bg-white dark:bg-[#10141A] border border-slate-200 dark:border-white/10 p-5 sm:p-7 shadow-xl">
+              <div className="rounded-2xl nexus-glass-card p-5 sm:p-7 shadow-xl">
                 
                 {/* Card Title & Subtitle */}
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                <h2 className="text-2xl font-bold text-[var(--foreground)] tracking-tight">
                   Order summary
                 </h2>
-                <div className="flex items-center justify-between text-xs font-mono text-slate-400 dark:text-white/40 tracking-wider mt-2 pb-5 border-b border-slate-100 dark:border-white/10">
-                  <span>NR-1048 · {totalItemCount} ITEMS</span>
+                <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)] tracking-wider mt-2 pb-5 border-b border-[var(--border)]">
+                  <span>PRE-CHECKOUT · {totalItemCount} ITEMS</span>
                   <span>USD</span>
                 </div>
 
                 {/* Subtotal Breakdown Lines */}
                 <div className="space-y-4 py-5 text-sm">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600 dark:text-white/60">Subtotal</span>
-                    <span className="font-mono text-slate-900 dark:text-white font-bold">
+                    <span className="text-[var(--muted)]">Subtotal</span>
+                    <span className="font-mono text-[var(--foreground)] font-bold">
                       ${(subtotalCents / 100).toFixed(2)}
                     </span>
                   </div>
 
                   {discountCents > 0 && (
-                    <div className="flex justify-between items-center text-emerald-600 dark:text-[#7FF8C6]">
+                    <div className="flex justify-between items-center text-[var(--gold)]">
                       <span>Promo code discount</span>
                       <span className="font-mono font-bold">
                         -${(discountCents / 100).toFixed(2)}
@@ -423,26 +408,26 @@ export default function CartPage() {
                   )}
 
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600 dark:text-white/60">Demo shipping</span>
-                    <span className="font-mono text-slate-900 dark:text-white/90">Free</span>
+                    <span className="text-[var(--muted)]">Fulfillment</span>
+                    <span className="font-mono text-[var(--foreground)]">Direct / Instant</span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600 dark:text-white/60">Estimated network fee</span>
-                    <span className="font-mono text-slate-500 dark:text-white/70">&lt; $0.001</span>
+                    <span className="text-[var(--muted)]">Estimated network fee</span>
+                    <span className="font-mono text-[var(--muted)]">&lt; $0.001</span>
                   </div>
                 </div>
 
                 {/* Total Row */}
-                <div className="pt-4 border-t border-slate-100 dark:border-white/10 flex justify-between items-baseline">
-                  <span className="text-lg text-slate-900 dark:text-white font-bold">Total</span>
-                  <span className="text-2xl sm:text-3xl font-mono font-bold text-slate-900 dark:text-white tracking-tight">
+                <div className="pt-4 border-t border-[var(--border)] flex justify-between items-baseline">
+                  <span className="text-lg text-[var(--foreground)] font-bold">Total</span>
+                  <span className="text-2xl sm:text-3xl font-mono font-bold text-[var(--gold-bright)] tracking-tight">
                     ${(totalCents / 100).toFixed(2)}
                   </span>
                 </div>
 
-                <p className="text-xs text-white/40 leading-relaxed mt-3 mb-6">
-                  Network fee is paid separately in XLM. Final amount confirmed before signing.
+                <p className="text-xs text-[var(--muted)] leading-relaxed mt-3 mb-6">
+                  Network fee is paid separately in XLM or XRP. Final amount confirmed before signing.
                 </p>
 
                 {/* Primary Continue CTA */}
@@ -450,7 +435,7 @@ export default function CartPage() {
                   type="button"
                   onClick={handleProceedToCheckout}
                   disabled={busy || items.length === 0}
-                  className="w-full py-3.5 sm:py-4 rounded-lg bg-[#7FF8C6] hover:bg-[#6EE7B7] active:scale-[0.99] text-[#052E20] font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[#7FF8C6]/10 disabled:opacity-50"
+                  className="w-full py-3.5 sm:py-4 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] active:scale-[0.99] text-black font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[var(--gold)]/20 disabled:opacity-50 cursor-pointer"
                 >
                   {busy ? (
                     <span>Locking rates...</span>
@@ -462,29 +447,29 @@ export default function CartPage() {
                   )}
                 </button>
 
-                {/* Testnet Assurance Pill */}
-                <div className="p-3.5 rounded-lg bg-[#0A261E]/80 border border-[#124B3B] flex items-center gap-2.5 mt-4 text-xs font-mono text-[#7FF8C6]">
-                  <ShieldCheck className="w-4 h-4 text-[#7FF8C6] shrink-0" />
-                  <span className="text-[#A7F3D0]">
-                    Testnet purchase. No real payment or delivery.
+                {/* Security Assurance Pill */}
+                <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center gap-2.5 mt-4 text-xs font-mono text-[var(--gold)]">
+                  <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
+                  <span className="text-[var(--foreground)]/90">
+                    Dual-rail cryptographic settlement.
                   </span>
                 </div>
 
                 {/* Available Payment Rails */}
-                <div className="mt-7 pt-6 border-t border-white/10">
-                  <p className="text-[11px] font-mono tracking-widest uppercase text-white/40 mb-3">
+                <div className="mt-7 pt-6 border-t border-[var(--border)]">
+                  <p className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)] mb-3">
                     AVAILABLE PAYMENT RAILS
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded bg-[#092B21] border border-[#165D46] text-[#7FF8C6] text-[10px] font-mono font-medium tracking-wide">
-                      STELLAR TESTNET
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-[10px] font-mono font-medium tracking-wide">
+                      STELLAR HORIZON
                     </span>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded bg-[#092B21] border border-[#165D46] text-[#7FF8C6] text-[10px] font-mono font-medium tracking-wide">
-                      XRPL TESTNET
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-[10px] font-mono font-medium tracking-wide">
+                      XRPL ALTNET
                     </span>
                   </div>
-                  <p className="text-xs text-white/40 leading-relaxed mt-3">
-                    Review the exact test-asset amount, quote expiry, and transaction fee before connecting your wallet.
+                  <p className="text-xs text-[var(--muted)] leading-relaxed mt-3">
+                    Review the exact asset amount, quote expiry, and transaction fee before connecting your wallet.
                   </p>
                 </div>
 
@@ -495,14 +480,6 @@ export default function CartPage() {
         )}
 
       </main>
-
-      {/* Figma Screen 4 Bottom Status Bar */}
-      <footer className="border-t border-white/10 py-5 bg-[#05070A]">
-        <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-white/40">
-          <p>© 2026 NexusRail · Demo environment</p>
-          <p>Test assets only. No real funds or fulfillment.</p>
-        </div>
-      </footer>
 
     </div>
   );

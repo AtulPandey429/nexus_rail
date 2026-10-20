@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
+import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
 import { readSession, SessionUser, onSessionChange, saveSession, clearSession } from '@/lib/shop';
 import { useLiveExchangeRates } from '@/lib/rates';
 import { Nexus3DCanvas } from '@/components/Nexus3DCanvas';
@@ -43,8 +44,8 @@ export default function AdminConsolePage() {
   // Live Orders state
   const [liveOrders, setLiveOrders] = useState<any[]>([
     {
-      id: 'NR-1048',
-      orderNumber: 'NR-1048',
+      id: '#NR8K2P9X',
+      orderNumber: '#NR8K2P9X',
       buyerEmail: 'alex@nexusrail.com',
       rail: 'Stellar (XLM)',
       amount: '200.02 XLM',
@@ -54,8 +55,8 @@ export default function AdminConsolePage() {
       createdAt: 'Just now',
     },
     {
-      id: 'NR-1047',
-      orderNumber: 'NR-1047',
+      id: 'NR-2026-000122',
+      orderNumber: 'NR-2026-000122',
       buyerEmail: 'sarah.dev@crypto.org',
       rail: 'XRPL (XRP)',
       amount: '58.00 XRP',
@@ -158,25 +159,25 @@ export default function AdminConsolePage() {
   // 1. RESTRICTED AUTHENTICATION GATE IF NOT ADMIN
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-[#07090C] text-[#F0F4F8] flex items-center justify-center p-4 selection:bg-[#7FF8C6] selection:text-black relative overflow-hidden">
+      <div className="min-h-screen bg-transparent text-[var(--foreground)] flex items-center justify-center p-4 selection:bg-[var(--gold)]/30 selection:text-[var(--foreground)] relative overflow-hidden">
         {/* Ambient 3D Particle Canvas */}
         <div className="absolute inset-0 pointer-events-none opacity-30 flex items-center justify-center">
           <Nexus3DCanvas variant="hero" className="w-full h-full max-w-2xl" />
         </div>
 
-        <div className="w-full max-w-md p-8 sm:p-9 rounded-3xl bg-[#0E131E]/90 border border-white/10 shadow-2xl backdrop-blur-2xl relative z-10 space-y-6">
+        <div className="w-full max-w-md p-8 sm:p-9 rounded-3xl nexus-glass-card border border-[var(--border)] shadow-2xl relative z-10 space-y-6">
           <div className="flex flex-col items-center text-center space-y-3">
-            <div className="w-14 h-14 rounded-2xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center shadow-lg shadow-amber-400/10">
-              <ShieldCheck className="w-7 h-7 text-amber-400" />
+            <div className="w-14 h-14 rounded-2xl bg-[var(--gold)]/10 border border-[var(--gold)]/30 flex items-center justify-center shadow-lg shadow-[var(--gold)]/10">
+              <ShieldCheck className="w-7 h-7 text-[var(--gold)]" />
             </div>
             <div>
-              <p className="text-[10px] font-mono tracking-widest uppercase text-amber-400 font-bold">
+              <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--gold)] font-bold">
                 RESTRICTED OPERATOR ZONE
               </p>
-              <h1 className="text-2xl font-bold text-white tracking-tight mt-1">
+              <h1 className="text-2xl font-bold text-[var(--foreground)] tracking-tight mt-1">
                 NexusRail Admin Console
               </h1>
-              <p className="text-xs text-white/50 mt-1 max-w-xs">
+              <p className="text-xs text-[var(--muted)] mt-1 max-w-xs">
                 Restricted access for dual-rail liquidity, live order fulfillment, and autonomous agent controls.
               </p>
             </div>
@@ -184,54 +185,54 @@ export default function AdminConsolePage() {
 
           <form onSubmit={handleAdminLogin} className="space-y-4 font-mono text-xs">
             <div>
-              <label className="text-white/60 block mb-1.5 uppercase tracking-wider text-[10px]">Operator Email</label>
+              <label className="text-[var(--muted)] block mb-1.5 uppercase tracking-wider text-[10px]">Operator Email</label>
               <input
                 type="email"
                 value={adminEmailInput}
                 onChange={(e) => setAdminEmailInput(e.target.value)}
                 placeholder="admin@nexusrail.com"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-amber-400/60"
+                className="w-full px-3.5 py-2.5 rounded-xl nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] placeholder-[var(--muted)]/40 focus:outline-none focus:border-[var(--border-focus)]"
               />
             </div>
 
             <div>
-              <label className="text-white/60 block mb-1.5 uppercase tracking-wider text-[10px]">Access Key / Password</label>
+              <label className="text-[var(--muted)] block mb-1.5 uppercase tracking-wider text-[10px]">Access Key / Password</label>
               <input
                 type="password"
                 value={adminPassInput}
                 onChange={(e) => setAdminPassInput(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-amber-400/60"
+                className="w-full px-3.5 py-2.5 rounded-xl nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] placeholder-[var(--muted)]/40 focus:outline-none focus:border-[var(--border-focus)]"
               />
             </div>
 
             {adminAuthError && (
-              <p className="text-rose-400 text-xs font-mono">{adminAuthError}</p>
+              <p className="text-rose-500 text-xs font-mono">{adminAuthError}</p>
             )}
 
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-400/20 flex items-center justify-center gap-2 active:scale-95"
+              className="w-full py-3 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-[var(--gold)]/20 flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
             >
               <Lock className="w-3.5 h-3.5" />
               <span>{isLoggingIn ? 'Authenticating...' : 'Sign In as Operator'}</span>
             </button>
           </form>
 
-          <div className="pt-2 border-t border-white/10">
+          <div className="pt-2 border-t border-[var(--border)]">
             <button
               type="button"
               onClick={() => handleAdminLogin()}
-              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-mono flex items-center justify-center gap-2 transition-all group"
+              className="w-full py-2.5 rounded-xl nexus-glass-surface hover:bg-[var(--card-hover)] border border-[var(--border)] text-[var(--foreground)] text-xs font-mono flex items-center justify-center gap-2 transition-all group cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+              <Sparkles className="w-3.5 h-3.5 text-[var(--gold)] group-hover:rotate-12 transition-transform" />
               <span>1-Click Demo Operator Access (admin@nexusrail.com)</span>
             </button>
           </div>
 
           <div className="text-center">
-            <Link href="/" className="text-[11px] font-mono text-white/40 hover:text-white transition-colors">
+            <Link href="/" className="text-[11px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors">
               &larr; Return to Public Storefront
             </Link>
           </div>
@@ -242,21 +243,21 @@ export default function AdminConsolePage() {
 
   // 2. FULL AUTHORIZED ADMIN CONSOLE
   return (
-    <div className="min-h-screen bg-[#07090C] text-[#F0F4F8] font-sans antialiased selection:bg-[#7FF8C6] selection:text-black flex">
+    <div className="min-h-screen bg-transparent text-[var(--foreground)] font-sans antialiased selection:bg-[var(--gold)]/30 selection:text-[var(--foreground)] flex">
       
       {/* 1. Left Sidebar Navigation */}
-      <aside className="w-64 border-r border-white/10 bg-[#07090C] flex flex-col justify-between shrink-0 hidden md:flex sticky top-0 h-screen p-5">
+      <aside className="w-64 border-r border-[var(--border)] bg-[var(--surface-solid)] flex flex-col justify-between shrink-0 hidden md:flex sticky top-0 h-screen p-5">
         
         <div className="space-y-6">
           {/* Brand Logo */}
           <div>
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-5 h-5 rounded bg-[#0E131E] border border-[#1C2638] flex items-center justify-center">
-                <span className="w-1.5 h-1.5 rounded-sm bg-[#7FF8C6]" />
+              <div className="w-5 h-5 rounded nexus-glass-surface border border-[var(--border)] flex items-center justify-center">
+                <span className="w-1.5 h-1.5 rounded-sm bg-[var(--gold)]" />
               </div>
-              <span className="text-base font-bold text-white tracking-tight lowercase font-mono">nexusrail</span>
+              <span className="text-base font-bold text-[var(--foreground)] tracking-tight lowercase font-mono">nexusrail</span>
             </Link>
-            <p className="text-[10px] font-mono tracking-widest uppercase text-amber-400 mt-1 pl-7 font-bold">
+            <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--gold)] mt-1 pl-7 font-bold">
               👑 ADMIN OPERATOR
             </p>
           </div>
@@ -279,10 +280,10 @@ export default function AdminConsolePage() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id as any)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left ${
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left cursor-pointer ${
                     isActive
-                      ? 'bg-[#092B21] text-[#7FF8C6] font-semibold border border-[#165D46]'
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                      ? 'bg-[var(--gold)]/15 text-[var(--gold-bright)] font-semibold border border-[var(--gold)]/40 shadow-sm'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card)]'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -293,16 +294,16 @@ export default function AdminConsolePage() {
           </nav>
 
           {/* Secondary Links */}
-          <div className="pt-4 border-t border-white/10 space-y-1 text-xs font-mono text-white/40">
-            <Link href="/admin/orders" className="flex items-center justify-between px-3 py-1.5 hover:text-white transition-colors">
-              <span>Order Fulfillment Desk</span>
+          <div className="pt-4 border-t border-[var(--border)] space-y-1 text-xs font-mono text-[var(--muted)]">
+            <Link href="/orders" className="flex items-center justify-between px-3 py-1.5 hover:text-[var(--foreground)] transition-colors">
+              <span>Customer Orders Desk</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
-            <Link href="/app/swap" className="flex items-center justify-between px-3 py-1.5 hover:text-white transition-colors">
+            <Link href="/app/swap" className="flex items-center justify-between px-3 py-1.5 hover:text-[var(--foreground)] transition-colors">
               <span>Cross-Chain Swap Desk</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
-            <Link href="https://docs.stellar.org" target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 hover:text-white transition-colors">
+            <Link href="https://docs.stellar.org" target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 hover:text-[var(--foreground)] transition-colors">
               <span>Stellar Testnet Docs</span>
               <ExternalLink className="w-3 h-3" />
             </Link>
@@ -310,17 +311,17 @@ export default function AdminConsolePage() {
         </div>
 
         {/* Test Environment Card at Bottom of Sidebar */}
-        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10 space-y-1 text-[11px] font-mono">
-          <div className="flex items-center gap-2 text-[#7FF8C6]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#7FF8C6]" />
+        <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-1 text-[11px] font-mono">
+          <div className="flex items-center gap-2 text-[var(--gold)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
             <span className="font-bold uppercase tracking-wider text-[10px]">AUTHENTIC TESTNET</span>
           </div>
-          <p className="text-white/40 leading-relaxed text-[10px]">
+          <p className="text-[var(--muted)] leading-relaxed text-[10px]">
             Connected to Stellar Horizon & XRPL Altnet Ledgers.
           </p>
-          <div className="pt-2 flex items-center justify-between text-[10px] text-white/30">
+          <div className="pt-2 flex items-center justify-between text-[10px] text-[var(--muted)]">
             <span>OPERATOR ACTIVE</span>
-            <span className="text-amber-400 font-bold">ADMIN ROLE</span>
+            <span className="text-[var(--gold)] font-bold">ADMIN ROLE</span>
           </div>
         </div>
 
@@ -330,10 +331,10 @@ export default function AdminConsolePage() {
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* Top App Chrome Header */}
-        <header className="h-16 border-b border-white/10 px-6 sm:px-8 flex items-center justify-between shrink-0 bg-[#07090C]">
+        <header className="h-16 border-b border-[var(--border)] px-6 sm:px-8 flex items-center justify-between shrink-0 bg-[var(--surface-solid)]">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-white/40">Workspace /</span>
-            <span className="text-xs font-mono text-white font-bold uppercase">{activeTab}</span>
+            <span className="text-xs font-mono text-[var(--muted)]">Workspace /</span>
+            <span className="text-xs font-mono text-[var(--foreground)] font-bold uppercase">{activeTab}</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -401,7 +402,7 @@ export default function AdminConsolePage() {
                 <div className="p-5 rounded-xl bg-[#10141A] border border-white/10 space-y-1">
                   <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">GROSS PAYMENT VOLUME</p>
                   <p className="text-2xl sm:text-3xl font-mono font-bold text-white tracking-tight">$184,920.40</p>
-                  <p className="text-xs font-mono text-[#7FF8C6] pt-1">↗ 18.6% vs prior 7d</p>
+                  <p className="text-xs font-mono text-[#F2D675] pt-1">↗ 18.6% vs prior 7d</p>
                 </div>
                 <div className="p-5 rounded-xl bg-[#10141A] border border-white/10 space-y-1">
                   <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">VERIFIED ORDERS</p>
@@ -411,12 +412,12 @@ export default function AdminConsolePage() {
                 <div className="p-5 rounded-xl bg-[#10141A] border border-white/10 space-y-1">
                   <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">MEDIAN FINALITY</p>
                   <p className="text-2xl sm:text-3xl font-mono font-bold text-white tracking-tight">3.2s</p>
-                  <p className="text-xs font-mono text-[#7FF8C6] pt-1">Fast dual-rail confirmation</p>
+                  <p className="text-xs font-mono text-[#F2D675] pt-1">Fast dual-rail confirmation</p>
                 </div>
                 <div className="p-5 rounded-xl bg-[#10141A] border border-white/10 space-y-1">
                   <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">LEDGER INVARIANT</p>
                   <p className="text-2xl sm:text-3xl font-mono font-bold text-white tracking-tight">$0.00</p>
-                  <p className="text-xs font-mono text-[#7FF8C6] pt-1">296 entries · 100% balanced</p>
+                  <p className="text-xs font-mono text-[#F2D675] pt-1">296 entries · 100% balanced</p>
                 </div>
               </div>
 
@@ -458,14 +459,14 @@ export default function AdminConsolePage() {
                         <span className="text-white/60">Stellar Platform Vault</span>
                         <span className="text-[#00E5FF] font-bold">10,000.00 XLM</span>
                       </div>
-                      <p className="text-[10px] text-white/40 font-mono truncate">GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC</p>
+                      <p className="text-[10px] text-white/40 font-mono truncate">{PLATFORM_STELLAR_VAULT}</p>
                     </div>
                     <div className="p-3.5 rounded-lg bg-white/5 border border-white/10 space-y-1">
                       <div className="flex justify-between">
                         <span className="text-white/60">XRPL Platform Vault</span>
                         <span className="text-[#0081F2] font-bold">100.00 XRP</span>
                       </div>
-                      <p className="text-[10px] text-white/40 font-mono truncate">rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp</p>
+                      <p className="text-[10px] text-white/40 font-mono truncate">{PLATFORM_XRPL_VAULT}</p>
                     </div>
                   </div>
                 </div>
@@ -483,7 +484,7 @@ export default function AdminConsolePage() {
                 </div>
                 <Link
                   href="/admin/orders"
-                  className="px-4 py-2 rounded-xl bg-[#7FF8C6] text-black font-bold text-xs font-mono flex items-center gap-1.5 self-start hover:bg-[#68e0b0] transition-colors"
+                  className="px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-bold text-xs font-mono flex items-center gap-1.5 self-start hover:bg-[#68e0b0] transition-colors"
                 >
                   <ShoppingCart className="w-3.5 h-3.5" />
                   <span>Open Fulfillment Desk</span>
@@ -513,7 +514,7 @@ export default function AdminConsolePage() {
                         <td className="py-3.5">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                             ord.status === 'PAID' || ord.status === 'SETTLED' || ord.status === 'FULFILLED'
-                              ? 'bg-[#092B21] border-[#165D46] text-[#7FF8C6]'
+                              ? 'bg-[#D4AF37]/15 border-[#D4AF37]/30 text-[#F2D675]'
                               : 'bg-amber-400/10 border-amber-400/30 text-amber-300'
                           }`}>
                             {ord.status}
@@ -527,7 +528,7 @@ export default function AdminConsolePage() {
                             href={ord.explorerUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[#7FF8C6] hover:underline"
+                            className="inline-flex items-center gap-1 text-[#F2D675] hover:underline"
                           >
                             <span>Verify</span>
                             <ExternalLink className="w-3 h-3" />
@@ -548,7 +549,7 @@ export default function AdminConsolePage() {
                 <div className="rounded-xl bg-[#10141A] border border-white/10 p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[#00E5FF] font-bold text-sm">Stellar Testnet Rail</span>
-                    <span className="px-2 py-0.5 rounded bg-[#092B21] border border-[#165D46] text-[#7FF8C6] text-[10px] font-bold">HEALTHY · 210ms</span>
+                    <span className="px-2 py-0.5 rounded bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#F2D675] text-[10px] font-bold">HEALTHY · 210ms</span>
                   </div>
                   <div className="space-y-2 text-xs font-mono">
                     <div className="flex justify-between text-white/60">
@@ -561,7 +562,7 @@ export default function AdminConsolePage() {
                     </div>
                     <div className="flex justify-between text-white/60">
                       <span>Funded Hot Balance:</span>
-                      <span className="text-[#7FF8C6] font-bold">10,000.00 XLM</span>
+                      <span className="text-[#F2D675] font-bold">10,000.00 XLM</span>
                     </div>
                   </div>
                 </div>
@@ -569,7 +570,7 @@ export default function AdminConsolePage() {
                 <div className="rounded-xl bg-[#10141A] border border-white/10 p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[#0081F2] font-bold text-sm">XRPL Altnet Rail</span>
-                    <span className="px-2 py-0.5 rounded bg-[#092B21] border border-[#165D46] text-[#7FF8C6] text-[10px] font-bold">HEALTHY · 318ms</span>
+                    <span className="px-2 py-0.5 rounded bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#F2D675] text-[10px] font-bold">HEALTHY · 318ms</span>
                   </div>
                   <div className="space-y-2 text-xs font-mono">
                     <div className="flex justify-between text-white/60">
@@ -578,11 +579,11 @@ export default function AdminConsolePage() {
                     </div>
                     <div className="flex justify-between text-white/60">
                       <span>Treasury Vault:</span>
-                      <span className="text-white">rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp</span>
+                      <span className="text-white truncate max-w-[200px]">{PLATFORM_XRPL_VAULT}</span>
                     </div>
                     <div className="flex justify-between text-white/60">
                       <span>Funded Hot Balance:</span>
-                      <span className="text-[#7FF8C6] font-bold">100.00 XRP</span>
+                      <span className="text-[#F2D675] font-bold">100.00 XRP</span>
                     </div>
                   </div>
                 </div>
@@ -595,7 +596,7 @@ export default function AdminConsolePage() {
             <div className="rounded-xl bg-[#10141A] border border-white/10 p-6 space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-bold text-white">Live Oracle FX Quotes</h3>
-                <span className="text-xs font-mono text-[#7FF8C6]">● Live Feed Connected</span>
+                <span className="text-xs font-mono text-[#F2D675]">● Live Feed Connected</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10">
@@ -608,7 +609,7 @@ export default function AdminConsolePage() {
                 </div>
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                   <span className="text-white/40 text-[10px] uppercase">XRP / XLM Cross Rate</span>
-                  <p className="text-2xl font-bold text-[#7FF8C6] mt-1">{(xrpUsd / (xlmUsd || 1)).toFixed(4)}</p>
+                  <p className="text-2xl font-bold text-[#F2D675] mt-1">{(xrpUsd / (xlmUsd || 1)).toFixed(4)}</p>
                 </div>
               </div>
             </div>
@@ -641,7 +642,7 @@ export default function AdminConsolePage() {
                   type="button"
                   onClick={handleConfirmAgentRefresh}
                   disabled={isExecutingAgent}
-                  className="px-4 py-2 rounded-xl bg-[#7FF8C6] hover:bg-[#68e0b0] text-black font-bold text-xs font-mono transition-all flex items-center gap-2"
+                  className="px-4 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#68e0b0] text-black font-bold text-xs font-mono transition-all flex items-center gap-2"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>{isExecutingAgent ? 'Executing Proposal...' : 'Approve & Execute'}</span>

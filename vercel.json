@@ -1,5 +1,6 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build:shared && npm run build:web",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "pnpm --filter @nexusrail/shared build && pnpm --filter @nexusrail/web build",
   "outputDirectory": "apps/web/.next"
 }
