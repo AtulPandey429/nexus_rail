@@ -7,6 +7,7 @@ import { walletRouter } from './routes/wallet.js';
 import { checkoutRouter } from './routes/checkout.js';
 import { cryptoRouter } from './routes/crypto.js';
 import { agentRouter } from './routes/agent.js';
+import { showdownRouter } from './routes/showdowns.js';
 import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import { SocketService } from './sockets/server.js';
 import type { HealthResponse } from '@nexusrail/shared';
@@ -24,6 +25,7 @@ app.use('/api/v1/wallet', walletRouter);
 app.use('/api/v1/checkout', checkoutRouter);
 app.use('/api/v1/crypto', cryptoRouter);
 app.use('/api/v1/agent', agentRouter);
+app.use('/api/v1/showdowns', showdownRouter);
 
 // Health Check Endpoint
 app.get('/api/v1/health', (_req: Request, res: Response) => {
