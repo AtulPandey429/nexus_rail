@@ -8,6 +8,7 @@ import { checkoutRouter } from './routes/checkout.js';
 import { cryptoRouter } from './routes/crypto.js';
 import { agentRouter } from './routes/agent.js';
 import { showdownRouter } from './routes/showdowns.js';
+import { reviewRouter } from './routes/reviews.js';
 import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import { SocketService } from './sockets/server.js';
 import type { HealthResponse } from '@nexusrail/shared';
@@ -20,6 +21,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/v1/products', productRouter);
+app.use('/api/v1/products', reviewRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/wallet', walletRouter);
 app.use('/api/v1/checkout', checkoutRouter);
