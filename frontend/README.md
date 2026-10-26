@@ -1,4 +1,4 @@
-# NexusRail Web Client (`@nexusrail/web`)
+# NexusRail Frontend (`@nexusrail/frontend`)
 
 [![Next.js](https://img.shields.io/badge/Next.js-15.2.3-black?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.0.0-61dafb?logo=react)](https://react.dev/)
@@ -40,7 +40,7 @@ The official web frontend for **NexusRail**, built with Next.js 15 App Router, R
 ## Page Structure
 
 ```
-apps/web/src/app/
+frontend/src/app/
 ├── layout.tsx            # Global layout (Header, Footer, ThemeProvider)
 ├── page.tsx              # Landing page
 ├── store/page.tsx        # Store catalog with search and category filters
@@ -66,7 +66,7 @@ npm install
 ```
 
 ### 2. Environment Configuration
-Create `.env.local` inside `apps/web/`:
+Create `.env.local` inside `frontend/`:
 ```env
 API_SERVER_URL=http://localhost:4000
 NEXT_PUBLIC_API_URL=http://localhost:4000
@@ -90,4 +90,4 @@ npm run build
 - **Styling**: Tailwind CSS 3.4.17
 - **Icons**: Lucide React
 - **Web3**: `@stellar/freighter-api`, `@gemwallet/api`
-- **Shared Package**: `@nexusrail/shared`
+- **Shared Types**: Embedded in `src/types/index.ts` ($NR Token AMM & Multi-Rail types)
