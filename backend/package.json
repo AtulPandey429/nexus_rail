@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "postbuild": "node -e \"if(process.env.RENDER||require('fs').existsSync('/opt/render')){const fs=require('fs');fs.mkdirSync('../apps/api',{recursive:true});fs.writeFileSync('../apps/api/package.json',JSON.stringify({name:'@nexusrail/api',version:'1.0.0',private:true,type:'module',scripts:{start:'node ../../backend/dist/server.js'}},null,2));const pkg=JSON.parse(fs.readFileSync('../package.json','utf8'));if(!pkg.workspaces.includes('apps/api')){pkg.workspaces.push('apps/api');fs.writeFileSync('../package.json',JSON.stringify(pkg,null,2));}}\"",
     "test": "node --import tsx --test --test-reporter spec \"test/**/*.test.ts\"",
     "start": "node dist/server.js"
   },

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node -e \"if(process.env.VERCEL||require('fs').existsSync('/vercel')){const fs=require('fs');fs.mkdirSync('../apps/web',{recursive:true});fs.cpSync('.next','../apps/web/.next',{recursive:true});}\"",
     "start": "next start",
     "lint": "next lint"
   },
