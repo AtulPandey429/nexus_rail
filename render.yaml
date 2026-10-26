@@ -4,6 +4,15 @@ services:
     env: node
     buildCommand: npm install && npm run build:backend
     startCommand: npm run start:backend
+    buildFilter:
+      paths:
+        - backend/**
+        - package.json
+        - package-lock.json
+        - render.yaml
+      ignoredPaths:
+        - frontend/**
+        - docs/**
     envVars:
       - key: PORT
         value: 4000
