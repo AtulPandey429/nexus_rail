@@ -3,28 +3,33 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "NexusRail — Flagship Multi-Rail Commerce & AI Agent Desk Monorepo",
+  "description": "NexusRail — Clean Frontend & Backend Multi-Rail Commerce Platform",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "frontend",
+    "backend"
   ],
   "scripts": {
-    "dev:api": "npm run dev --workspace=@nexusrail/api",
-    "dev:web": "npm run dev --workspace=@nexusrail/web",
-    "build:shared": "npm run build --workspace=@nexusrail/shared",
-    "build:api": "npm run build --workspace=@nexusrail/api",
-    "build:web": "npm run build --workspace=@nexusrail/web",
-    "build": "npm run build:shared && npm run build:api && npm run build:web",
-    "start:api": "npm run start --workspace=@nexusrail/api",
-    "start:web": "npm run start --workspace=@nexusrail/web",
-    "test": "npm run test --workspace=@nexusrail/api"
+    "dev:frontend": "npm run dev --workspace=@nexusrail/frontend",
+    "dev:backend": "npm run dev --workspace=@nexusrail/backend",
+    "dev:web": "npm run dev:frontend",
+    "dev:api": "npm run dev:backend",
+    "build:frontend": "npm run build --workspace=@nexusrail/frontend",
+    "build:backend": "npm run build --workspace=@nexusrail/backend",
+    "build:shared": "node -e \"console.log('Shared types embedded directly in frontend/src/types and backend/src/types')\"",
+    "build:web": "npm run build:frontend",
+    "build:api": "npm run build:backend",
+    "build": "npm run build:backend && npm run build:frontend",
+    "start:frontend": "npm run start --workspace=@nexusrail/frontend",
+    "start:backend": "npm run start --workspace=@nexusrail/backend",
+    "start:web": "npm run start:frontend",
+    "start:api": "npm run start:backend",
+    "test": "npm run test --workspace=@nexusrail/backend"
   },
   "devDependencies": {
     "next": "^15.2.3",
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.117.3",
     "mongodb": "^7.7.0"
   }
 }

@@ -98,32 +98,39 @@ flowchart TD
 
 ```
 nexus-rail/
-├── apps/
-│   ├── web/                    # Next.js 15 Web Application
-│   │   ├── public/             # Optimized WebP assets and favicons
-│   │   ├── src/
-│   │   │   ├── app/            # App Router pages and proxy routes
-│   │   │   ├── components/     # UI components (NexusLogo, AgentDesk, MultiRail)
-│   │   │   └── lib/            # Utilities, wallet integrations, and client state
-│   │   └── README.md           # Frontend Documentation
-│   │
-│   └── api/                    # Express.js Microservice
-│       ├── src/
-│       │   ├── agent/          # Tool registry and proposal lock management
-│       │   ├── config/         # Environment schema validation
-│       │   ├── middleware/     # Auth and security middlewares
-│       │   ├── routes/         # REST API endpoints
-│       │   ├── services/       # Stellar, XRPL, Stripe, AI, and MongoDB services
-│       │   └── workers/        # Ledger watcher and keep-alive workers
-│       └── README.md           # Backend Documentation
+├── frontend/                   # Next.js 15 Web Application (Vercel)
+│   ├── public/                 # Optimized WebP assets and favicons
+│   ├── src/
+│   │   ├── app/                # App Router pages (store, cart, checkout, swap, admin, profile, receipt, guide, payment)
+│   │   ├── components/         # Organized by domain:
+│   │   │   ├── layout/         # AppShell, SiteHeader, SiteFooter, ThemeProvider
+│   │   │   ├── wallet/         # WalletConnectModal, WalletIcons, AuthModal
+│   │   │   ├── checkout/       # MultiRailCheckoutSelector, StripeCheckoutModal, TransactionSafetyCenter
+│   │   │   ├── agent/          # AgentDeskPanel, FloatingAIAgentWidget, RobotMascot
+│   │   │   └── ui/             # NexusLogo, Nexus3DCanvas, ProductShowdownCard, RwaGoldVaultCard
+│   │   ├── lib/                # Utilities, wallet integrations, and client state
+│   │   └── types/              # Self-contained Frontend TypeScript definitions
+│   ├── vercel.json             # Standalone Vercel configuration
+│   └── README.md               # Frontend Documentation
 │
-├── packages/
-│   └── shared/                 # Shared TypeScript models, schemas, and interfaces
+├── backend/                    # Express.js Microservice (Render)
+│   ├── src/
+│   │   ├── agent/              # Tool registry and proposal lock management
+│   │   ├── config/             # Environment schema validation
+│   │   ├── middleware/         # Auth and security middlewares
+│   │   ├── routes/             # REST API endpoints
+│   │   ├── services/           # Stellar, XRPL, Stripe, $NR AMM, AI, and MongoDB services
+│   │   ├── types/              # Self-contained Backend TypeScript definitions & Zod schemas
+│   │   └── workers/            # Ledger watcher, Webhook DLQ, and keep-alive workers
+│   ├── render.yaml             # Standalone Render configuration
+│   └── README.md               # Backend Documentation
 │
-├── docs/                       # Comprehensive System Documentation
+├── docs/                       # System & Module-by-Module Documentation (docs/modules/)
 ├── openapi.yaml                # OpenAPI 3.0.3 Specification
 ├── .env.example                # Environment variable template
-├── package.json                # Workspaces configuration
+├── vercel.json                 # Root Vercel configuration
+├── render.yaml                 # Root Render configuration
+├── package.json                # Workspaces configuration (frontend & backend)
 └── README.md                   # Project overview
 ```
 
@@ -159,30 +166,30 @@ APP_URL=http://localhost:3000
 API_SERVER_URL=http://localhost:4000
 ```
 
-### 4. Build Shared Types & Packages
+### 4. Build Backend & Frontend
 ```bash
-npm run build:shared
-npm run build:api
+npm run build:backend
+npm run build:frontend
 ```
 
 ### 5. Run Development Servers
 ```bash
 # Terminal 1: Backend API (http://localhost:4000)
-npm run dev:api
+npm run dev:backend
 
 # Terminal 2: Next.js Frontend (http://localhost:3000)
-npm run dev:web
+npm run dev:frontend
 ```
 
 ---
 
 ## 📜 Scripts
 
-- `npm run build`: Compiles shared packages, backend TypeScript, and Next.js frontend.
-- `npm run dev:api`: Starts backend API in development mode with live reload.
-- `npm run dev:web`: Starts Next.js development server.
-- `npm run build:api`: Compiles the backend API (`tsc`).
-- `npm run build:web`: Builds the Next.js frontend for production.
+- `npm run build`: Compiles backend TypeScript and builds the Next.js frontend.
+- `npm run dev:backend` (alias `dev:api`): Starts backend API in development mode with live reload.
+- `npm run dev:frontend` (alias `dev:web`): Starts Next.js development server.
+- `npm run build:backend` (alias `build:api`): Compiles the backend API (`tsc`).
+- `npm run build:frontend` (alias `build:web`): Builds the Next.js frontend for production.
 
 ---
 
