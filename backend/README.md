@@ -1,4 +1,4 @@
-# NexusRail Backend Engine (`@nexusrail/api`)
+# NexusRail Backend Service (`@nexusrail/backend`)
 
 [![Express](https://img.shields.io/badge/Express-4.21.2-lightgrey?logo=express)](https://expressjs.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.2-blue?logo=typescript)](https://www.typescriptlang.org/)
@@ -113,9 +113,9 @@ APP_URL=http://localhost:3000
 ### 3. Run Development Server
 ```bash
 # From monorepo root:
-npm run dev:api
+npm run dev:backend
 
-# Or from apps/api:
+# Or from backend/:
 npm run dev
 ```
 
