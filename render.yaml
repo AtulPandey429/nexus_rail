@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: nexusrail-api
+    env: node
+    buildCommand: npm install && npm run build:shared && npm run build:api
+    startCommand: npm run start --workspace=apps/api
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
