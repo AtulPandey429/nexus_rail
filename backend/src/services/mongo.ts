@@ -1,5 +1,6 @@
 import { MongoClient, Db, Collection } from 'mongodb';
 import { env } from '../config/env.js';
+import type { AssetSymbol } from '../types/index.js';
 
 export interface MongoUserDoc {
   _id?: any;
@@ -101,8 +102,39 @@ export interface MongoOrderDoc {
   nr_discount_cents?: number;
   paid_nr_micro?: number;
   nr_spot_rate_usd?: number;
+  portfolio_credited?: boolean;
+  portfolio_credited_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface MongoUserHoldingDoc {
+  _id?: any;
+  id: string;
+  user_id: string;
+  symbol: AssetSymbol;
+  label: string;
+  quantity: number;
+  total_cost_cents: number;
+  avg_buy_price_cents: number;
+  realized_pnl_cents: number;
+  updated_at: string;
+}
+
+export type PortfolioEventType = 'ACQUIRE_ORDER' | 'CASHBACK_REWARD' | 'SWAP_IN' | 'SELL_CASHOUT';
+
+export interface MongoPortfolioEventDoc {
+  _id?: any;
+  id: string;
+  user_id: string;
+  type: PortfolioEventType;
+  symbol: AssetSymbol;
+  quantity_delta: number;
+  unit_price_cents: number;
+  total_usd_cents: number;
+  fee_cents: number;
+  reference_id: string;
+  created_at: string;
 }
 
 export interface MongoWalletTxDoc {
@@ -304,6 +336,12 @@ export class MongoService {
       // 10. $NR Token AMM Pool & Price History
       await db.collection('token_pool').createIndex({ symbol: 1 }, { unique: true });
       await db.collection('token_price_history').createIndex({ symbol: 1, created_at: -1 });
+
+      // 11. User Holdings & Portfolio Events
+      await db.collection('user_holdings').createIndex({ user_id: 1, symbol: 1 }, { unique: true });
+      await db.collection('user_holdings').createIndex({ user_id: 1 });
+      await db.collection('portfolio_events').createIndex({ user_id: 1, created_at: -1 });
+      await db.collection('portfolio_events').createIndex({ type: 1, created_at: -1 });
 
       console.log('✅ [MongoDB Atlas] Primary Collections & TTL Indexes Initialized');
     } catch (err: any) {

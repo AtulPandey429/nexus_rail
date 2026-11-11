@@ -80,3 +80,91 @@ export interface DbWalletTransaction {
   balance_after: number;
   created_at: string;
 }
+
+export type PortfolioEventType = 'ACQUIRE_ORDER' | 'CASHBACK_REWARD' | 'SWAP_IN' | 'SELL_CASHOUT';
+
+export interface DbUserHolding {
+  id: string;
+  user_id: string;
+  symbol: AssetSymbol;
+  label: string;
+  quantity: number;
+  total_cost_cents: number;
+  avg_buy_price_cents: number;
+  realized_pnl_cents: number;
+  updated_at: string;
+}
+
+export interface DbPortfolioEvent {
+  id: string;
+  user_id: string;
+  type: PortfolioEventType;
+  symbol: AssetSymbol;
+  quantity_delta: number;
+  unit_price_cents: number;
+  total_usd_cents: number;
+  fee_cents: number;
+  reference_id: string;
+  created_at: string;
+}
+
+export interface HydratedHolding {
+  symbol: AssetSymbol;
+  label: string;
+  quantity: number;
+  total_cost_cents: number;
+  avg_buy_price_cents: number;
+  current_price_cents: number;
+  current_value_cents: number;
+  unrealized_pnl_cents: number;
+  unrealized_pnl_percent: number;
+  realized_pnl_cents: number;
+  change_24h_percent?: number;
+  oracle_source: 'binance' | 'coingecko' | 'amm';
+  updated_at: string;
+}
+
+export interface UserPortfolioResponse {
+  user_id: string;
+  total_cost_cents: number;
+  total_current_value_cents: number;
+  total_unrealized_pnl_cents: number;
+  total_unrealized_pnl_percent: number;
+  total_realized_pnl_cents: number;
+  inr_total_current_value: number;
+  holdings: HydratedHolding[];
+  recent_events: DbPortfolioEvent[];
+}
+
+export interface SellHoldingRequest {
+  symbol: AssetSymbol;
+  quantity: number;
+}
+
+export interface SellHoldingResponse {
+  success: boolean;
+  event_id: string;
+  symbol: AssetSymbol;
+  quantity_sold: number;
+  gross_proceeds_cents: number;
+  spread_fee_cents: number;
+  net_payout_cents: number;
+  realized_pnl_cents: number;
+  remaining_quantity: number;
+  new_usd_balance_cents: number;
+}
+
+export interface PlatformAUCResponse {
+  total_custody_usd_cents: number;
+  assets: {
+    symbol: AssetSymbol;
+    label: string;
+    total_quantity: number;
+    current_price_cents: number;
+    valuation_usd_cents: number;
+    user_count: number;
+  }[];
+  recent_liquidations: DbPortfolioEvent[];
+  total_spread_earned_cents: number;
+}
+
