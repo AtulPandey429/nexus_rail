@@ -8,6 +8,7 @@ import { chainRegistry, stellarProvider, stellarUsdcProvider } from '../services
 import { settlementEmitter } from '../services/settlementEvents.js';
 import { RatesService } from '../services/rates.js';
 import { NrTokenService } from '../services/nrTokenService.js';
+import { PortfolioService } from '../services/portfolioService.js';
 
 export const checkoutRouter = Router();
 
@@ -302,6 +303,13 @@ checkoutRouter.post('/:chain/verify-payment', requireAuth, async (req: Authentic
         txHash,
         timestamp: new Date().toISOString(),
       });
+
+      // Credit underlying asset holdings to user portfolio
+      try {
+        await PortfolioService.creditOrderAllocations(order);
+      } catch (portErr: any) {
+        console.warn('⚠️ [checkoutRouter] Portfolio crediting warning:', portErr.message);
+      }
     }
 
     res.json({

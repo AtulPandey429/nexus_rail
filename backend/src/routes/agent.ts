@@ -10,6 +10,7 @@ import { OrderSequenceService } from '../services/orderSequence.js';
 import { settlementEmitter } from '../services/settlementEvents.js';
 import { stellarProvider, xrplProvider } from '../services/crypto/index.js';
 import { NrTokenService, NR_MICRO_SCALE } from '../services/nrTokenService.js';
+import { PortfolioService } from '../services/portfolioService.js';
 import type { DbProduct } from '../types/index.js';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -602,6 +603,9 @@ agentRouter.post('/confirm', requireAuth, async (req: AuthenticatedRequest, res:
               txHash: executedTxHash,
               timestamp: now,
             });
+            try {
+              await PortfolioService.creditOrderAllocations(executedOrder as any, session);
+            } catch {}
             successMessage = `Order ${orderNumber} for ${qty}x ${title} has been authorized and paid!`;
           } else {
             successMessage = `Order ${orderNumber} for ${qty}x ${title} has been created with status PENDING.`;
@@ -662,6 +666,10 @@ agentRouter.post('/confirm', requireAuth, async (req: AuthenticatedRequest, res:
             txHash: executedTxHash,
             timestamp: now,
           });
+
+          try {
+            await PortfolioService.creditOrderAllocations(executedOrder as any, session);
+          } catch {}
 
           successMessage = `Payment of $${(priceCents / 100).toFixed(2)} USD for Order ${existingOrder.order_number} authorized and settled!`;
         } else {

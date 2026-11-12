@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { stellarProvider, stellarUsdcProvider, xrplProvider } from '../services/crypto/index.js';
 import { MongoService, MongoOrderDoc } from '../services/mongo.js';
 import { settlementEmitter } from '../services/settlementEvents.js';
+import { PortfolioService } from '../services/portfolioService.js';
 
 export class LedgerWatcherWorker {
   private static isRunning = false;
@@ -77,6 +78,11 @@ export class LedgerWatcherWorker {
                   txHash,
                   timestamp: new Date().toISOString(),
                 });
+                try {
+                  await PortfolioService.creditOrderAllocations(order);
+                } catch (portErr: any) {
+                  console.warn('⚠️ [LedgerWatcher] Portfolio crediting warning:', portErr.message);
+                }
               }
             }
           } else if (isXrpl) {
@@ -118,6 +124,11 @@ export class LedgerWatcherWorker {
                   txHash,
                   timestamp: new Date().toISOString(),
                 });
+                try {
+                  await PortfolioService.creditOrderAllocations(order);
+                } catch (portErr: any) {
+                  console.warn('⚠️ [LedgerWatcher] Portfolio crediting warning:', portErr.message);
+                }
               }
             }
           }

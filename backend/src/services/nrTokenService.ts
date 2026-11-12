@@ -15,6 +15,7 @@ import { OrderSequenceService } from './orderSequence.js';
 import { settlementEmitter } from './settlementEvents.js';
 import { IpfsService } from './ipfs.js';
 import { RedisCacheService } from './redis.js';
+import { PortfolioService } from './portfolioService.js';
 
 export const NR_MICRO_SCALE = 1_000_000;
 export const GENESIS_RESERVE_USD_CENTS = 10_000_000; // $100,000.00
@@ -797,6 +798,13 @@ export class NrTokenService {
       txHash,
       timestamp: now,
     });
+
+    // Credit underlying asset holdings to user portfolio
+    try {
+      await PortfolioService.creditOrderAllocations(order);
+    } catch (portErr: any) {
+      console.warn('⚠️ [NrTokenService] Portfolio crediting warning:', portErr.message);
+    }
 
     // Best-effort IPFS receipt anchor (non-blocking if PINATA_JWT is absent)
     IpfsService.pinOrderReceipt(order.id, {

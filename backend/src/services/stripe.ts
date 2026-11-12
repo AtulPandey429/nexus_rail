@@ -4,6 +4,7 @@ import { MongoService, MongoOrderDoc, MongoCartItemDoc, OrderItem } from './mong
 import { ProductService } from './products.js';
 import { settlementEmitter } from './settlementEvents.js';
 import { OrderSequenceService } from './orderSequence.js';
+import { PortfolioService } from './portfolioService.js';
 import crypto from 'crypto';
 
 function stripe(): Stripe {
@@ -121,6 +122,14 @@ export class StripeService {
       txHash: session.payment_intent ? String(session.payment_intent) : `stripe_${session.id}`,
       timestamp: new Date().toISOString(),
     });
+
+    if (doc) {
+      try {
+        await PortfolioService.creditOrderAllocations(doc);
+      } catch (err: any) {
+        console.warn('⚠️ [StripeService] Portfolio crediting warning:', err.message);
+      }
+    }
 
     return { orderId, status: 'PAID' };
   }
