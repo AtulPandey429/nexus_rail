@@ -25,6 +25,7 @@ import { rwaGoldRouter } from './routes/rwaGold.js';
 import { rwaModularRouter } from './routes/rwa/rwaModularRouter.js';
 import { swapRouter } from './routes/swap.js';
 import { userRouter } from './routes/user.js';
+import { portfolioRouter } from './routes/portfolio.js';
 import type { HealthResponse } from './types/index.js';
 
 const app = express();
@@ -77,6 +78,7 @@ app.use('/api/v1/rwa', rwaGoldRouter);
 app.use('/api/v1/rwa-modular', rwaModularRouter);
 app.use('/api/v1/swap', swapRouter);
 app.use('/api/v1/user', userRouter);
+app.use('/api/v1/portfolio', portfolioRouter);
 
 // Health Check Endpoints
 app.get('/health', (_req: Request, res: Response) => {

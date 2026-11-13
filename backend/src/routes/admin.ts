@@ -4,6 +4,7 @@ import { MongoService, MongoOrderDoc } from '../services/mongo.js';
 import { ProductService } from '../services/products.js';
 import { NrTokenService } from '../services/nrTokenService.js';
 import { RedisCacheService } from '../services/redis.js';
+import { PortfolioService } from '../services/portfolioService.js';
 import { z } from 'zod';
 
 export const adminRouter = Router();
@@ -214,5 +215,14 @@ adminRouter.post('/nr-pool/adjust-reserve', async (req: AuthenticatedRequest, re
     res.json({ success: true, data: stats });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Reserve adjustment failed' });
+  }
+});
+
+adminRouter.get('/portfolios', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const auc = await PortfolioService.getPlatformAUC();
+    res.json({ success: true, data: auc });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to aggregate platform AUC' });
   }
 });
