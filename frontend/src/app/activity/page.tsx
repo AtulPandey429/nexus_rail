@@ -13,9 +13,13 @@ import {
   AlertCircle,
   ArrowRight,
   BookOpen,
+  Coins,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { fetchOrders } from '@/lib/shop';
 import { NexusLogo } from '@/components/ui/NexusLogo';
+import type { DbPortfolioEvent } from '@/types';
 
 interface OrderItem {
   id: string;
@@ -137,6 +141,8 @@ function ActivityContent() {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PAID' | 'AWAITING' | 'EXPIRED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string>(highlightId);
+  const [viewMode, setViewMode] = useState<'orders' | 'portfolio'>('orders');
+  const [portfolioEvents, setPortfolioEvents] = useState<DbPortfolioEvent[]>([]);
 
   useEffect(() => {
     fetchOrders().then((live) => {
@@ -168,6 +174,21 @@ function ActivityContent() {
         setOrders(mapped);
       }
     }).catch(() => {});
+
+    // Fetch portfolio events
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (token) {
+      fetch('/api/v1/portfolio', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((json) => {
+          if (json?.success && json.data?.recent_events) {
+            setPortfolioEvents(json.data.recent_events);
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const filteredOrders = useMemo(() => {
@@ -284,6 +305,115 @@ function ActivityContent() {
             </p>
           </div>
         </div>
+
+        {/* View Mode Toggle: Orders vs Portfolio Events */}
+        <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3">
+          <button
+            type="button"
+            onClick={() => setViewMode('orders')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+              viewMode === 'orders'
+                ? 'bg-[var(--gold)] text-black shadow-md'
+                : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card)]'
+            }`}
+          >
+            Commerce Orders &amp; Ledger
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('portfolio')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              viewMode === 'portfolio'
+                ? 'bg-[var(--gold)] text-black shadow-md'
+                : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card)]'
+            }`}
+          >
+            <Coins className="w-3.5 h-3.5" />
+            <span>Portfolio Custody &amp; Cashout Events ({portfolioEvents.length})</span>
+          </button>
+        </div>
+
+        {viewMode === 'portfolio' ? (
+          /* PORTFOLIO EVENTS AUDIT TABLE (MODULE 3) */
+          <div className="space-y-4">
+            <div className="rounded-2xl nexus-glass-card border border-[var(--border)] overflow-hidden shadow-xl">
+              <div className="p-4 border-b border-[var(--border)] bg-[var(--card-subtle)] flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-sm text-[var(--foreground)]">Portfolio Custody &amp; Cashout Feed</h3>
+                  <p className="text-[11px] font-mono text-[var(--muted)]">Every order basket allocation, cashback reward, and 1-click liquidation</p>
+                </div>
+                <span className="text-xs font-mono text-[var(--gold)] font-bold">{portfolioEvents.length} events logged</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] text-[10px] tracking-widest uppercase text-[var(--muted)] bg-[var(--card-subtle)]/50">
+                      <th className="py-3.5 px-4 sm:px-6">EVENT TYPE</th>
+                      <th className="py-3.5 px-4">ASSET &amp; QUANTITY</th>
+                      <th className="py-3.5 px-4">UNIT PRICE</th>
+                      <th className="py-3.5 px-4">GROSS VALUE</th>
+                      <th className="py-3.5 px-4">SPREAD FEE</th>
+                      <th className="py-3.5 px-4 sm:px-6 text-right">DATE / REF ID</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {portfolioEvents.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-xs font-mono text-[var(--muted)]">
+                          No portfolio custody events recorded yet. Once you complete an order or cashout, events will appear here.
+                        </td>
+                      </tr>
+                    ) : (
+                      portfolioEvents.map((evt) => {
+                        const isAcquire = evt.type === 'ACQUIRE_ORDER';
+                        const isCashback = evt.type === 'CASHBACK_REWARD';
+                        const isSell = evt.type === 'SELL_CASHOUT';
+
+                        return (
+                          <tr key={evt.id} className="hover:bg-[var(--card-subtle)] transition-colors">
+                            <td className="py-3.5 px-4 sm:px-6">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                  isAcquire
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : isCashback
+                                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                }`}
+                              >
+                                {isAcquire ? 'ACQUIRED (ORDER)' : isCashback ? '2% CASHBACK' : '1-CLICK CASHOUT'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-[var(--foreground)]">
+                              <span className={evt.quantity_delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                                {evt.quantity_delta >= 0 ? '+' : ''}{evt.quantity_delta} {evt.symbol}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-[var(--muted)]">
+                              ${(evt.unit_price_cents / 100).toFixed(2)}
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-[var(--foreground)]">
+                              ${(evt.total_usd_cents / 100).toFixed(2)}
+                            </td>
+                            <td className="py-3.5 px-4 text-cyan-400 font-semibold">
+                              {evt.fee_cents > 0 ? `-$${(evt.fee_cents / 100).toFixed(2)}` : '0.00'}
+                            </td>
+                            <td className="py-3.5 px-4 sm:px-6 text-right text-[11px] text-[var(--muted)] font-mono">
+                              <div>{new Date(evt.created_at).toLocaleString()}</div>
+                              <div className="text-[10px] text-[var(--muted)]/60 truncate max-w-[150px] ml-auto">{evt.reference_id}</div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
 
         {/* Filter Tabs & Search Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
@@ -484,6 +614,8 @@ function ActivityContent() {
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
       </main>
     </div>

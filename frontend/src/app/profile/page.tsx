@@ -18,9 +18,17 @@ import {
   RefreshCw,
   ShoppingBag,
   Unlink,
+  TrendingUp,
+  TrendingDown,
+  Coins,
+  DollarSign,
+  Layers,
+  ArrowUpRight,
+  X,
 } from 'lucide-react';
 import { readSession, clearSession, notifySession, SessionUser } from '@/lib/shop';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
+import type { UserPortfolioResponse, HydratedHolding } from '@/types';
 
 interface ProfileData {
   id: string;
@@ -67,6 +75,83 @@ export default function ProfilePage() {
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [targetNetwork, setTargetNetwork] = useState<'stellar' | 'xrpl'>('stellar');
 
+  // Live Asset Portfolio & P&L State
+  const [portfolio, setPortfolio] = useState<UserPortfolioResponse | null>(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const [cashoutHolding, setCashoutHolding] = useState<HydratedHolding | null>(null);
+  const [cashoutQty, setCashoutQty] = useState<number>(0);
+  const [cashoutSubmitting, setCashoutSubmitting] = useState(false);
+  const [cashoutSuccessMsg, setCashoutSuccessMsg] = useState('');
+  const [cashoutErrorMsg, setCashoutErrorMsg] = useState('');
+
+  const fetchPortfolio = async () => {
+    const session = readSession();
+    if (!session.token) return;
+    try {
+      setPortfolioLoading(true);
+      const res = await fetch('/api/v1/portfolio', {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data) {
+          setPortfolio(data.data);
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [Profile] Failed to fetch portfolio:', err.message);
+    } finally {
+      setPortfolioLoading(false);
+    }
+  };
+
+  const handleOpenCashout = (holding: HydratedHolding) => {
+    setCashoutHolding(holding);
+    setCashoutQty(holding.quantity);
+    setCashoutErrorMsg('');
+    setCashoutSuccessMsg('');
+  };
+
+  const handleCashoutSubmit = async () => {
+    if (!cashoutHolding || cashoutQty <= 0) return;
+    const session = readSession();
+    if (!session.token) return;
+
+    setCashoutSubmitting(true);
+    setCashoutErrorMsg('');
+    setCashoutSuccessMsg('');
+
+    try {
+      const res = await fetch('/api/v1/portfolio/sell', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({
+          symbol: cashoutHolding.symbol,
+          quantity: cashoutQty,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Liquidation failed');
+      }
+
+      setSuccessMsg(
+        `Successfully liquidated ${cashoutQty} ${cashoutHolding.symbol}! $${(data.data.net_payout_cents / 100).toFixed(2)} USD net credited to balance (Spread: $${(data.data.spread_fee_cents / 100).toFixed(2)}).`
+      );
+      setCashoutHolding(null);
+      await fetchPortfolio();
+      await fetchProfile();
+    } catch (err: any) {
+      setCashoutErrorMsg(err.message || 'Cashout failed');
+    } finally {
+      setCashoutSubmitting(false);
+    }
+  };
+
   // Load profile from API
   const fetchProfile = async () => {
     const session = readSession();
@@ -107,6 +192,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     fetchProfile();
+    fetchPortfolio();
   }, []);
 
   // Update Name
@@ -218,6 +304,157 @@ export default function ProfilePage() {
         initialNetwork={targetNetwork}
         onConnected={handleWalletModalConnected}
       />
+
+      {/* 1-Click Multi-Rail Cashout Modal */}
+      {cashoutHolding && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-[var(--card)] border border-[var(--border-highlight)] p-6 sm:p-8 space-y-6 shadow-2xl relative text-left">
+            <button
+              type="button"
+              onClick={() => setCashoutHolding(null)}
+              className="absolute top-5 right-5 p-2 rounded-xl text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-subtle)] transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs font-mono text-[var(--gold)]">
+                <Coins className="w-3.5 h-3.5" />
+                <span>1-Click Multi-Rail Cashout</span>
+              </div>
+              <h3 className="text-xl font-bold text-[var(--foreground)]">
+                Liquidate {cashoutHolding.label}
+              </h3>
+              <p className="text-xs text-[var(--muted)]">
+                Instant liquidation at live market oracle rates minus a 0.50% platform spread. Proceeds are credited directly to your internal USD wallet.
+              </p>
+            </div>
+
+            {/* Live Pricing Reference */}
+            <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2 text-xs font-mono">
+              <div className="flex justify-between">
+                <span className="text-[var(--muted)]">Live Oracle Price:</span>
+                <span className="font-bold text-[var(--foreground)]">
+                  ${(cashoutHolding.current_price_cents / 100).toFixed(2)} USD
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--muted)]">Owned Quantity:</span>
+                <span className="font-bold text-[var(--gold)]">
+                  {cashoutHolding.quantity} {cashoutHolding.symbol}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--muted)]">Average Cost Basis:</span>
+                <span>${(cashoutHolding.avg_buy_price_cents / 100).toFixed(2)} USD</span>
+              </div>
+            </div>
+
+            {/* Quantity Selector & Percentage Buttons */}
+            <div className="space-y-2">
+              <label className="text-xs font-mono text-[var(--muted)] flex justify-between">
+                <span>Quantity to Sell:</span>
+                <span className="text-[var(--foreground)] font-bold">{cashoutQty}</span>
+              </label>
+              <input
+                type="number"
+                min="0.000001"
+                max={cashoutHolding.quantity}
+                step="any"
+                value={cashoutQty}
+                onChange={(e) => setCashoutQty(Math.min(cashoutHolding.quantity, Math.max(0, parseFloat(e.target.value) || 0)))}
+                className="w-full px-4 py-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--gold)]"
+              />
+
+              {/* Quick % buttons */}
+              <div className="grid grid-cols-4 gap-2 pt-1">
+                {[0.25, 0.5, 0.75, 1.0].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => setCashoutQty(Number((cashoutHolding.quantity * pct).toFixed(6)))}
+                    className="py-1.5 rounded-lg bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-xs font-mono font-semibold text-[var(--foreground)] transition-colors cursor-pointer"
+                  >
+                    {pct === 1.0 ? 'MAX' : `${pct * 100}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Dynamic Calculation Breakdown */}
+            {cashoutQty > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2 text-xs font-mono">
+                {(() => {
+                  const grossCents = Math.round(cashoutQty * cashoutHolding.current_price_cents);
+                  const spreadCents = Math.round(grossCents * 0.005);
+                  const netCents = grossCents - spreadCents;
+                  const costPortion = cashoutHolding.quantity > 0
+                    ? Math.round(cashoutHolding.total_cost_cents * (cashoutQty / cashoutHolding.quantity))
+                    : 0;
+                  const pnlCents = netCents - costPortion;
+
+                  return (
+                    <>
+                      <div className="flex justify-between text-amber-200">
+                        <span>Gross Market Proceeds:</span>
+                        <span>${(grossCents / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-300/80">
+                        <span>Platform Spread Fee (0.50%):</span>
+                        <span>-${(spreadCents / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-emerald-400 border-t border-amber-500/20 pt-1.5">
+                        <span>Net Payout to USD Balance:</span>
+                        <span>+${(netCents / 100).toFixed(2)} USD</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-[var(--muted)] pt-0.5">
+                        <span>Est. Realized P&L on Cashout:</span>
+                        <span className={pnlCents >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                          {pnlCents >= 0 ? '+' : ''}${(pnlCents / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {cashoutErrorMsg && (
+              <p className="text-xs font-mono text-rose-400 bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
+                {cashoutErrorMsg}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setCashoutHolding(null)}
+                className="flex-1 py-3 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-xs font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCashoutSubmit}
+                disabled={cashoutSubmitting || cashoutQty <= 0}
+                className="flex-1 py-3 rounded-xl bg-[var(--gold)] hover:bg-[#68e0b0] disabled:opacity-50 text-black font-mono font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[var(--gold)]/20"
+              >
+                {cashoutSubmitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Liquidating...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <span>Confirm 1-Click Cashout</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top Breadcrumb & Page Title */}
       <div className="space-y-2">
@@ -422,6 +659,209 @@ export default function ProfilePage() {
             <ArrowRight className="w-3.5 h-3.5 text-[var(--gold)]" />
           </Link>
         </div>
+      </div>
+
+      {/* LIVE ASSET PORTFOLIO & REAL-TIME P&L SECTION (MODULE 3) */}
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
+                Live Asset Custody Portfolio &amp; P&amp;L
+              </h2>
+            </div>
+            <p className="text-xs text-[var(--muted)] mt-0.5">
+              Live market valuations from Binance 24hr and Gold-API oracles. Decomposed from your Smart Baskets and single asset packs. Liquidate anytime with 1-click.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={fetchPortfolio}
+            disabled={portfolioLoading}
+            className="px-4 py-2 rounded-xl bg-[var(--card)] hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono text-[var(--foreground)] flex items-center gap-2 transition-colors cursor-pointer self-start sm:self-auto shadow-sm"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[var(--gold)] ${portfolioLoading ? 'animate-spin' : ''}`} />
+            <span>Sync Live Prices</span>
+          </button>
+        </div>
+
+        {/* 4 Summary Banner Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Total Invested Cost */}
+          <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
+            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+              TOTAL INVESTED COST
+            </span>
+            <p className="text-xl sm:text-2xl font-mono font-bold text-[var(--foreground)]">
+              ${((portfolio?.total_cost_cents || 0) / 100).toFixed(2)} USD
+            </p>
+            <p className="text-[11px] font-mono text-[var(--muted)]">
+              Weighted-average cost basis
+            </p>
+          </div>
+
+          {/* Card 2: Current Portfolio Value */}
+          <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
+            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+              CURRENT MARKET VALUE
+            </span>
+            <p className="text-xl sm:text-2xl font-mono font-bold text-[var(--gold)]">
+              ${((portfolio?.total_current_value_cents || 0) / 100).toFixed(2)} USD
+            </p>
+            <p className="text-[11px] font-mono text-emerald-400">
+              ≈ ₹{(portfolio?.inr_total_current_value || 0).toLocaleString('en-IN')} INR
+            </p>
+          </div>
+
+          {/* Card 3: Net Unrealized P&L */}
+          <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
+            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+              NET UNREALIZED P&amp;L
+            </span>
+            {(() => {
+              const pnlCents = portfolio?.total_unrealized_pnl_cents || 0;
+              const pnlPct = portfolio?.total_unrealized_pnl_percent || 0;
+              const isPositive = pnlCents >= 0;
+              return (
+                <>
+                  <div className={`flex items-center gap-1.5 text-xl sm:text-2xl font-mono font-bold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {isPositive ? <TrendingUp className="w-5 h-5 shrink-0" /> : <TrendingDown className="w-5 h-5 shrink-0" />}
+                    <span>{isPositive ? '+' : ''}${(pnlCents / 100).toFixed(2)}</span>
+                  </div>
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold ${isPositive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`}>
+                    {isPositive ? '+' : ''}{pnlPct.toFixed(2)}%
+                  </span>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Card 4: Total Realized Gains */}
+          <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
+            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+              REALIZED CASHOUT GAINS
+            </span>
+            <p className="text-xl sm:text-2xl font-mono font-bold text-[var(--foreground)]">
+              ${((portfolio?.total_realized_pnl_cents || 0) / 100).toFixed(2)} USD
+            </p>
+            <p className="text-[11px] font-mono text-[var(--muted)]">
+              Past 1-click cashouts
+            </p>
+          </div>
+        </div>
+
+        {/* Holdings Cards Grid */}
+        {portfolioLoading ? (
+          <div className="nexus-glass-card p-8 rounded-3xl border border-[var(--border)] text-center text-xs font-mono text-[var(--muted)] flex items-center justify-center gap-3 animate-pulse">
+            <RefreshCw className="w-4 h-4 animate-spin text-[var(--gold)]" />
+            <span>Hydrating real-time asset quotes and cost basis...</span>
+          </div>
+        ) : !portfolio || portfolio.holdings.length === 0 ? (
+          <div className="nexus-glass-card p-8 rounded-3xl border border-dashed border-[var(--border)] text-center space-y-3">
+            <Coins className="w-8 h-8 text-[var(--muted)] mx-auto opacity-50" />
+            <h3 className="text-sm font-bold text-[var(--foreground)]">No Active Custody Holdings Yet</h3>
+            <p className="text-xs text-[var(--muted)] max-w-md mx-auto">
+              When you purchase Smart Baskets or Live RWA Asset Packs in the Store, your underlying gold, silver, XRP, XLM, and $NR tokens are automatically tracked here in real-time.
+            </p>
+            <Link
+              href="/store"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--gold)] hover:bg-[#68e0b0] text-black font-mono font-bold text-xs transition-colors mt-2"
+            >
+              <span>Explore Smart Baskets Store</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {portfolio.holdings.map((h) => {
+              const isProfit = h.unrealized_pnl_cents >= 0;
+              const has24hChange = typeof h.change_24h_percent === 'number';
+              const is24hUp = (h.change_24h_percent || 0) >= 0;
+
+              return (
+                <div
+                  key={h.symbol}
+                  className="nexus-glass-card p-6 rounded-3xl border border-[var(--border)] hover:border-[var(--border-highlight)] transition-all flex flex-col justify-between space-y-5"
+                >
+                  <div className="space-y-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[var(--gold)]" />
+                          <h3 className="font-bold text-sm text-[var(--foreground)]">{h.label}</h3>
+                        </div>
+                        <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block mt-0.5">
+                          {h.symbol} • Oracle: {h.oracle_source}
+                        </span>
+                      </div>
+
+                      {has24hChange && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 shrink-0 ${is24hUp ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`}>
+                          {is24hUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          <span>{is24hUp ? '+' : ''}{(h.change_24h_percent || 0).toFixed(2)}% 24h</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quantity & Value */}
+                    <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2 font-mono text-xs">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-[var(--muted)]">Holding Balance:</span>
+                        <span className="text-base font-bold text-[var(--foreground)]">
+                          {h.quantity} {h.symbol === 'GOLD_G' ? 'g Gold' : h.symbol === 'SILVER_G' ? 'g Silver' : h.symbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-[var(--muted)]">Current Position Value:</span>
+                        <span className="font-bold text-[var(--gold)]">
+                          ${(h.current_value_cents / 100).toFixed(2)} USD
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Valuation & Cost Basis Grid */}
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                      <div className="p-2.5 rounded-xl bg-[var(--card-subtle)]/50 border border-[var(--border)]/50">
+                        <span className="text-[10px] text-[var(--muted)] block">Avg Cost Basis</span>
+                        <span className="font-semibold text-[var(--foreground)]">
+                          ${(h.avg_buy_price_cents / 100).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-[var(--card-subtle)]/50 border border-[var(--border)]/50">
+                        <span className="text-[10px] text-[var(--muted)] block">Live Market Price</span>
+                        <span className="font-semibold text-[var(--foreground)]">
+                          ${(h.current_price_cents / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Unrealized P&L Badge */}
+                    <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono font-semibold ${isProfit ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'}`}>
+                      <span className="text-[11px]">Unrealized P&amp;L:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span>{isProfit ? '+' : ''}${(h.unrealized_pnl_cents / 100).toFixed(2)}</span>
+                        <span>({isProfit ? '+' : ''}{h.unrealized_pnl_percent.toFixed(2)}%)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cashout Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCashout(h)}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--gold)]/20 border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono font-bold text-[var(--foreground)] hover:text-[var(--gold)] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--gold)]" />
+                    <span>1-Click Cashout / Sell</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* VERIFIED WALLETS SECTION (Requirement 5 & 6) */}
