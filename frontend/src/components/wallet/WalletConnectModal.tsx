@@ -178,6 +178,56 @@ export function WalletConnectModal({
   const handleWalletSuccess = async (address: string, chain: 'stellar' | 'xrpl', walletName: string) => {
     setSuccessMsg(`Authorizing session with ${walletName}...`);
     try {
+      const session = readSession();
+      const account: WalletConnectedAccount = { address, chain, walletName };
+
+      // Case A: User is ALREADY authenticated (e.g. via Google OAuth or Email)
+      if (session.token && session.user) {
+        setSuccessMsg(`Linking ${walletName} to your account...`);
+        try {
+          const linkRes = await fetch('/api/v1/user/wallets/connect', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.token}`,
+            },
+            body: JSON.stringify({
+              walletAddress: address,
+              chain,
+              provider: walletName,
+            }),
+          });
+          const linkData = await linkRes.json().catch(() => null);
+
+          const updatedUser: any = {
+            ...session.user,
+            walletAddress: address,
+            stellarAddress: chain === 'stellar' ? address : session.user.stellarAddress,
+            xrplAddress: chain === 'xrpl' ? address : session.user.xrplAddress,
+            lastConnectedWallet: {
+              network: chain,
+              provider: walletName,
+              address,
+              connectedAt: new Date().toISOString(),
+            },
+            wallets: linkData?.user?.wallets || session.user.wallets,
+          };
+
+          localStorage.setItem('nexus_user', JSON.stringify(updatedUser));
+          notifySession();
+        } catch (err) {
+          console.warn('Backend wallet link error:', err);
+        }
+
+        await recordSuccessfulConnection(account);
+        setSuccessMsg(`Linked ${walletName} (${address.slice(0, 4)}...${address.slice(-4)}) successfully!`);
+        setTimeout(() => {
+          onClose();
+        }, 600);
+        return;
+      }
+
+      // Case B: User was NOT logged in -> authenticate directly with wallet challenge
       const auth = await authenticateWalletWithChallenge({
         address,
         chain,
@@ -188,7 +238,6 @@ export function WalletConnectModal({
       localStorage.setItem('nexus_token', auth.token);
       notifySession();
 
-      const account: WalletConnectedAccount = { address, chain, walletName };
       await recordSuccessfulConnection(account);
 
       setSuccessMsg(`Connected: ${address.slice(0, 6)}...${address.slice(-4)}`);

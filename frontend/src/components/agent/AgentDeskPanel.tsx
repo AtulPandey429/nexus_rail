@@ -825,11 +825,11 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"
-              onClick={() => handleSend('Add order for 2 NR tokens')}
+              onClick={() => handleSend('Add order for 2 NXL tokens')}
               className="px-3 py-1.5 rounded-full bg-[var(--gold)]/15 hover:bg-[var(--gold)]/25 border border-[var(--gold)]/30 text-[11px] font-mono text-[var(--gold)] whitespace-nowrap transition-colors cursor-pointer font-semibold flex items-center gap-1"
             >
               <Sparkles className="w-3 h-3 text-[var(--gold)]" />
-              <span>Add order for 2 NR tokens</span>
+              <span>Add order for 2 NXL tokens</span>
             </button>
             <button
               type="button"
@@ -847,7 +847,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
             </button>
             <button
               type="button"
-              onClick={() => handleSend('Pay for order #NR-1001')}
+              onClick={() => handleSend('Pay for order #NXL-1001')}
               className="px-3 py-1.5 rounded-full bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-[11px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] whitespace-nowrap transition-colors cursor-pointer"
             >
               💳 Pay for order
@@ -873,7 +873,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="e.g. 'Add order for 2 NR tokens', 'Show my orders', 'Pay for order #12', or 'Show my balance'..."
+              placeholder="e.g. 'Add order for 2 NXL tokens', 'Show my orders', 'Pay for order #12', or 'Show my balance'..."
               className="flex-1 bg-transparent px-4 py-3 text-sm text-[var(--foreground)] placeholder-[var(--muted)]/50 focus:outline-none font-mono"
             />
             <button

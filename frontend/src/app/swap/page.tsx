@@ -35,13 +35,14 @@ import {
   payWithCrossmark,
 } from '@/lib/wallets';
 
-type SwapToken = 'XRP' | 'XLM' | 'NR' | 'USD' | 'USDC' | 'RLUSD';
+type SwapToken = 'XRP' | 'XLM' | 'NXL' | 'NR' | 'USD' | 'USDC' | 'RLUSD';
 
-const SELECTABLE_TOKENS: Array<'XRP' | 'XLM' | 'NR' | 'USD'> = ['XRP', 'XLM', 'NR', 'USD'];
+const SELECTABLE_TOKENS: Array<'XRP' | 'XLM' | 'NXL' | 'USD'> = ['XRP', 'XLM', 'NXL', 'USD'];
 
 const TOKEN_DETAILS: Record<SwapToken, { name: string; chain: string; iconColor: string }> = {
   XRP: { name: 'XRP', chain: 'XRPL TESTNET', iconColor: 'text-[#0081F2]' },
   XLM: { name: 'Stellar Lumens', chain: 'STELLAR TESTNET', iconColor: 'text-[#00E5FF]' },
+  NXL: { name: 'Nexus Cross-Ledger ($NXL)', chain: 'DUAL-RAIL AMM POOL', iconColor: 'text-[var(--gold)]' },
   NR: { name: 'NexusRail Token', chain: 'NEXUSRAIL AMM POOL', iconColor: 'text-[var(--gold)]' },
   USD: { name: 'Nexus Ledger USD', chain: 'INTERNAL LEDGER', iconColor: 'text-emerald-400' },
   USDC: { name: 'USD Coin', chain: 'STELLAR TESTNET', iconColor: 'text-[#2775CA]' },
@@ -184,7 +185,7 @@ export default function SwapPage() {
         const balJson = await balRes.json().catch(() => null);
         if (balRes.ok && balJson?.success && balJson.balance) {
           setUsdBalance((balJson.balance.USD || 0) / 100);
-          setNrBalance((balJson.balance.NR || 0) / 1_000_000);
+          setNrBalance(((balJson.balance.NXL ?? balJson.balance.NR) || 0) / 1_000_000);
         }
       } catch {}
     }
@@ -195,15 +196,16 @@ export default function SwapPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const toParam = params.get('to')?.toUpperCase();
-      if (toParam === 'NR') {
+      if (toParam === 'NR' || toParam === 'NXL') {
         setFromToken('XLM');
-        setToToken('NR');
+        setToToken('NXL');
       }
     }
   }, []);
 
   const nrSpotUsd = nrPool?.spotPriceUsd || 1.0;
-  const involvesNrOrUsd = fromToken === 'NR' || toToken === 'NR' || fromToken === 'USD' || toToken === 'USD';
+  const involvesNrOrUsd =
+    fromToken === 'NXL' || fromToken === 'NR' || toToken === 'NXL' || toToken === 'NR' || fromToken === 'USD' || toToken === 'USD';
 
   // Fetch authoritative AMM quote when $NR or USD is involved
   useEffect(() => {
@@ -244,7 +246,7 @@ export default function SwapPage() {
   const tokenUsdPrice = (tok: SwapToken) => {
     if (tok === 'XRP') return xrpUsd;
     if (tok === 'XLM') return xlmUsd;
-    if (tok === 'NR') return nrSpotUsd;
+    if (tok === 'NR' || tok === 'NXL') return nrSpotUsd;
     return 1.0;
   };
 
@@ -262,12 +264,12 @@ export default function SwapPage() {
   // Compute output amount based on live rates / AMM curve
   const receiveAmount = useMemo(() => {
     if (ammQuote && involvesNrOrUsd) {
-      return ammQuote.receiveAmount.toFixed(fromToken === 'NR' && toToken === 'USD' ? 2 : 4);
+      return ammQuote.receiveAmount.toFixed((fromToken === 'NR' || fromToken === 'NXL') && toToken === 'USD' ? 2 : 4);
     }
     const num = parseFloat(payAmount);
     if (isNaN(num) || num <= 0) return '0.00';
     const computed = num * liveRate;
-    return computed.toFixed(toToken === 'NR' ? 4 : 2);
+    return computed.toFixed(toToken === 'NR' || toToken === 'NXL' ? 4 : 2);
   }, [payAmount, liveRate, ammQuote, involvesNrOrUsd, fromToken, toToken]);
 
   // Compute USD estimated values
@@ -288,7 +290,7 @@ export default function SwapPage() {
     const num = parseFloat(receiveAmount);
     if (isNaN(num) || num <= 0) return '0.00';
     const slipFactor = slippage === '0.1%' ? 0.001 : slippage === '0.5%' ? 0.005 : 0.01;
-    return (num * (1 - slipFactor)).toFixed(toToken === 'NR' ? 4 : 2);
+    return (num * (1 - slipFactor)).toFixed(toToken === 'NR' || toToken === 'NXL' ? 4 : 2);
   }, [receiveAmount, slippage, toToken]);
 
   // Invert tokens
@@ -317,13 +319,13 @@ export default function SwapPage() {
   const getTokenDisplayBalance = (tok: SwapToken) => {
     if (tok === 'XRP') return `${xrpBalance.toFixed(2)} XRP`;
     if (tok === 'XLM') return `${xlmBalance.toFixed(2)} XLM`;
-    if (tok === 'NR') return `${nrBalance.toFixed(4)} NR`;
+    if (tok === 'NR' || tok === 'NXL') return `${nrBalance.toFixed(4)} NXL`;
     if (tok === 'USD') return `$${usdBalance.toFixed(2)} USD`;
     return '0.00';
   };
 
   const effectiveDestination =
-    toToken === 'NR' || toToken === 'USD'
+    toToken === 'NR' || toToken === 'NXL' || toToken === 'USD'
       ? user?.id
         ? `nexus_wallet_${user.id.slice(0, 8)}`
         : 'NEXUS_INTERNAL_LEDGER'
@@ -381,7 +383,7 @@ export default function SwapPage() {
     // Fallback order state
     const fallbackId = `SWAP-${Date.now().toString(36).toUpperCase()}`;
     const fallbackDeposit =
-      fromToken === 'USD' || fromToken === 'NR'
+      fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL'
         ? 'NEXUS_INTERNAL_LEDGER'
         : fromToken === 'XRP'
         ? PLATFORM_XRPL_VAULT
@@ -390,13 +392,13 @@ export default function SwapPage() {
       swapId: fallbackId,
       depositAddress: fallbackDeposit,
       identifierType:
-        fromToken === 'USD' || fromToken === 'NR'
+        fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL'
           ? ('internal_ledger' as any)
           : fromToken === 'XRP'
           ? 'destination_tag'
           : 'memo_text',
       identifier:
-        fromToken === 'USD' || fromToken === 'NR'
+        fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL'
           ? fallbackId
           : fromToken === 'XRP'
           ? Math.floor(100000 + Math.random() * 900000)
@@ -410,7 +412,7 @@ export default function SwapPage() {
     if (!activeSwapOrder) return;
     setSwapError('');
     let resolvedDepositHash = '';
-    const isInternalIngress = fromToken === 'USD' || fromToken === 'NR';
+    const isInternalIngress = fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL';
 
     // 1. If using Extension (Freighter / GemWallet) for XLM/XRP ingress
     if (!isInternalIngress && depositMethod === 'extension') {

@@ -7,6 +7,19 @@ export type SessionUser = {
   walletAddress?: string;
   stellarAddress?: string;
   xrplAddress?: string;
+  lastConnectedWallet?: {
+    network: 'stellar' | 'xrpl';
+    provider: string;
+    address: string;
+    connectedAt: string;
+  } | null;
+  wallets?: Array<{
+    network: 'stellar' | 'xrpl';
+    address: string;
+    provider: string;
+    connectedAt: string;
+    verified?: boolean;
+  }>;
   role: 'user' | 'admin';
 };
 
@@ -208,7 +221,7 @@ export const FIGMA_CATALOG: CatalogItem[] = [
   {
     sku: 'BASKET-AI-ALPHA',
     title: 'AI Dynamic Alpha Basket',
-    description: 'Diversified combo pairing 0.40g Gold, 25 $NR AMM Tokens, 15 XRP, and 100 XLM priced live every 60s.',
+    description: 'Diversified combo pairing 0.40g Gold, 25 $NXL AMM Tokens, 15 XRP, and 100 XLM priced live every 60s.',
     priceCents: 10282,
     priceInr: 9662,
     change24hPercent: 0.78,
@@ -222,7 +235,7 @@ export const FIGMA_CATALOG: CatalogItem[] = [
     tag: 'SMART BASKET • ALPHA',
     allocations: [
       { symbol: 'GOLD_G', label: '24K Gold (PAXG)', unitQty: 0.4, weightPercent: 48.1, valueCents: 4946 },
-      { symbol: 'NR', label: '$NR Protocol Token', unitQty: 25, weightPercent: 24.3, valueCents: 2500 },
+      { symbol: 'NXL', label: '$NXL Protocol Token', unitQty: 25, weightPercent: 24.3, valueCents: 2500 },
       { symbol: 'XRP', label: 'XRP (XRPL Native)', unitQty: 15, weightPercent: 14.0, valueCents: 1442 },
       { symbol: 'XLM', label: 'XLM (Stellar Native)', unitQty: 100, weightPercent: 13.6, valueCents: 1394 },
     ],
@@ -268,8 +281,8 @@ export const FIGMA_CATALOG: CatalogItem[] = [
   },
   {
     sku: 'NR-PACK-50',
-    title: '50 $NR Protocol Pack',
-    description: 'Instant 50 $NR token allocation priced live against the x · y = k bonding curve AMM with 10% checkout utility.',
+    title: '50 $NXL Protocol Pack',
+    description: 'Instant 50 $NXL token allocation priced live against the dual-rail AMM with 10% checkout utility.',
     priceCents: 5000,
     priceInr: 4699,
     change24hPercent: 0,
@@ -280,9 +293,9 @@ export const FIGMA_CATALOG: CatalogItem[] = [
     rail: 'multi',
     rating: 5.0,
     upvotes: 550,
-    tag: 'AMM LIVE • 50 $NR',
+    tag: 'AMM LIVE • 50 $NXL',
     allocations: [
-      { symbol: 'NR', label: '$NR Protocol Token', unitQty: 50, weightPercent: 100, valueCents: 5000 },
+      { symbol: 'NXL', label: '$NXL Protocol Token', unitQty: 50, weightPercent: 100, valueCents: 5000 },
     ],
   },
   // --- STELLAR SOROBAN PRODUCTS ---
@@ -334,7 +347,7 @@ export const FIGMA_CATALOG: CatalogItem[] = [
     tag: 'STELLAR &bull; AI AGENT',
     allocations: [
       { symbol: 'USDC', label: 'AI Compute Quota', unitQty: 15, weightPercent: 50, valueCents: 1500 },
-      { symbol: 'NR', label: '$NR Agent Credits', unitQty: 15, weightPercent: 50, valueCents: 1500 },
+      { symbol: 'NXL', label: '$NXL Agent Credits', unitQty: 15, weightPercent: 50, valueCents: 1500 },
     ],
   },
   {
@@ -440,7 +453,7 @@ export const FIGMA_CATALOG: CatalogItem[] = [
     tag: 'CROSS-RAIL &bull; APPAREL',
     allocations: [
       { symbol: 'USDC', label: 'Apparel Base', unitQty: 22, weightPercent: 68.8, valueCents: 2200 },
-      { symbol: 'NR', label: '$NR Protocol Stake', unitQty: 10, weightPercent: 31.2, valueCents: 1000 },
+      { symbol: 'NXL', label: '$NXL Protocol Stake', unitQty: 10, weightPercent: 31.2, valueCents: 1000 },
     ],
   },
   {
@@ -457,7 +470,7 @@ export const FIGMA_CATALOG: CatalogItem[] = [
     tag: 'CROSS-RAIL &bull; HEADWEAR',
     allocations: [
       { symbol: 'USDC', label: 'Headwear Base', unitQty: 18, weightPercent: 64.3, valueCents: 1800 },
-      { symbol: 'NR', label: '$NR Protocol Stake', unitQty: 10, weightPercent: 35.7, valueCents: 1000 },
+      { symbol: 'NXL', label: '$NXL Protocol Stake', unitQty: 10, weightPercent: 35.7, valueCents: 1000 },
     ],
   },
 ];

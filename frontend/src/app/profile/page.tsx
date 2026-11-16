@@ -85,7 +85,7 @@ export default function ProfilePage() {
   const [cashoutSuccessMsg, setCashoutSuccessMsg] = useState('');
   const [cashoutErrorMsg, setCashoutErrorMsg] = useState('');
 
-  // Dual-Rail On-Chain $NR Withdrawal State (Stellar Protocol 22 + XRPL XLS-30d)
+  // Dual-Rail On-Chain $NXL Withdrawal State (Stellar Protocol 22 + XRPL XLS-30d)
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [withdrawNrHolding, setWithdrawNrHolding] = useState<HydratedHolding | null>(null);
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
@@ -129,7 +129,7 @@ export default function ProfilePage() {
 
     const numAmount = Number(withdrawAmount);
     if (!numAmount || numAmount <= 0) {
-      setWithdrawErrorMsg('Please specify a positive amount of $NR to withdraw.');
+      setWithdrawErrorMsg('Please specify a positive amount of $NXL to withdraw.');
       return;
     }
 
@@ -581,10 +581,10 @@ export default function ProfilePage() {
                 <span>Dual-Rail Settlement (Stellar Protocol 22 + XRPL XLS-30d)</span>
               </div>
               <h3 className="text-xl font-bold text-[var(--foreground)]">
-                Withdraw $NR On-Chain
+                Withdraw $NXL On-Chain
               </h3>
               <p className="text-xs text-[var(--muted)]">
-                Mint or transfer internal <strong className="text-[var(--gold)]">$NR</strong> tokens to your self-custodial wallet on either Stellar Testnet or XRP Ledger with guaranteed 1:1 cross-rail parity.
+                Mint or transfer internal <strong className="text-[var(--gold)]">$NXL</strong> tokens to your self-custodial wallet on either Stellar Testnet or XRP Ledger with guaranteed 1:1 cross-rail parity.
               </p>
             </div>
 
@@ -624,7 +624,7 @@ export default function ProfilePage() {
                     <span>On-Chain {withdrawSuccessData.chain} Transfer Confirmed!</span>
                   </div>
                   <p className="text-[var(--foreground)]">
-                    Successfully transferred <strong className="text-emerald-300">{withdrawSuccessData.amountNr} $NR</strong> tokens to your external {withdrawSuccessData.chain === 'XRPL' ? 'XRP Ledger' : 'Stellar'} address.
+                    Successfully transferred <strong className="text-emerald-300">{withdrawSuccessData.amountNr} $NXL</strong> tokens to your external {withdrawSuccessData.chain === 'XRPL' ? 'XRP Ledger' : 'Stellar'} address.
                   </p>
                   <div className="pt-2 border-t border-emerald-500/20 space-y-1 text-[11px] text-[var(--muted)]">
                     {withdrawSuccessData.ledgerSeq && <p>Ledger Sequence: #{withdrawSuccessData.ledgerSeq}</p>}
@@ -702,9 +702,9 @@ export default function ProfilePage() {
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[var(--muted)]">
-                    <label>Withdrawal Amount ($NR)</label>
+                    <label>Withdrawal Amount ($NXL)</label>
                     <span className="text-[var(--gold)]">
-                      Available: {withdrawNrHolding ? withdrawNrHolding.quantity : 0} $NR
+                      Available: {withdrawNrHolding ? withdrawNrHolding.quantity : 0} $NXL
                     </span>
                   </div>
                   <div className="flex gap-2">
@@ -1073,7 +1073,7 @@ export default function ProfilePage() {
             <Coins className="w-8 h-8 text-[var(--muted)] mx-auto opacity-50" />
             <h3 className="text-sm font-bold text-[var(--foreground)]">No Active Custody Holdings Yet</h3>
             <p className="text-xs text-[var(--muted)] max-w-md mx-auto">
-              When you purchase Smart Baskets or Live RWA Asset Packs in the Store, your underlying gold, silver, XRP, XLM, and $NR tokens are automatically tracked here in real-time.
+              When you purchase Smart Baskets or Live RWA Asset Packs in the Store, your underlying gold, silver, XRP, XLM, and $NXL tokens are automatically tracked here in real-time.
             </p>
             <Link
               href="/store"
@@ -1169,14 +1169,14 @@ export default function ProfilePage() {
                       <span>1-Click Cashout / Sell</span>
                     </button>
 
-                    {h.symbol === 'NR' && (
+                    {(h.symbol === 'NR' || h.symbol === 'NXL') && (
                       <button
                         type="button"
                         onClick={() => handleOpenWithdrawNr(h)}
                         className="w-full py-2.5 px-4 rounded-xl bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 text-xs font-mono font-bold text-[#00E5FF] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
                         <Cpu className="w-3.5 h-3.5" />
-                        <span>Withdraw to Stellar Testnet</span>
+                        <span>Withdraw $NXL On-Chain</span>
                       </button>
                     )}
                   </div>

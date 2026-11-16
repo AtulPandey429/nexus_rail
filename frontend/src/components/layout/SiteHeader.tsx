@@ -100,6 +100,30 @@ export function SiteHeader() {
     ? `${user.walletAddress.slice(0, 4)}..${user.walletAddress.slice(-4)}`
     : 'Account';
 
+  // Connected Wallet Resolution (Stellar / XRPL / Google Linkage)
+  const connectedAddress =
+    user?.lastConnectedWallet?.address ||
+    user?.stellarAddress ||
+    user?.xrplAddress ||
+    (user?.walletAddress && (user.walletAddress.startsWith('G') || user.walletAddress.startsWith('r')) ? user.walletAddress : null);
+
+  const isStellar = connectedAddress?.startsWith('G');
+  const isXrpl = connectedAddress?.startsWith('r');
+
+  const walletProvider =
+    user?.lastConnectedWallet?.provider ||
+    (isStellar ? 'Freighter' : isXrpl ? 'Crossmark' : 'Web3 Wallet');
+
+  const walletNetwork =
+    user?.lastConnectedWallet?.network ||
+    (isStellar ? 'stellar' : isXrpl ? 'xrpl' : undefined);
+
+  const formattedWalletAddress = connectedAddress
+    ? `${connectedAddress.slice(0, 4)}...${connectedAddress.slice(-4)}`
+    : null;
+
+  const hasConnectedWallet = Boolean(connectedAddress);
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[var(--border)] bg-[var(--surface)] backdrop-blur-xl transition-all duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
@@ -160,33 +184,75 @@ export function SiteHeader() {
           {/* Authenticated User Pill vs Unauthenticated Unified Sign In / Connect */}
           {user ? (
             <div className="hidden sm:flex items-center gap-2">
-              <Link
-                href="/profile"
-                title="View Account & Verified Wallets"
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-mono transition-all cursor-pointer ${
-                  pathname === '/profile'
-                    ? 'bg-[var(--card-hover)] border-[var(--border-highlight)] text-[var(--foreground)] font-bold'
-                    : 'bg-[var(--card)] border-[var(--border)] hover:border-[var(--gold)] text-[var(--foreground)]'
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                <span className="font-semibold max-w-[120px] truncate">{userDisplayName}</span>
-              </Link>
+              {hasConnectedWallet ? (
+                /* 1. Wallet is Connected: Show Address + Sub-label with Wallet Provider Badge */
+                <button
+                  type="button"
+                  onClick={() => setIsWalletModalOpen(true)}
+                  title="Click to switch or manage Web3 wallets"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--gold)] transition-all cursor-pointer group shadow-sm text-left"
+                >
+                  <span className={`w-2 h-2 rounded-full ${walletNetwork === 'stellar' ? 'bg-[#00E5FF]' : 'bg-[#0081F2]'} animate-pulse shrink-0`} />
+                  <div className="flex flex-col leading-tight">
+                    <span className="font-mono text-xs font-bold text-[var(--foreground)] group-hover:text-[var(--gold)] transition-colors">
+                      {formattedWalletAddress}
+                    </span>
+                    <span className="text-[10px] font-mono text-[var(--muted)] flex items-center gap-1">
+                      <span>{walletProvider}</span>
+                      <span className="opacity-40">·</span>
+                      <span className="uppercase text-[9px] opacity-70">{walletNetwork === 'stellar' ? 'Stellar' : 'XRPL'}</span>
+                    </span>
+                  </div>
+                </button>
+              ) : (
+                /* 2. Logged in via Google / Email only: Show Google Name + Prominent '+ Connect Wallet' CTA */
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/profile"
+                    title="View Account Profile"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-highlight)] text-xs font-mono transition-all cursor-pointer text-left"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                    <div className="flex flex-col leading-tight">
+                      <span className="font-semibold text-xs text-[var(--foreground)] max-w-[110px] truncate">
+                        {user.name || user.email?.split('@')[0] || 'Google User'}
+                      </span>
+                      <span className="text-[9px] text-[var(--muted)]">Google Account</span>
+                    </div>
+                  </Link>
 
-              <button
-                type="button"
-                onClick={() => setIsWalletModalOpen(true)}
-                title="Connect / Switch Web3 Wallet"
-                className="p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--gold)] hover:border-[var(--border-highlight)] hover:bg-[var(--gold)]/10 transition-colors cursor-pointer"
-                aria-label="Manage Web3 Wallets"
-              >
-                <Wallet className="w-5 h-5" strokeWidth={2.4} />
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsWalletModalOpen(true)}
+                    title="Connect Stellar (Freighter) or XRPL (Crossmark / GemWallet) Wallet"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--gold)]/15 hover:bg-[var(--gold)]/25 border border-[var(--gold)]/40 text-[var(--gold)] text-xs font-mono font-bold transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-95"
+                  >
+                    <Wallet className="w-3.5 h-3.5 text-[var(--gold)]" />
+                    <span>+ Connect Wallet</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Profile Shortcut when wallet is connected */}
+              {hasConnectedWallet && (
+                <Link
+                  href="/profile"
+                  title="View Account & Portfolio"
+                  className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                    pathname === '/profile'
+                      ? 'bg-[var(--card-hover)] border-[var(--border-highlight)] text-[var(--foreground)]'
+                      : 'bg-[var(--card)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--gold)]'
+                  }`}
+                  aria-label="Account Profile"
+                >
+                  <User className="w-4 h-4" />
+                </Link>
+              )}
 
               <button
                 type="button"
                 onClick={signOut}
-                className="text-[11px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors px-1 cursor-pointer"
+                className="text-[11px] font-mono text-[var(--muted)] hover:text-rose-400 transition-colors px-1 cursor-pointer"
               >
                 Sign out
               </button>
@@ -258,10 +324,13 @@ export function SiteHeader() {
                     setMobileMenuOpen(false);
                     setIsWalletModalOpen(true);
                   }}
-                  className="w-full py-2.5 px-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--gold)] flex items-center gap-2"
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--gold)] flex items-center justify-between"
                 >
-                  <Wallet className="w-4 h-4" />
-                  <span>Manage Wallets</span>
+                  <div className="flex items-center gap-2">
+                    <Wallet className="w-4 h-4" />
+                    <span>{hasConnectedWallet ? `${formattedWalletAddress} (${walletProvider})` : '+ Connect Web3 Wallet'}</span>
+                  </div>
+                  <span className="text-[10px] text-[var(--muted)] uppercase">{walletNetwork || 'Stellar / XRPL'}</span>
                 </button>
 
                 <button

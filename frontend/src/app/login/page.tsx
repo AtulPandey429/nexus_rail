@@ -381,6 +381,14 @@ function LoginFormContent() {
               </span>
             </div>
 
+            {/* Multi-Auth Flexibility Tip */}
+            <div className="p-3 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/20 text-[11px] font-mono text-[var(--gold)] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[var(--gold)] shrink-0 animate-pulse" />
+              <span>
+                Tip: Start with Google or Email now, and link your Stellar (Freighter) or XRPL (Crossmark) wallet anytime later!
+              </span>
+            </div>
+
             <p className="text-[10px] text-[var(--muted)]/70 text-center leading-relaxed font-mono">
               By continuing, you agree to the Terms of Service and Privacy Policy. New here? An account is created automatically.
             </p>

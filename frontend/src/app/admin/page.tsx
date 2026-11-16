@@ -373,7 +373,7 @@ export default function AdminConsolePage() {
     const xrp = Number(ammDepositXrp);
     const nr = Number(ammDepositNr);
     if (!xrp || xrp <= 0 || !nr || nr <= 0) {
-      setDualRailFeedback('Positive amounts of XRP and $NR are required.');
+      setDualRailFeedback('Positive amounts of XRP and $NXL are required.');
       return;
     }
     setAmmDepositing(true);
@@ -543,7 +543,7 @@ export default function AdminConsolePage() {
       { symbol: 'USDC', label: 'USDC Reserve', unitQty: Number(qtyUsdc) },
       { symbol: 'XRP', label: 'XRP (XRPL Native)', unitQty: Number(qtyXrp) },
       { symbol: 'XLM', label: 'XLM (Stellar Native)', unitQty: Number(qtyXlm) },
-      { symbol: 'NR', label: '$NR Protocol Token', unitQty: Number(qtyNr) },
+      { symbol: 'NXL', label: '$NXL Protocol Token', unitQty: Number(qtyNr) },
     ].filter((a) => Number.isFinite(a.unitQty) && a.unitQty > 0);
 
     if (allocations.length === 0) {
@@ -643,7 +643,7 @@ export default function AdminConsolePage() {
         throw new Error(json?.error || 'Reserve adjustment rejected');
       }
       setNrPool(json.data);
-      setReserveFeedback(`Reserve updated! New $NR Spot Price: $${Number(json.data.spotPriceUsd).toFixed(4)}`);
+      setReserveFeedback(`Reserve updated! New $NXL Spot Price: $${Number(json.data.spotPriceUsd).toFixed(4)}`);
     } catch (err: any) {
       setReserveFeedback(err.message || 'Reserve adjustment failed');
     } finally {
@@ -803,7 +803,7 @@ export default function AdminConsolePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-white tracking-tight">$NR Native Protocol AMM Pool</h3>
+            <h3 className="text-base font-semibold text-white tracking-tight">$NXL Native Protocol AMM Pool</h3>
             <span className="px-2 py-0.5 rounded bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#F2D675] text-[10px] font-mono font-bold">
               x · y = k LIVE
             </span>
@@ -813,7 +813,7 @@ export default function AdminConsolePage() {
           </p>
         </div>
         <div className="text-left sm:text-right font-mono">
-          <span className="text-[10px] text-white/40 uppercase block">LIVE $NR SPOT PRICE</span>
+          <span className="text-[10px] text-white/40 uppercase block">LIVE $NXL SPOT PRICE</span>
           <span className="text-xl font-bold text-[#F2D675]">
             ${(nrPool?.spotPriceUsd ?? 1.0).toFixed(4)}
           </span>
@@ -831,15 +831,15 @@ export default function AdminConsolePage() {
           </span>
         </div>
         <div className="p-3.5 rounded-lg bg-white/5 border border-white/10">
-          <span className="text-[10px] text-white/40 uppercase block">Pool Supply (S_NR)</span>
+          <span className="text-[10px] text-white/40 uppercase block">Pool Supply (S_NXL)</span>
           <span className="text-base font-bold text-[#00E5FF] mt-1 block">
-            {(nrPool?.poolNrSupply ?? 100000).toLocaleString('en-US', { maximumFractionDigits: 2 })} NR
+            {(nrPool?.poolNrSupply ?? 100000).toLocaleString('en-US', { maximumFractionDigits: 2 })} NXL
           </span>
         </div>
         <div className="p-3.5 rounded-lg bg-white/5 border border-white/10">
-          <span className="text-[10px] text-white/40 uppercase block">Circulating $NR</span>
+          <span className="text-[10px] text-white/40 uppercase block">Circulating $NXL</span>
           <span className="text-base font-bold text-white mt-1 block">
-            {(nrPool?.circulatingNr ?? 0).toLocaleString('en-US', { maximumFractionDigits: 4 })} NR
+            {(nrPool?.circulatingNr ?? 0).toLocaleString('en-US', { maximumFractionDigits: 4 })} NXL
           </span>
         </div>
         <div className="p-3.5 rounded-lg bg-white/5 border border-white/10">
@@ -1040,7 +1040,7 @@ export default function AdminConsolePage() {
               { label: 'USDC', val: qtyUsdc, set: setQtyUsdc },
               { label: 'XRP', val: qtyXrp, set: setQtyXrp },
               { label: 'XLM', val: qtyXlm, set: setQtyXlm },
-              { label: '$NR', val: qtyNr, set: setQtyNr },
+              { label: '$NXL', val: qtyNr, set: setQtyNr },
             ].map((field) => (
               <div key={field.label}>
                 <label className="text-[10px] text-white/45 block mb-1">{field.label}</label>
@@ -1089,7 +1089,7 @@ export default function AdminConsolePage() {
               </h3>
             </div>
             <p className="text-xs font-mono text-white/40 mt-1">
-              Deterministic double-entry fee segregation: 50% Owner Net Profit · 50% $NR Buyback Reserve Injection
+              Deterministic double-entry fee segregation: 50% Owner Net Profit · 50% $NXL Buyback Reserve Injection
             </p>
           </div>
           <button
@@ -1124,7 +1124,7 @@ export default function AdminConsolePage() {
             </p>
           </div>
           <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1">
-            <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">$NR BUYBACK RESERVE</p>
+            <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">$NXL BUYBACK RESERVE</p>
             <p className="text-2xl font-mono font-bold text-[#00E5FF]">
               ${treasurySummary ? treasurySummary.nrPoolInjectedUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}
             </p>
@@ -1208,7 +1208,7 @@ export default function AdminConsolePage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-white/60">$NR Buyback Share (%)</label>
+                <label className="text-white/60">$NXL Buyback Share (%)</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -1378,7 +1378,7 @@ export default function AdminConsolePage() {
                 <th className="pb-2.5">Gross Amount</th>
                 <th className="pb-2.5">Total Revenue</th>
                 <th className="pb-2.5">Owner Profit (50%)</th>
-                <th className="pb-2.5">$NR Buyback (50%)</th>
+                <th className="pb-2.5">$NXL Buyback (50%)</th>
                 <th className="pb-2.5">Rail</th>
               </tr>
             </thead>
@@ -2227,7 +2227,7 @@ export default function AdminConsolePage() {
                   </p>
                 </div>
                 <div className="p-5 rounded-xl bg-[#10141A] border border-white/10 space-y-1">
-                  <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">$NR BUYBACK RESERVE</p>
+                  <p className="text-[10px] font-mono tracking-widest uppercase text-white/40">$NXL BUYBACK RESERVE</p>
                   <p className="text-2xl sm:text-3xl font-mono font-bold text-[#00E5FF] tracking-tight">
                     ${treasurySummary ? treasurySummary.nrPoolInjectedUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}
                   </p>

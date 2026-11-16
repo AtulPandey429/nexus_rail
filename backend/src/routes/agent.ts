@@ -78,7 +78,7 @@ function parseQuantityAndProduct(message: string, products: DbProduct[]) {
 
   // Common aliases mapped to catalog SKUs
   const aliases: Array<{ match: RegExp; sku: string }> = [
-    { match: /\b(nr|nr\s*token|nr\s*tokens|nexus\s*rail\s*token|nr\s*coins?)\b/i, sku: 'NR-TOKEN' },
+    { match: /\b(nxl|nxl\s*token|nxl\s*tokens|nr|nr\s*token|nr\s*tokens|nexus\s*rail\s*token|nr\s*coins?)\b/i, sku: 'NR-PACK-50' },
     { match: /\b(ngold|gold\s*token|gold|1\s*gram\s*gold)\b/i, sku: 'NGOLD-TOKEN' },
     { match: /\b(rail\s*one|hardware\s*signer|railone)\b/i, sku: 'RAIL-ONE' },
     { match: /\b(relay\s*mat|desk\s*mat|mat)\b/i, sku: 'RELAY-MAT' },
@@ -148,8 +148,8 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
       const xrpAvailableUnits = (balance.XRP || 0) > 0 ? (balance.XRP / 1_000_000) : 250.0;
       const xlmAvailableUnits = (balance.XLM || 0) > 0 ? (balance.XLM / 100) : 340.0;
 
-      // Real $NR ledger holdings + live AMM spot price
-      const nrTokensUnits = (balance.NR || 0) > 0 ? Number((balance.NR / NR_MICRO_SCALE).toFixed(4)) : 0;
+      // Real $NXL ledger holdings + live AMM spot price
+      const nrTokensUnits = ((balance.NXL ?? balance.NR) || 0) > 0 ? Number((((balance.NXL ?? balance.NR) || 0) / NR_MICRO_SCALE).toFixed(4)) : 0;
       const nrTokenUsdPrice = nrPool?.spotPriceUsd ?? 1.0;
       const ngoldUnits = 1.0; // 1g Allocated Gold Token
       const ngoldUsdPrice = 85.0; // $85.00
@@ -194,10 +194,10 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
             rail: 'Stellar Testnet',
           },
           {
-            symbol: 'NR',
-            name: 'NR Protocol Token',
+            symbol: 'NXL',
+            name: 'NXL Protocol Token',
             type: 'token',
-            amount: `${nrTokensUnits.toFixed(1)} NR`,
+            amount: `${nrTokensUnits.toFixed(1)} NXL`,
             usdValue: nrUsdVal,
             rail: 'Dual-Rail Token',
           },
@@ -214,7 +214,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
 
       return res.json({
         success: true,
-        reply: `Here are the active asset holdings for your connected wallet (${walletAddress.slice(0, 10)}...):\n• Total Portfolio Value: $${totalPortfolioUsd.toFixed(2)} USD\n• XRP: ${xrpAvailableUnits.toFixed(2)} XRP (~$${xrpUsdVal.toFixed(2)})\n• XLM: ${xlmAvailableUnits.toFixed(2)} XLM (~$${xlmUsdVal.toFixed(2)})\n• NR Tokens: ${nrTokensUnits.toFixed(1)} NR (~$${nrUsdVal.toFixed(2)})\n• Nexus Cash: $${usdCashVal.toFixed(2)} USD`,
+        reply: `Here are the active asset holdings for your connected wallet (${walletAddress.slice(0, 10)}...):\n• Total Portfolio Value: $${totalPortfolioUsd.toFixed(2)} USD\n• XRP: ${xrpAvailableUnits.toFixed(2)} XRP (~$${xrpUsdVal.toFixed(2)})\n• XLM: ${xlmAvailableUnits.toFixed(2)} XLM (~$${xlmUsdVal.toFixed(2)})\n• NXL Tokens: ${nrTokensUnits.toFixed(1)} NXL (~$${nrUsdVal.toFixed(2)})\n• Nexus Cash: $${usdCashVal.toFixed(2)} USD`,
         holdings,
       });
     }
@@ -243,7 +243,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
       if (userOrders.length === 0) {
         return res.json({
           success: true,
-          reply: 'You have no recorded orders in your account yet. You can create an order by typing "Add order for 2 NR tokens" or by browsing our Store.',
+          reply: 'You have no recorded orders in your account yet. You can create an order by typing "Add order for 2 NXL tokens" or by browsing our Store.',
           orders: [],
         });
       }
@@ -288,12 +288,12 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
       // 1. Extract Order Identifier (#NR-1002, #12, NR-1002, 12, etc.)
       const orderRefMatch =
         message.match(/(?:order\s*#?|#)([a-zA-Z0-9_-]+)/i) ||
-        message.match(/#?NR[\w-]+/i);
+        message.match(/#?(NXL|NR)[\w-]+/i);
 
       if (!orderRefMatch) {
         return res.json({
           success: true,
-          reply: 'Please specify the Order ID you wish to pay for (e.g., "Pay for order #NR-1002" or "Pay for order #12"). You can type "Show my orders" to see all your pending orders.',
+          reply: 'Please specify the Order ID you wish to pay for (e.g., "Pay for order #NXL-1002" or "Pay for order #12"). You can type "Show my orders" to see all your pending orders.',
         });
       }
 
@@ -392,7 +392,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
 
         return res.json({
           success: true,
-          reply: `I could not determine which product you would like to order. Which item from our catalog can I add for you?\n\nAvailable items:\n${topCatalog}\n\nExample: "Add order for 2 NR tokens" or "Order 1 Rail One".`,
+          reply: `I could not determine which product you would like to order. Which item from our catalog can I add for you?\n\nAvailable items:\n${topCatalog}\n\nExample: "Add order for 2 NXL tokens" or "Order 1 Rail One".`,
         });
       }
 
@@ -428,7 +428,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
     // =========================================================================
     // ACTION 5: Specific order lookup by ID (#NR8K2P9X, NR8K2P9X, etc.)
     // =========================================================================
-    const orderIdMatch = message.match(/#?NR[\w-]+/i);
+    const orderIdMatch = message.match(/#?(NXL|NR)[\w-]+/i);
     if (orderIdMatch && (lower.includes('status') || lower.includes('order') || lower.includes('where') || lower.includes('receipt'))) {
       const targetVariants = OrderSequenceService.getLookupVariants(orderIdMatch[0]);
       const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
@@ -478,7 +478,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
     // =========================================================================
     // Standard Assistant Chat Flow
     // =========================================================================
-    let aiReply = 'I am your NexusRail Autonomous Commerce Agent. You can ask me to "Add order for 2 NR tokens", "Show my orders", "Pay for order #...", or "Show my balance".';
+    let aiReply = 'I am your NexusRail Autonomous Commerce Agent. You can ask me to "Add order for 2 NXL tokens", "Show my orders", "Pay for order #...", or "Show my balance".';
     let latencyMs = 120;
 
     try {

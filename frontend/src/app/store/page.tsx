@@ -39,6 +39,7 @@ const ALLOCATION_COLORS: Record<string, string> = {
   XRP: 'bg-blue-400',
   XLM: 'bg-cyan-400',
   NR: 'bg-violet-400',
+  NXL: 'bg-violet-400',
 };
 
 const PRODUCT_IMAGES: Record<string, string> = {
@@ -248,7 +249,7 @@ export default function StoreCatalogPage() {
               <div className="w-5 h-5 rounded-md nexus-glass-card border border-[var(--border)] flex items-center justify-center text-[var(--gold)]">
                 <Box className="w-3 h-3" />
               </div>
-              <span>Live Smart Baskets &amp; RWA tokens auto-synced every 60s via CoinGecko, Binance &amp; $NR AMM.</span>
+              <span>Live Smart Baskets &amp; RWA tokens auto-synced every 60s via CoinGecko, Binance &amp; $NXL AMM.</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -491,7 +492,7 @@ export default function StoreCatalogPage() {
                         {product.priceInr && product.isLiveAsset && (
                           <div className="flex items-center justify-between text-[11px] font-mono text-[var(--muted)]">
                             <span>≈ ₹{product.priceInr.toLocaleString('en-IN')} INR</span>
-                            <span className="text-emerald-400">10% off w/ $NR</span>
+                            <span className="text-emerald-400">10% off w/ $NXL</span>
                           </div>
                         )}
 

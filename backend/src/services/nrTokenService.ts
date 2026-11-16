@@ -24,7 +24,7 @@ export const TOTAL_SUPPLY_NR_MICRO = 1_000_000_000_000; // 1,000,000.000000 NR c
 export const DEFAULT_SWAP_FEE_BPS = 50; // 0.50%
 export const MIN_RESERVE_USD_CENTS = 100_000; // $1,000.00 safety floor
 
-export type NrSwapAsset = 'NR' | 'USD' | 'XLM' | 'XRP';
+export type NrSwapAsset = 'NR' | 'NXL' | 'USD' | 'XLM' | 'XRP';
 
 export interface NrPoolStats {
   symbol: 'NR';
@@ -376,8 +376,8 @@ export class NrTokenService {
     const [pool, fx] = await Promise.all([this.ensureGenesisPool(), getFxQuote()]);
     const feeBps = pool.swap_fee_bps || DEFAULT_SWAP_FEE_BPS;
 
-    if (toAsset === 'NR') {
-      const inputUsdCents = assetToUsdCents(fromAsset as Exclude<NrSwapAsset, 'NR'>, amount, fx);
+    if (toAsset === 'NR' || toAsset === 'NXL') {
+      const inputUsdCents = assetToUsdCents(fromAsset as any, amount, fx);
       const q = computeBuyQuoteFromPool(pool.reserve_usd_cents, pool.pool_nr_micro, inputUsdCents, feeBps);
       return {
         fromAsset,
@@ -403,10 +403,10 @@ export class NrTokenService {
       };
     }
 
-    if (fromAsset === 'NR') {
+    if (fromAsset === 'NR' || fromAsset === 'NXL') {
       const inputNrMicro = Math.round(amount * NR_MICRO_SCALE);
       const q = computeSellQuoteFromPool(pool.reserve_usd_cents, pool.pool_nr_micro, inputNrMicro, feeBps);
-      const receiveAmount = usdCentsToTargetAsset(toAsset as Exclude<NrSwapAsset, 'NR'>, q.netUsdOutCents, fx);
+      const receiveAmount = usdCentsToTargetAsset(toAsset as any, q.netUsdOutCents, fx);
       return {
         fromAsset,
         toAsset,

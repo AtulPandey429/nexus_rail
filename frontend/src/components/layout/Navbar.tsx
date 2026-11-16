@@ -75,8 +75,8 @@ export function Navbar({
           onClick={() => setActiveView('rwa')}
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-rail-emerald to-cyber-purple flex items-center justify-center font-bold text-lg text-nexus-dark shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-all">
-            NR
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-rail-emerald to-cyber-purple flex items-center justify-center font-bold text-xs text-nexus-dark shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-all">
+            NXL
           </div>
           <div>
             <div className="flex items-center gap-2">

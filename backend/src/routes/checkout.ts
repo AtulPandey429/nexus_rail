@@ -12,8 +12,8 @@ import { PortfolioService } from '../services/portfolioService.js';
 
 export const checkoutRouter = Router();
 
-// POST /api/v1/checkout/nr/pay - Pay order using $NR balance with 10% discount + 0% fee
-checkoutRouter.post('/nr/pay', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/v1/checkout/nr/pay or /nxl/pay - Pay order using $NXL/$NR balance with 10% discount + 0% fee
+const handleTokenPayOrder = async (req: AuthenticatedRequest, res: Response) => {
   const orderId = String(req.body?.orderId || '').trim();
   if (!orderId) {
     return res.status(400).json({ success: false, error: 'orderId is required' });
@@ -30,7 +30,7 @@ checkoutRouter.post('/nr/pay', requireAuth, async (req: AuthenticatedRequest, re
       data: result,
     });
   } catch (error: any) {
-    const msg = error?.message || '$NR checkout failed';
+    const msg = error?.message || '$NXL checkout failed';
     const status = msg.includes('not found')
       ? 404
       : msg.includes('Insufficient')
@@ -38,7 +38,10 @@ checkoutRouter.post('/nr/pay', requireAuth, async (req: AuthenticatedRequest, re
       : 400;
     return res.status(status).json({ success: false, error: msg });
   }
-});
+};
+
+checkoutRouter.post('/nr/pay', requireAuth, handleTokenPayOrder);
+checkoutRouter.post('/nxl/pay', requireAuth, handleTokenPayOrder);
 
 // POST /api/v1/checkout/stripe/create-session
 checkoutRouter.post('/stripe/create-session', requireAuth, async (req: AuthenticatedRequest, res: Response) => {

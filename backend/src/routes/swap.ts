@@ -8,7 +8,7 @@ import { verifyToken } from '../services/jwt.js';
 
 export const swapRouter = Router();
 
-const SWAP_ASSETS = ['XRP', 'XLM', 'NR', 'USD'] as const;
+const SWAP_ASSETS = ['XRP', 'XLM', 'NR', 'NXL', 'USD'] as const;
 
 const initiateSwapSchema = z.object({
   fromAsset: z.enum(SWAP_ASSETS),
@@ -58,7 +58,7 @@ swapRouter.get('/nr-pool', async (_req: Request, res: Response) => {
 swapRouter.post('/quote', async (req: Request, res: Response) => {
   try {
     const { fromAsset = 'XRP', toAsset = 'XLM', amount = 100 } = req.body || {};
-    if (fromAsset === 'NR' || toAsset === 'NR' || fromAsset === 'USD' || toAsset === 'USD') {
+    if (fromAsset === 'NR' || fromAsset === 'NXL' || toAsset === 'NR' || toAsset === 'NXL' || fromAsset === 'USD' || toAsset === 'USD') {
       const q = await NrTokenService.quoteSwap({ fromAsset, toAsset, amount: Number(amount) || 100 });
       return res.json({
         success: true,
@@ -107,11 +107,11 @@ swapRouter.post('/initiate', async (req: Request, res: Response) => {
     const { fromAsset, toAsset, amount, userDestinationAddress, userSourceAddress } = parsed.data;
     const userId = extractOptionalUserId(req);
 
-    if (fromAsset === 'NR' || toAsset === 'NR' || fromAsset === 'USD' || toAsset === 'USD') {
+    if (fromAsset === 'NR' || fromAsset === 'NXL' || toAsset === 'NR' || toAsset === 'NXL' || fromAsset === 'USD' || toAsset === 'USD') {
       const order = await NrTokenService.createNrSwapOrder({
         userId,
-        fromAsset,
-        toAsset,
+        fromAsset: fromAsset === 'NXL' ? 'NR' : fromAsset,
+        toAsset: toAsset === 'NXL' ? 'NR' : toAsset,
         amount,
         userDestinationAddress,
       });
@@ -162,7 +162,9 @@ swapRouter.post('/execute', async (req: Request, res: Response) => {
     const isNrOrUsd =
       Boolean(existingNrOrder) ||
       fromAsset === 'NR' ||
+      fromAsset === 'NXL' ||
       toAsset === 'NR' ||
+      toAsset === 'NXL' ||
       fromAsset === 'USD' ||
       toAsset === 'USD';
 

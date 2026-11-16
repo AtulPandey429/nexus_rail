@@ -92,7 +92,7 @@ function CheckoutContent() {
           .then((r) => r.json())
           .then((j) => {
             if (j?.success && j.balance) {
-              setNrBalance((j.balance.NR || 0) / 1_000_000);
+              setNrBalance(((j.balance.NXL ?? j.balance.NR) || 0) / 1_000_000);
             }
           })
           .catch(() => {});
@@ -164,7 +164,7 @@ function CheckoutContent() {
     ? `1 XLM = $${stellarPricePerToken.toFixed(4)}`
     : selectedRail === 'XRPL'
     ? `1 XRP = $${xrplPricePerToken.toFixed(4)}`
-    : `1 NR = $${nrPricePerToken.toFixed(4)}`;
+    : `1 NXL = $${nrPricePerToken.toFixed(4)}`;
 
   const activeTotalCrypto =
     selectedRail === 'STELLAR' ? stellarTotalCrypto : selectedRail === 'XRPL' ? xrplTotalCrypto : nrTotalCrypto;
@@ -172,7 +172,7 @@ function CheckoutContent() {
     selectedRail === 'STELLAR' ? stellarOrderCrypto : selectedRail === 'XRPL' ? xrplOrderCrypto : nrTotalCrypto;
   const activeFeeCrypto =
     selectedRail === 'STELLAR' ? stellarFeeCrypto : selectedRail === 'XRPL' ? xrplFeeCrypto : '0.00';
-  const activeToken = selectedRail === 'STELLAR' ? 'XLM' : selectedRail === 'XRPL' ? 'XRP' : 'NR';
+  const activeToken = selectedRail === 'STELLAR' ? 'XLM' : selectedRail === 'XRPL' ? 'XRP' : 'NXL';
 
   // Handle onchain or $NR native ledger payment submission
   const handleConfirmAndPay = async () => {
@@ -188,9 +188,9 @@ function CheckoutContent() {
 
       if (selectedRail === 'NR_TOKEN') {
         if (!token) {
-          throw new Error('Please sign in to pay with your $NR Protocol Token wallet balance.');
+          throw new Error('Please sign in to pay with your $NXL Protocol Token wallet balance.');
         }
-        const nrRes = await fetch('/api/v1/checkout/nr/pay', {
+        const nrRes = await fetch('/api/v1/checkout/nxl/pay', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -200,7 +200,7 @@ function CheckoutContent() {
         });
         const nrJson = await nrRes.json().catch(() => null);
         if (!nrRes.ok || !nrJson?.success) {
-          throw new Error(nrJson?.error || '$NR checkout failed');
+          throw new Error(nrJson?.error || '$NXL checkout failed');
         }
         txHash = nrJson.data.txHash;
         finalPaidUsd = (nrJson.data.finalPaidCents || 0) / 100;
@@ -451,7 +451,7 @@ function CheckoutContent() {
                   </p>
                 </button>
 
-                {/* Card 3: $NR Protocol Token (10% Discount + 0% Fee) */}
+                {/* Card 3: $NXL Protocol Token (10% Discount + 0% Fee) */}
                 <button
                   type="button"
                   onClick={() => setSelectedRail('NR_TOKEN')}
@@ -468,7 +468,7 @@ function CheckoutContent() {
                       }`}>
                         {selectedRail === 'NR_TOKEN' && <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />}
                       </span>
-                      <span className="text-sm font-semibold text-[var(--foreground)]">$NR Token</span>
+                      <span className="text-sm font-semibold text-[var(--foreground)]">$NXL Token</span>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[10px] font-mono font-bold">
                       SAVE 10%
@@ -476,11 +476,11 @@ function CheckoutContent() {
                   </div>
 
                   <p className="text-2xl font-mono font-medium text-[var(--foreground)] tracking-tight mt-3">
-                    {nrTotalCrypto} NR
+                    {nrTotalCrypto} NXL
                   </p>
 
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    Balance {nrBalance.toFixed(4)} NR · Fee $0.00
+                    Balance {nrBalance.toFixed(4)} NXL · Fee $0.00
                   </p>
 
                   {nrBalance >= Number(nrTotalCrypto) ? (
@@ -490,11 +490,11 @@ function CheckoutContent() {
                     </p>
                   ) : (
                     <Link
-                      href="/swap?to=NR"
+                      href="/swap?to=NXL"
                       onClick={(e) => e.stopPropagation()}
                       className="text-xs font-mono text-amber-400 hover:underline mt-3 inline-flex items-center gap-1 font-semibold"
                     >
-                      Need more $NR? Swap XLM/XRP &rarr; NR
+                      Need more $NXL? Swap XLM/XRP &rarr; NXL
                     </Link>
                   )}
                 </button>
@@ -519,11 +519,11 @@ function CheckoutContent() {
                         ? 'Freighter · Stellar testnet'
                         : selectedRail === 'XRPL'
                         ? 'GemWallet · XRPL testnet'
-                        : 'NexusRail Ledger · $NR Token'}
+                        : 'NexusRail Ledger · $NXL Token'}
                     </p>
                     <p className="text-[11px] font-mono text-[var(--muted)]">
                       {selectedRail === 'NR_TOKEN'
-                        ? `Available: ${nrBalance.toFixed(4)} NR`
+                        ? `Available: ${nrBalance.toFixed(4)} NXL`
                         : user?.walletAddress || (selectedRail === 'STELLAR' ? 'GCKF...7Q2M' : 'rNXs...9b3K')}
                     </p>
                   </div>
@@ -647,7 +647,7 @@ function CheckoutContent() {
                 </div>
                 {nrDiscountUsd > 0 && (
                   <div className="flex justify-between text-emerald-400">
-                    <span>$NR Holder Discount (10%)</span>
+                    <span>$NXL Holder Discount (10%)</span>
                     <span className="font-bold">-${nrDiscountUsd.toFixed(2)}</span>
                   </div>
                 )}
@@ -709,11 +709,11 @@ function CheckoutContent() {
             <TransactionSafetyCenter
               chain={selectedRail === 'XRPL' ? 'xrpl' : 'stellar'}
               networkName={selectedRail === 'STELLAR' ? 'STELLAR TESTNET' : selectedRail === 'XRPL' ? 'XRPL TESTNET' : 'NEXUSRAIL NATIVE LEDGER'}
-              networkIdentifier={selectedRail === 'STELLAR' ? 'Test SDF Network ; September 2015' : selectedRail === 'XRPL' ? 'wss://s.altnet.rippletest.net:51233' : 'Double-Entry AMM $NR Settlement'}
-              actionType={selectedRail === 'NR_TOKEN' ? '$NR Native Token Checkout (10% Off)' : 'Commercial Hardware Settlement'}
-              recipientAddress={selectedRail === 'STELLAR' ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR' : selectedRail === 'XRPL' ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW' : 'NR-AMM-TREASURY-VAULT'}
+              networkIdentifier={selectedRail === 'STELLAR' ? 'Test SDF Network ; September 2015' : selectedRail === 'XRPL' ? 'wss://s.altnet.rippletest.net:51233' : 'Double-Entry AMM $NXL Settlement'}
+              actionType={selectedRail === 'NR_TOKEN' ? '$NXL Native Token Checkout (10% Off)' : 'Commercial Hardware Settlement'}
+              recipientAddress={selectedRail === 'STELLAR' ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR' : selectedRail === 'XRPL' ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW' : 'NXL-AMM-TREASURY-VAULT'}
               isMerchantVault={true}
-              destinationTagOrMemo={selectedRail === 'XRPL' ? 104857 : `NR-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`}
+              destinationTagOrMemo={selectedRail === 'XRPL' ? 104857 : `NXL-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`}
               assetSymbol={activeToken}
               isNativeAsset={true}
               amount={activeTotalCrypto}

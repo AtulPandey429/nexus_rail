@@ -163,7 +163,7 @@ export class DualRailTokenService {
         const ammInfo = await client.request({
           command: 'amm_info',
           asset: { currency: 'XRP' },
-          asset2: { currency: XRPL_NR_CURRENCY_HEX, issuer: issuerWallet.address },
+          asset2: { currency: XRPL_NR_CURRENCY_CODE, issuer: issuerWallet.address },
         });
 
         if (ammInfo.result?.amm) {
@@ -185,14 +185,14 @@ export class DualRailTokenService {
         // AMM does not exist yet, proceed with AMMCreate
       }
 
-      // 1. Distributor TrustSet for NR
-      console.log('1️⃣ Setting Distributor TrustSet for XRPL $NR...');
+      // 1. Distributor TrustSet for NXL
+      console.log('1️⃣ Setting Distributor TrustSet for XRPL $NXL...');
       const trustTx = await client.submitAndWait(
         {
           TransactionType: 'TrustSet',
           Account: distWallet.address,
           LimitAmount: {
-            currency: XRPL_NR_CURRENCY_HEX,
+            currency: XRPL_NR_CURRENCY_CODE,
             issuer: issuerWallet.address,
             value: String(TOTAL_SUPPLY_CAP),
           },
@@ -207,18 +207,18 @@ export class DualRailTokenService {
         txHash: trustTx.result.hash,
         ledgerSeq: trustTx.result.ledger_index,
         amountPrimary: String(TOTAL_SUPPLY_CAP),
-        details: { limit: TOTAL_SUPPLY_CAP, currencyHex: XRPL_NR_CURRENCY_HEX },
+        details: { limit: TOTAL_SUPPLY_CAP, currencyCode: XRPL_NR_CURRENCY_CODE },
       });
 
       // 2. Issuer Mints tokens to Distributor
-      console.log('2️⃣ Issuer minting $NR to Distributor Vault...');
+      console.log('2️⃣ Issuer minting $NXL to Distributor Vault...');
       const mintTx = await client.submitAndWait(
         {
           TransactionType: 'Payment',
           Account: issuerWallet.address,
           Destination: distWallet.address,
           Amount: {
-            currency: XRPL_NR_CURRENCY_HEX,
+            currency: XRPL_NR_CURRENCY_CODE,
             issuer: issuerWallet.address,
             value: '500',
           },
@@ -244,7 +244,7 @@ export class DualRailTokenService {
           Account: distWallet.address,
           Amount: xrpToDrops(initialXrp),
           Amount2: {
-            currency: XRPL_NR_CURRENCY_HEX,
+            currency: XRPL_NR_CURRENCY_CODE,
             issuer: issuerWallet.address,
             value: String(initialNr),
           },
@@ -266,7 +266,7 @@ export class DualRailTokenService {
       const ammCheck = await client.request({
         command: 'amm_info',
         asset: { currency: 'XRP' },
-        asset2: { currency: XRPL_NR_CURRENCY_HEX, issuer: issuerWallet.address },
+        asset2: { currency: XRPL_NR_CURRENCY_CODE, issuer: issuerWallet.address },
       });
 
       const ammAccount = ammCheck.result?.amm?.account || distWallet.address;
@@ -343,16 +343,16 @@ export class DualRailTokenService {
       if (!distributorSeed) throw new Error('XRPL_HOT_WALLET_SEED is required');
       const distWallet = Wallet.fromSeed(distributorSeed);
 
-      console.log(`💧 Depositing ${xrpAmount} XRP and ${nrAmount} NR into XRPL AMM...`);
+      console.log(`💧 Depositing ${xrpAmount} XRP and ${nrAmount} NXL into XRPL AMM...`);
       const depositTx = await client.submitAndWait(
         {
           TransactionType: 'AMMDeposit',
           Account: distWallet.address,
           Asset: { currency: 'XRP' },
-          Asset2: { currency: XRPL_NR_CURRENCY_HEX, issuer: issuerWallet.address },
+          Asset2: { currency: XRPL_NR_CURRENCY_CODE, issuer: issuerWallet.address },
           Amount: xrpToDrops(xrpAmount),
           Amount2: {
-            currency: XRPL_NR_CURRENCY_HEX,
+            currency: XRPL_NR_CURRENCY_CODE,
             issuer: issuerWallet.address,
             value: String(nrAmount),
           },
@@ -398,14 +398,14 @@ export class DualRailTokenService {
       if (!distributorSeed) throw new Error('XRPL_HOT_WALLET_SEED is required');
       const distWallet = Wallet.fromSeed(distributorSeed);
 
-      console.log(`🚀 Sending ${amountNr} $NR on XRPL to ${destinationAddress}...`);
+      console.log(`🚀 Sending ${amountNr} $NXL on XRPL to ${destinationAddress}...`);
       const paymentTx = await client.submitAndWait(
         {
           TransactionType: 'Payment',
           Account: distWallet.address,
           Destination: destinationAddress,
           Amount: {
-            currency: XRPL_NR_CURRENCY_HEX,
+            currency: XRPL_NR_CURRENCY_CODE,
             issuer: issuerWallet.address,
             value: String(amountNr),
           },
