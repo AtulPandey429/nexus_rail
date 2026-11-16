@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { AgentDeskPanel } from '@/components/agent/AgentDeskPanel';
@@ -10,7 +10,18 @@ import { VisualEffectsCanvas } from '@/components/ui/VisualEffectsCanvas';
 import { FloatingAIAgentWidget } from '@/components/agent/FloatingAIAgentWidget';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isAdmin = pathname?.startsWith('/admin');
   const [agentOpen, setAgentOpen] = useState(false);
+
+  // Dedicated, distraction-free layout for Admin Operator Console
+  if (isAdmin) {
+    return (
+      <div className="flex flex-col min-h-screen bg-[#0B0E14] text-white antialiased">
+        <main className="flex-1 w-full">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen relative overflow-x-hidden transition-colors duration-200">

@@ -37,6 +37,12 @@ const NAV_LINKS = [
 export function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Completely hide customer storefront header on Admin dashboard
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
   const { theme, toggleTheme, setIsCustomizerOpen } = useTheme();
 
   const [user, setUser] = useState<SessionUser | null>(null);

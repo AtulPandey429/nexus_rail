@@ -2,9 +2,17 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { NexusLogo } from '@/components/ui/NexusLogo';
 
 export function SiteFooter() {
+  const pathname = usePathname();
+
+  // Hide customer footer on admin workspace
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
   return (
     <footer className="w-full border-t border-[var(--border)] bg-[var(--surface-solid)] text-[var(--muted)] text-xs py-10 px-4 sm:px-6 transition-colors duration-200">
       <div className="max-w-7xl mx-auto space-y-8">
