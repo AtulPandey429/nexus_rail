@@ -26,6 +26,7 @@ import { rwaModularRouter } from './routes/rwa/rwaModularRouter.js';
 import { swapRouter } from './routes/swap.js';
 import { userRouter } from './routes/user.js';
 import { portfolioRouter } from './routes/portfolio.js';
+import { NrTokenService } from './services/nrTokenService.js';
 import type { HealthResponse } from './types/index.js';
 
 const app = express();
@@ -79,6 +80,16 @@ app.use('/api/v1/rwa-modular', rwaModularRouter);
 app.use('/api/v1/swap', swapRouter);
 app.use('/api/v1/user', userRouter);
 app.use('/api/v1/portfolio', portfolioRouter);
+
+// Public Dual-Rail Token Pool Stats ($NXL / $NR)
+app.get(['/api/v1/nr-token/status', '/api/v1/nxl-token/status'], async (_req: Request, res: Response) => {
+  try {
+    const stats = await NrTokenService.getPoolStats();
+    res.json({ success: true, data: stats });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load token pool status' });
+  }
+});
 
 // Health Check Endpoints
 app.get('/health', (_req: Request, res: Response) => {

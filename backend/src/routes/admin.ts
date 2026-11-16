@@ -203,7 +203,7 @@ adminRouter.get('/users', async (_req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-adminRouter.get('/nr-pool', async (_req: AuthenticatedRequest, res: Response) => {
+adminRouter.get(['/nr-pool', '/nr-token/status', '/nxl-token/status'], async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const stats = await NrTokenService.getPoolStats();
     res.json({ success: true, data: stats });
@@ -212,7 +212,7 @@ adminRouter.get('/nr-pool', async (_req: AuthenticatedRequest, res: Response) =>
   }
 });
 
-adminRouter.post('/nr-pool/adjust-reserve', async (req: AuthenticatedRequest, res: Response) => {
+adminRouter.post(['/nr-pool/adjust-reserve', '/nr-token/reserve', '/nxl-token/reserve'], async (req: AuthenticatedRequest, res: Response) => {
   const parsed = AdjustReserveSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, error: 'Invalid reserve adjustment payload', details: parsed.error.format() });
@@ -330,7 +330,7 @@ adminRouter.get('/tokens/nr', async (_req: AuthenticatedRequest, res: Response) 
 // Dual-Rail Token & Native XRPL AMM (XLS-30d) Endpoints
 // ============================================================================
 
-adminRouter.get('/dual-rail/status', async (_req: AuthenticatedRequest, res: Response) => {
+adminRouter.get(['/dual-rail/status', '/dual-rail/summary'], async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const summary = await DualRailTokenService.getDualRailSummary();
     res.json({ success: true, data: summary });

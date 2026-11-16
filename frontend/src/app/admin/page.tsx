@@ -577,13 +577,13 @@ export default function AdminConsolePage() {
     setAdjustingReserve(true);
     setReserveFeedback('');
     try {
-      const res = await fetch('/api/v1/admin/nr-token/reserve', {
+      const res = await fetch('/api/v1/admin/nr-pool/adjust-reserve', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ deltaUsd, note: reserveNote }),
+        body: JSON.stringify({ deltaUsdCents: Math.round(deltaUsd * 100), note: reserveNote }),
       });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success) {
