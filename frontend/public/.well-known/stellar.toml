@@ -1,0 +1,25 @@
+# Stellar SEP-0001 Configuration for NexusRail ($NR)
+# https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0001.md
+
+NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+HORIZON_URL = "https://horizon-testnet.stellar.org"
+
+[DOCUMENTATION]
+ORG_NAME = "NexusRail Global Commerce"
+ORG_URL = "https://nexusrail.vercel.app"
+ORG_LOGO = "https://nexusrail.vercel.app/logo-256.png"
+ORG_DESCRIPTION = "Multi-rail institutional bridge & asset custody platform supporting Stellar, XRPL, and Real-World Assets."
+ORG_TWITTER = "nexusrail"
+ORG_OFFICIAL_EMAIL = "contact@nexusrail.com"
+
+[[CURRENCIES]]
+code = "NR"
+issuer = "GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ"
+display_decimals = 6
+name = "NexusRail Protocol Token"
+desc = "NexusRail native utility, AMM liquidity reserve, and 50% revenue-share token under Stellar Protocol 22."
+is_asset_anchored = false
+fixed_number = 1000000
+image = "https://nexusrail.vercel.app/logo-256.png"
+status = "live"
+contract = "CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N"
