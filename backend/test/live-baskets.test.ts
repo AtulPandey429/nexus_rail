@@ -128,7 +128,7 @@ describe('Suite: Module 2 — Live Multi-Rail Smart Baskets & Real-Time Oracle S
       is_live_asset: true,
       allocations: [
         { symbol: 'GOLD_G', label: '24K Gold (PAXG)', unitQty: 0.4 },
-        { symbol: 'NR', label: '$NR Protocol Token', unitQty: 25 },
+        { symbol: 'NXL', label: '$NXL Protocol Token', unitQty: 25 },
         { symbol: 'XRP', label: 'XRP', unitQty: 15 },
         { symbol: 'XLM', label: 'XLM', unitQty: 100 },
       ],
@@ -154,7 +154,7 @@ describe('Suite: Module 2 — Live Multi-Rail Smart Baskets & Real-Time Oracle S
       active: true,
       upvotes_count: 20,
       is_live_asset: true,
-      allocations: [{ symbol: 'NR', label: '$NR Protocol Token', unitQty: 50 }],
+      allocations: [{ symbol: 'NXL', label: '$NXL Protocol Token', unitQty: 50 }],
       created_at: MOCK_SNAPSHOT.fetchedAt,
     };
     const hydratedNr = computeHydratedProduct(nrPack, MOCK_SNAPSHOT, { spotPriceCents: 142, change24hPercent: 8.5 });
@@ -251,7 +251,7 @@ describe('Suite: Module 2 — Live Multi-Rail Smart Baskets & Real-Time Oracle S
         is_live_asset: true,
         allocations: [
           { symbol: 'USDC', label: 'USDC Reserve', unitQty: 20 },
-          { symbol: 'NR', label: '$NR Token', unitQty: 10 },
+          { symbol: 'NXL', label: '$NXL Token', unitQty: 10 },
         ],
       }),
     });

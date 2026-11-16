@@ -29,7 +29,7 @@ export interface RecordRevenueParams {
   feeCents?: number;
   spreadCents?: number;
   gasArbitrageCents?: number;
-  rail?: 'STELLAR' | 'XRPL' | 'STRIPE' | 'NR' | 'INTERNAL';
+  rail?: 'STELLAR' | 'XRPL' | 'STRIPE' | 'NXL' | 'INTERNAL';
 }
 
 export class TreasuryService {

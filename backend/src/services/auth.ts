@@ -65,9 +65,25 @@ export class AuthService {
   static async ensureDefaultUsers(): Promise<void> {
     try {
       const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
+      const now = new Date().toISOString();
+
+      await usersCol.updateOne(
+        { email: 'admin@nexusrail.com' },
+        {
+          $setOnInsert: {
+            id: 'user_admin_nexus_com',
+            email: 'admin@nexusrail.com',
+            passwordHash: hashPassword('admin123'),
+            role: 'admin',
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        { upsert: true }
+      );
+
       const adminDoc = await usersCol.findOne({ email: 'admin@nexusrail.dev' });
       if (!adminDoc) {
-        const now = new Date().toISOString();
         await usersCol.insertOne({
           id: 'user_admin_nexus_01',
           email: 'admin@nexusrail.dev',
@@ -79,7 +95,6 @@ export class AuthService {
       }
       const demoDoc = await usersCol.findOne({ email: 'demo@nexusrail.dev' });
       if (!demoDoc) {
-        const now = new Date().toISOString();
         await usersCol.insertOne({
           id: 'user_demo_shopper_01',
           email: 'demo@nexusrail.dev',

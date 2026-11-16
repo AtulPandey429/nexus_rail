@@ -163,7 +163,7 @@ describe('Suite: Module 4 — Platform Owner Profit Engine & Stellar Protocol 22
 
   it('T4.8: On-Chain $NR Token & External Withdrawal: withdrawNrToExternalAddress creates confirmed transaction log', async () => {
     const token = await StellarTokenIssuerService.getOnChainTokenDetails();
-    assert.equal(token.symbol, 'NR');
+    assert.equal(token.symbol, 'NXL');
     assert.equal(token.chain, 'STELLAR');
     assert.equal(token.total_supply_cap, 1_000_000);
 

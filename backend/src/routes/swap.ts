@@ -8,7 +8,7 @@ import { verifyToken } from '../services/jwt.js';
 
 export const swapRouter = Router();
 
-const SWAP_ASSETS = ['XRP', 'XLM', 'NR', 'NXL', 'USD'] as const;
+const SWAP_ASSETS = ['XRP', 'XLM', 'NXL', 'USD'] as const;
 
 const initiateSwapSchema = z.object({
   fromAsset: z.enum(SWAP_ASSETS),
@@ -58,7 +58,7 @@ swapRouter.get('/nr-pool', async (_req: Request, res: Response) => {
 swapRouter.post('/quote', async (req: Request, res: Response) => {
   try {
     const { fromAsset = 'XRP', toAsset = 'XLM', amount = 100 } = req.body || {};
-    if (fromAsset === 'NR' || fromAsset === 'NXL' || toAsset === 'NR' || toAsset === 'NXL' || fromAsset === 'USD' || toAsset === 'USD') {
+    if (fromAsset === 'NXL' || toAsset === 'NXL' || fromAsset === 'USD' || toAsset === 'USD') {
       const q = await NrTokenService.quoteSwap({ fromAsset, toAsset, amount: Number(amount) || 100 });
       return res.json({
         success: true,
@@ -107,11 +107,11 @@ swapRouter.post('/initiate', async (req: Request, res: Response) => {
     const { fromAsset, toAsset, amount, userDestinationAddress, userSourceAddress } = parsed.data;
     const userId = extractOptionalUserId(req);
 
-    if (fromAsset === 'NR' || fromAsset === 'NXL' || toAsset === 'NR' || toAsset === 'NXL' || fromAsset === 'USD' || toAsset === 'USD') {
+    if (fromAsset === 'NXL' || toAsset === 'NXL' || fromAsset === 'USD' || toAsset === 'USD') {
       const order = await NrTokenService.createNrSwapOrder({
         userId,
-        fromAsset: fromAsset === 'NXL' ? 'NR' : fromAsset,
-        toAsset: toAsset === 'NXL' ? 'NR' : toAsset,
+        fromAsset,
+        toAsset,
         amount,
         userDestinationAddress,
       });
@@ -161,9 +161,7 @@ swapRouter.post('/execute', async (req: Request, res: Response) => {
     const existingNrOrder = swapId ? NrTokenService.getNrSwapOrder(swapId) : undefined;
     const isNrOrUsd =
       Boolean(existingNrOrder) ||
-      fromAsset === 'NR' ||
       fromAsset === 'NXL' ||
-      toAsset === 'NR' ||
       toAsset === 'NXL' ||
       fromAsset === 'USD' ||
       toAsset === 'USD';
@@ -173,7 +171,7 @@ swapRouter.post('/execute', async (req: Request, res: Response) => {
       if (!userId) {
         return res.status(401).json({
           success: false,
-          error: 'Sign in is required to execute $NR or USD ledger swaps',
+          error: 'Sign in is required to execute $NXL or USD ledger swaps',
         });
       }
 

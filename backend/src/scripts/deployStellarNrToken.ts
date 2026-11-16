@@ -2,7 +2,7 @@ import { Keypair, Horizon, Networks, TransactionBuilder, Asset, Operation } from
 import { MongoService, MongoPlatformTokenDoc, MongoTokenWithdrawalDoc } from '../services/mongo.js';
 import { env } from '../config/env.js';
 
-export const STELLAR_NR_ASSET_CODE = 'NR';
+export const STELLAR_NR_ASSET_CODE = 'NXL';
 export const NR_TOTAL_ON_CHAIN_CAP = 1_000_000;
 
 export class StellarTokenIssuerService {
@@ -16,11 +16,11 @@ export class StellarTokenIssuerService {
    */
   static async getOnChainTokenDetails(): Promise<MongoPlatformTokenDoc> {
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
-    const existing = await tokensCol.findOne({ symbol: 'NR', chain: 'STELLAR' });
+    const existing = await tokensCol.findOne({ symbol: 'NXL', chain: 'STELLAR' });
     if (existing) return existing;
 
     const genesisDoc: MongoPlatformTokenDoc = {
-      symbol: 'NR',
+      symbol: 'NXL',
       name: 'NexusRail Protocol Token',
       chain: 'STELLAR',
       asset_code: STELLAR_NR_ASSET_CODE,
@@ -32,15 +32,15 @@ export class StellarTokenIssuerService {
       total_supply_cap: NR_TOTAL_ON_CHAIN_CAP,
       mint_tx_hash: '4945f74bef92a0ab1f3842a8b72f79c252f187b1d7ea0b47a8f14a38929c837b',
       created_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),
-      explorer_url: `https://stellar.expert/explorer/testnet/asset/NR-${env.STELLAR_NR_ISSUER_PUBLIC || 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ'}`,
+      explorer_url: `https://stellar.expert/explorer/testnet/asset/NXL-${env.STELLAR_NR_ISSUER_PUBLIC || 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ'}`,
     };
 
     await tokensCol.updateOne(
-      { symbol: 'NR', chain: 'STELLAR' },
+      { symbol: 'NXL', chain: 'STELLAR' },
       { $setOnInsert: genesisDoc },
       { upsert: true }
     );
-    return (await tokensCol.findOne({ symbol: 'NR', chain: 'STELLAR' })) || genesisDoc;
+    return (await tokensCol.findOne({ symbol: 'NXL', chain: 'STELLAR' })) || genesisDoc;
   }
 
   /**

@@ -55,18 +55,18 @@ export function computeHydratedProduct(
     };
   }
 
-  const unitPriceBySymbol: Record<AssetSymbol, { unitCents: number; change24h: number }> = {
+  const unitPriceBySymbol: Record<string, { unitCents: number; change24h: number }> = {
     GOLD_G: { unitCents: Math.max(1, Math.round(snapshot.goldUsdPerGram * 100)), change24h: snapshot.gold24hChange },
     SILVER_G: { unitCents: Math.max(1, Math.round(snapshot.silverUsdPerGram * 100)), change24h: snapshot.silver24hChange },
     XRP: { unitCents: Math.max(1, Math.round(snapshot.xrpUsd * 100)), change24h: snapshot.xrp24hChange },
     XLM: { unitCents: Math.max(1, Math.round(snapshot.xlmUsd * 100)), change24h: snapshot.xlm24hChange },
     USDC: { unitCents: 100, change24h: 0 },
-    NR: { unitCents: Math.max(1, nrPool.spotPriceCents), change24h: nrPool.change24hPercent },
     NXL: { unitCents: Math.max(1, nrPool.spotPriceCents), change24h: nrPool.change24hPercent },
+    NR: { unitCents: Math.max(1, nrPool.spotPriceCents), change24h: nrPool.change24hPercent },
   };
 
   const components = base.allocations.map((alloc) => {
-    const ref = unitPriceBySymbol[alloc.symbol];
+    const ref = unitPriceBySymbol[alloc.symbol] || unitPriceBySymbol.NXL || { unitCents: 100, change24h: 0 };
     const valCents = Math.max(1, Math.round(alloc.unitQty * ref.unitCents));
     return { alloc, valCents, change24h: ref.change24h };
   });
@@ -83,7 +83,7 @@ export function computeHydratedProduct(
       ? Number(components.reduce((sum, c) => sum + (c.valCents / totalCents) * c.change24h, 0).toFixed(2))
       : 0;
 
-  const isOnlyNr = base.allocations.every((a) => a.symbol === 'NR');
+  const isOnlyNr = base.allocations.every((a) => a.symbol === 'NXL');
 
   return {
     ...base,
@@ -160,7 +160,7 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
     is_basket: false,
     allocations: [
       { symbol: 'USDC', label: 'Apparel Base', unitQty: 22 },
-      { symbol: 'NR', label: '$NR Protocol Stake', unitQty: 10 },
+      { symbol: 'NXL', label: '$NXL Protocol Stake', unitQty: 10 },
     ],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -204,7 +204,7 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
     is_basket: false,
     allocations: [
       { symbol: 'USDC', label: 'Headwear Base', unitQty: 18 },
-      { symbol: 'NR', label: '$NR Protocol Stake', unitQty: 10 },
+      { symbol: 'NXL', label: '$NXL Protocol Stake', unitQty: 10 },
     ],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -292,7 +292,7 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
     is_basket: false,
     allocations: [
       { symbol: 'USDC', label: 'AI Compute Quota', unitQty: 15 },
-      { symbol: 'NR', label: '$NR Agent Credits', unitQty: 15 },
+      { symbol: 'NXL', label: '$NXL Agent Credits', unitQty: 15 },
     ],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -321,8 +321,8 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
   },
   {
     id: 'prod_nr_token_05',
-    sku: 'NR-TOKEN',
-    title: 'NR Protocol Token',
+    sku: 'NXL-TOKEN',
+    title: 'NXL Protocol Token',
     description: 'NexusRail multi-rail governance & fee-discount token priced dynamically on the constant-product AMM.',
     price_cents: 100,
     category: 'live-assets',
@@ -335,7 +335,7 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
     is_live_asset: true,
     is_basket: false,
     allocations: [
-      { symbol: 'NR', label: '$NR Protocol Token', unitQty: 1 },
+      { symbol: 'NXL', label: '$NXL Protocol Token', unitQty: 1 },
     ],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -410,7 +410,7 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
     id: 'basket_ai_alpha_09',
     sku: 'BASKET-AI-ALPHA',
     title: 'AI Dynamic Alpha Basket',
-    description: 'All-in-one diversified combo pairing 0.40g Gold, 25 $NR AMM Tokens, 15 XRP, and 100 XLM priced live every 60s.',
+    description: 'All-in-one diversified combo pairing 0.40g Gold, 25 $NXL AMM Tokens, 15 XRP, and 100 XLM priced live every 60s.',
     price_cents: 9760,
     category: 'baskets',
     stock_quantity: 1000,
@@ -423,7 +423,7 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
     is_basket: true,
     allocations: [
       { symbol: 'GOLD_G', label: '24K Gold (PAXG)', unitQty: 0.4 },
-      { symbol: 'NR', label: '$NR Protocol Token', unitQty: 25 },
+      { symbol: 'NXL', label: '$NXL Protocol Token', unitQty: 25 },
       { symbol: 'XRP', label: 'XRP (XRPL Native)', unitQty: 15 },
       { symbol: 'XLM', label: 'XLM (Stellar Native)', unitQty: 100 },
     ],
@@ -474,21 +474,21 @@ const DEFAULT_PRODUCTS: Omit<MongoProductDoc, '_id'>[] = [
   },
   {
     id: 'live_nr_pack_50_12',
-    sku: 'NR-PACK-50',
-    title: '50 $NR Protocol Pack',
-    description: 'Instant 50 $NR token allocation priced live against the x · y = k bonding curve AMM with 10% checkout utility.',
+    sku: 'NXL-PACK-50',
+    title: '50 $NXL Protocol Pack',
+    description: 'Instant 50 $NXL token allocation priced live against the x · y = k bonding curve AMM with 10% checkout utility.',
     price_cents: 5000,
     category: 'live-assets',
     stock_quantity: 2000,
     active: true,
     upvotes_count: 550,
     rail: 'multi',
-    tag: 'AMM LIVE • 50 $NR',
+    tag: 'AMM LIVE • 50 $NXL',
     rating: 5.0,
     is_live_asset: true,
     is_basket: false,
     allocations: [
-      { symbol: 'NR', label: '$NR Protocol Token', unitQty: 50 },
+      { symbol: 'NXL', label: '$NXL Protocol Token', unitQty: 50 },
     ],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

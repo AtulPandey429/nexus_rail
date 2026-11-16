@@ -77,7 +77,7 @@ export class DualRailTokenService {
    */
   static async getOrCreateXrplIssuer(client: Client): Promise<{ issuerWallet: Wallet; isNew: boolean }> {
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
-    const existing = await tokensCol.findOne({ symbol: 'NR', chain: 'XRPL' });
+    const existing = await tokensCol.findOne({ symbol: 'NXL', chain: 'XRPL' }) || await tokensCol.findOne({ symbol: 'NR' as any, chain: 'XRPL' });
 
     const seed = env.XRPL_NR_ISSUER_SEED || existing?.issuer_secret;
     if (seed) {
@@ -89,7 +89,7 @@ export class DualRailTokenService {
     console.log('✨ [XRPL Launch] Funding new XRPL Issuer account via Altnet faucet...');
     const { wallet: issuerWallet } = await client.fundWallet();
 
-    // Enable DefaultRipple (SetFlag: 8) so users can transfer $NR peer-to-peer
+    // Enable DefaultRipple (SetFlag: 8) so users can transfer $NXL peer-to-peer
     const rippleTx = await client.submitAndWait(
       {
         TransactionType: 'AccountSet',
@@ -110,11 +110,11 @@ export class DualRailTokenService {
     });
 
     const tokenDoc: MongoPlatformTokenDoc = {
-      symbol: 'NR',
+      symbol: 'NXL',
       name: 'NexusRail Protocol Token',
       chain: 'XRPL',
-      asset_code: 'NR',
-      currency_hex: XRPL_NR_CURRENCY_HEX,
+      asset_code: 'NXL',
+      currency_hex: '',
       issuer_address: issuerWallet.address,
       issuer_secret: issuerWallet.seed,
       distribution_address: env.PLATFORM_XRPL_VAULT || 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp',
@@ -126,7 +126,7 @@ export class DualRailTokenService {
       explorer_url: `https://testnet.xrpl.org/accounts/${issuerWallet.address}`,
     };
 
-    await tokensCol.updateOne({ symbol: 'NR', chain: 'XRPL' }, { $set: tokenDoc }, { upsert: true });
+    await tokensCol.updateOne({ symbol: 'NXL', chain: 'XRPL' }, { $set: tokenDoc }, { upsert: true });
 
     return { issuerWallet, isNew: true };
   }
@@ -275,9 +275,9 @@ export class DualRailTokenService {
       // Record in Mongo platform_amm_pools
       const ammPoolCol = await MongoService.getCollection<MongoAmmPoolDoc>('platform_amm_pools');
       const ammPoolDoc: MongoAmmPoolDoc = {
-        id: `pool_xrpl_nr_xrp`,
+        id: `pool_xrpl_nxl_xrp`,
         chain: 'XRPL',
-        symbol: 'NR',
+        symbol: 'NXL',
         paired_asset: 'XRP',
         amm_account: ammAccount,
         issuer_address: issuerWallet.address,
@@ -292,12 +292,12 @@ export class DualRailTokenService {
         updated_at: new Date().toISOString(),
       };
 
-      await ammPoolCol.updateOne({ chain: 'XRPL', symbol: 'NR' }, { $set: ammPoolDoc }, { upsert: true });
+      await ammPoolCol.updateOne({ chain: 'XRPL', symbol: 'NXL' }, { $set: ammPoolDoc }, { upsert: true });
 
       // Update platform_tokens with AMM account
       const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
       await tokensCol.updateOne(
-        { chain: 'XRPL', symbol: 'NR' },
+        { chain: 'XRPL', symbol: 'NXL' },
         { $set: { amm_account: ammAccount, amm_tx_hash: txHash } }
       );
 

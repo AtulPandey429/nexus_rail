@@ -24,10 +24,10 @@ export const TOTAL_SUPPLY_NR_MICRO = 1_000_000_000_000; // 1,000,000.000000 NR c
 export const DEFAULT_SWAP_FEE_BPS = 50; // 0.50%
 export const MIN_RESERVE_USD_CENTS = 100_000; // $1,000.00 safety floor
 
-export type NrSwapAsset = 'NR' | 'NXL' | 'USD' | 'XLM' | 'XRP';
+export type NrSwapAsset = 'NXL' | 'USD' | 'XLM' | 'XRP';
 
 export interface NrPoolStats {
-  symbol: 'NR';
+  symbol: 'NXL';
   name: string;
   spotPriceUsd: number;
   spotPriceCents: number;
@@ -242,7 +242,7 @@ export function computeSellQuoteFromPool(
 /**
  * Computes direct asset-to-USD cents using live FX oracle rates.
  */
-function assetToUsdCents(asset: Exclude<NrSwapAsset, 'NR'>, amount: number, fx: { xlmUsd: number; xrpUsd: number }): number {
+function assetToUsdCents(asset: Exclude<NrSwapAsset, 'NXL'>, amount: number, fx: { xlmUsd: number; xrpUsd: number }): number {
   if (asset === 'USD') return Math.round(amount * 100);
   if (asset === 'XLM') return Math.round(amount * fx.xlmUsd * 100);
   return Math.round(amount * fx.xrpUsd * 100);
@@ -251,7 +251,7 @@ function assetToUsdCents(asset: Exclude<NrSwapAsset, 'NR'>, amount: number, fx: 
 /**
  * Converts USD cents to target non-NR asset units using live FX oracle rates.
  */
-function usdCentsToTargetAsset(asset: Exclude<NrSwapAsset, 'NR'>, usdCents: number, fx: { xlmUsd: number; xrpUsd: number }): number {
+function usdCentsToTargetAsset(asset: Exclude<NrSwapAsset, 'NXL'>, usdCents: number, fx: { xlmUsd: number; xrpUsd: number }): number {
   const usd = usdCents / 100;
   if (asset === 'USD') return Number(usd.toFixed(2));
   if (asset === 'XLM') return Number((usd / (fx.xlmUsd || 0.17)).toFixed(6));
@@ -264,13 +264,20 @@ export class NrTokenService {
    */
   static async ensureGenesisPool(): Promise<MongoTokenPoolDoc> {
     const poolCol = await MongoService.getCollection<MongoTokenPoolDoc>('token_pool');
-    const existing = await poolCol.findOne({ symbol: 'NR' });
+    let existing = await poolCol.findOne({ symbol: 'NXL' });
+    if (!existing) {
+      const legacy = await poolCol.findOne({ symbol: 'NR' as any });
+      if (legacy) {
+        await poolCol.updateOne({ _id: legacy._id }, { $set: { symbol: 'NXL', name: 'NexusRail Protocol Token' } });
+        existing = await poolCol.findOne({ symbol: 'NXL' });
+      }
+    }
     if (existing) return existing;
 
     const now = new Date().toISOString();
     const genesisSpotUsd = computeSpotPriceUsd(GENESIS_RESERVE_USD_CENTS, GENESIS_POOL_NR_MICRO);
     const genesisDoc: MongoTokenPoolDoc = {
-      symbol: 'NR',
+      symbol: 'NXL',
       name: 'NexusRail Protocol Token',
       reserve_usd_cents: GENESIS_RESERVE_USD_CENTS,
       pool_nr_micro: GENESIS_POOL_NR_MICRO,
@@ -284,14 +291,14 @@ export class NrTokenService {
       updated_at: now,
     };
 
-    await poolCol.updateOne({ symbol: 'NR' }, { $setOnInsert: genesisDoc }, { upsert: true });
+    await poolCol.updateOne({ symbol: 'NXL' }, { $setOnInsert: genesisDoc }, { upsert: true });
 
     const historyCol = await MongoService.getCollection<MongoTokenPriceTickDoc>('token_price_history');
-    const count = await historyCol.countDocuments({ symbol: 'NR' });
+    const count = await historyCol.countDocuments({ symbol: 'NXL' });
     if (count === 0) {
       await historyCol.insertOne({
         id: `tick_${crypto.randomUUID()}`,
-        symbol: 'NR',
+        symbol: 'NXL',
         spot_price_cents: genesisDoc.spot_price_cents,
         spot_price_usd: genesisSpotUsd,
         reserve_usd_cents: genesisDoc.reserve_usd_cents,
@@ -302,17 +309,17 @@ export class NrTokenService {
       });
     }
 
-    return (await poolCol.findOne({ symbol: 'NR' })) || genesisDoc;
+    return (await poolCol.findOne({ symbol: 'NXL' })) || genesisDoc;
   }
 
   /**
-   * Returns live $NR AMM pool telemetry and recent price ticks.
+   * Returns live $NXL AMM pool telemetry and recent price ticks.
    */
   static async getPoolStats(): Promise<NrPoolStats> {
     const pool = await this.ensureGenesisPool();
     const historyCol = await MongoService.getCollection<MongoTokenPriceTickDoc>('token_price_history');
     const recentTicks = await historyCol
-      .find({ symbol: 'NR' })
+      .find({ symbol: 'NXL' })
       .sort({ created_at: -1 })
       .limit(30)
       .toArray();
@@ -328,7 +335,7 @@ export class NrTokenService {
     const invariantK = (BigInt(pool.reserve_usd_cents) * BigInt(pool.pool_nr_micro)).toString();
 
     return {
-      symbol: 'NR',
+      symbol: 'NXL',
       name: pool.name,
       spotPriceUsd: Number(spotPriceUsd.toFixed(6)),
       spotPriceCents,
@@ -376,7 +383,7 @@ export class NrTokenService {
     const [pool, fx] = await Promise.all([this.ensureGenesisPool(), getFxQuote()]);
     const feeBps = pool.swap_fee_bps || DEFAULT_SWAP_FEE_BPS;
 
-    if (toAsset === 'NR' || toAsset === 'NXL') {
+    if (toAsset === 'NXL') {
       const inputUsdCents = assetToUsdCents(fromAsset as any, amount, fx);
       const q = computeBuyQuoteFromPool(pool.reserve_usd_cents, pool.pool_nr_micro, inputUsdCents, feeBps);
       return {
@@ -403,7 +410,7 @@ export class NrTokenService {
       };
     }
 
-    if (fromAsset === 'NR' || fromAsset === 'NXL') {
+    if (fromAsset === 'NXL') {
       const inputNrMicro = Math.round(amount * NR_MICRO_SCALE);
       const q = computeSellQuoteFromPool(pool.reserve_usd_cents, pool.pool_nr_micro, inputNrMicro, feeBps);
       const receiveAmount = usdCentsToTargetAsset(toAsset as any, q.netUsdOutCents, fx);
@@ -431,11 +438,11 @@ export class NrTokenService {
       };
     }
 
-    // Direct USD <-> XLM / XRP quote fallback when neither side is NR
-    const inputUsdCents = assetToUsdCents(fromAsset as Exclude<NrSwapAsset, 'NR'>, amount, fx);
+    // Direct USD <-> XLM / XRP quote fallback when neither side is NXL
+    const inputUsdCents = assetToUsdCents(fromAsset as Exclude<NrSwapAsset, 'NXL'>, amount, fx);
     const feeCents = Math.max(1, Math.round((inputUsdCents * feeBps) / 10_000));
     const netOutCents = Math.max(1, inputUsdCents - feeCents);
-    const receiveAmount = usdCentsToTargetAsset(toAsset as Exclude<NrSwapAsset, 'NR'>, netOutCents, fx);
+    const receiveAmount = usdCentsToTargetAsset(toAsset as Exclude<NrSwapAsset, 'NXL'>, netOutCents, fx);
     const spotPriceUsd = computeSpotPriceUsd(pool.reserve_usd_cents, pool.pool_nr_micro);
 
     return {
@@ -593,8 +600,8 @@ export class NrTokenService {
         const poolCol = await MongoService.getCollection<MongoTokenPoolDoc>('token_pool');
         const historyCol = await MongoService.getCollection<MongoTokenPriceTickDoc>('token_price_history');
 
-        const currentPool = await poolCol.findOne({ symbol: 'NR' }, { session });
-        if (!currentPool) throw new Error('NR pool not initialized');
+        const currentPool = (await poolCol.findOne({ symbol: 'NXL' }, { session })) || (await poolCol.findOne({ symbol: 'NR' as any }, { session }));
+        if (!currentPool) throw new Error('NXL pool not initialized');
 
         finalQuote = await this.quoteSwap({
           fromAsset: order!.fromAsset,
@@ -602,24 +609,24 @@ export class NrTokenService {
           amount: order!.payAmount,
         });
 
-        // 1. Ingress Debit (if internal USD or NR wallet balance)
+        // 1. Ingress Debit (if internal USD or NXL wallet balance)
         if (order!.fromAsset === 'USD') {
           const debitCents = Math.round(order!.payAmount * 100);
           await walletService.debitBalance(userId, debitCents, 'USD', order!.swapId, session);
-        } else if (order!.fromAsset === 'NR') {
+        } else if (order!.fromAsset === 'NXL') {
           const debitNrMicro = Math.round(order!.payAmount * NR_MICRO_SCALE);
-          await walletService.debitBalance(userId, debitNrMicro, 'NR', order!.swapId, session);
+          await walletService.debitBalance(userId, debitNrMicro, 'NXL', order!.swapId, session);
         }
 
         // 2. Update AMM Pool with optimistic concurrency check
-        if (order!.toAsset === 'NR' || order!.fromAsset === 'NR') {
+        if (order!.toAsset === 'NXL' || order!.fromAsset === 'NXL') {
           const newSpotCents = Math.round(finalQuote.spotPriceAfterUsd * 100);
-          const circulatingDelta = order!.toAsset === 'NR' ? finalQuote.nrDeltaMicro : -finalQuote.nrDeltaMicro;
+          const circulatingDelta = order!.toAsset === 'NXL' ? finalQuote.nrDeltaMicro : -finalQuote.nrDeltaMicro;
           const now = new Date().toISOString();
 
           const updateRes: any = await poolCol.findOneAndUpdate(
             {
-              symbol: 'NR',
+              symbol: 'NXL',
               reserve_usd_cents: currentPool.reserve_usd_cents,
               pool_nr_micro: currentPool.pool_nr_micro,
             },
@@ -647,12 +654,12 @@ export class NrTokenService {
           await historyCol.insertOne(
             {
               id: `tick_${crypto.randomUUID()}`,
-              symbol: 'NR',
+              symbol: 'NXL',
               spot_price_cents: newSpotCents,
               spot_price_usd: finalQuote.spotPriceAfterUsd,
               reserve_usd_cents: finalQuote.finalReserveUsdCents,
               pool_nr_micro: finalQuote.finalPoolNrMicro,
-              trigger: order!.toAsset === 'NR' ? 'SWAP_BUY' : 'SWAP_SELL',
+              trigger: order!.toAsset === 'NXL' ? 'SWAP_BUY' : 'SWAP_SELL',
               reference_id: order!.swapId,
               created_at: new Date().toISOString(),
             },
@@ -660,9 +667,9 @@ export class NrTokenService {
           );
         }
 
-        // 3. Egress Internal Credit (when toAsset is NR or USD)
-        if (order!.toAsset === 'NR') {
-          await walletService.creditBalance(userId, finalQuote.nrDeltaMicro, 'NR', order!.swapId, session);
+        // 3. Egress Internal Credit (when toAsset is NXL or USD)
+        if (order!.toAsset === 'NXL') {
+          await walletService.creditBalance(userId, finalQuote.nrDeltaMicro, 'NXL', order!.swapId, session);
         } else if (order!.toAsset === 'USD') {
           await walletService.creditBalance(userId, finalQuote.outputUsdCents, 'USD', order!.swapId, session);
         }
@@ -776,11 +783,11 @@ export class NrTokenService {
 
     try {
       await session.withTransaction(async () => {
-        // 1. Atomic debit from user's NR balance (throws Insufficient NR balance if short)
+        // 1. Atomic debit from user's NXL balance (throws Insufficient NXL balance if short)
         await walletService.debitBalance(
           userId,
           paidNrMicro,
-          'NR',
+          'NXL',
           order.order_number || order.id,
           session
         );
@@ -791,7 +798,7 @@ export class NrTokenService {
           {
             $set: {
               status: 'PAID',
-              payment_rail: 'NR_TOKEN',
+              payment_rail: 'NXL_TOKEN',
               tx_hash: txHash,
               total_cents: finalPaidCents,
               nr_discount_cents: nrDiscountCents,
@@ -883,7 +890,7 @@ export class NrTokenService {
     if (session) updateOpts.session = session;
 
     const updatedRes: any = await poolCol.findOneAndUpdate(
-      { symbol: 'NR' },
+      { symbol: 'NXL' },
       {
         $inc: {
           reserve_usd_cents: cents,
@@ -908,7 +915,7 @@ export class NrTokenService {
     await historyCol.insertOne(
       {
         id: `tick_${crypto.randomUUID()}`,
-        symbol: 'NR',
+        symbol: 'NXL',
         spot_price_cents: Math.round(actualSpotUsd * 100),
         spot_price_usd: Number(actualSpotUsd.toFixed(6)),
         reserve_usd_cents: updatedDoc.reserve_usd_cents,
@@ -953,7 +960,7 @@ export class NrTokenService {
     const now = new Date().toISOString();
 
     await poolCol.updateOne(
-      { symbol: 'NR' },
+      { symbol: 'NXL' },
       {
         $inc: {
           reserve_usd_cents: delta,
@@ -968,7 +975,7 @@ export class NrTokenService {
 
     await historyCol.insertOne({
       id: `tick_${crypto.randomUUID()}`,
-      symbol: 'NR',
+      symbol: 'NXL',
       spot_price_cents: newSpotCents,
       spot_price_usd: Number(newSpotUsd.toFixed(6)),
       reserve_usd_cents: targetReserve,

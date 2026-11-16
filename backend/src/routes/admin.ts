@@ -21,7 +21,7 @@ const AdjustReserveSchema = z.object({
 });
 
 const AllocationItemSchema = z.object({
-  symbol: z.enum(['GOLD_G', 'SILVER_G', 'XRP', 'XLM', 'USDC', 'NR']),
+  symbol: z.enum(['GOLD_G', 'SILVER_G', 'XRP', 'XLM', 'USDC', 'NXL']),
   label: z.string().min(1).max(60),
   unitQty: z.number().positive(),
 });
@@ -376,14 +376,14 @@ adminRouter.get('/dual-rail/logs', async (_req: AuthenticatedRequest, res: Respo
 adminRouter.get('/dual-rail/credentials', async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
-    const stellarDoc = await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NR' });
-    const xrplDoc = await tokensCol.findOne({ chain: 'XRPL', symbol: 'NR' });
+    const stellarDoc = await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' }) || await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NR' as any });
+    const xrplDoc = await tokensCol.findOne({ chain: 'XRPL', symbol: 'NXL' }) || await tokensCol.findOne({ chain: 'XRPL', symbol: 'NR' as any });
 
     res.json({
       success: true,
       data: {
         stellar: {
-          assetCode: env.STELLAR_NR_ASSET_CODE || 'NR',
+          assetCode: env.STELLAR_NR_ASSET_CODE || stellarDoc?.asset_code || 'NXL',
           issuerAddress: stellarDoc?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC,
           issuerSecretKey: stellarDoc?.issuer_secret || env.STELLAR_NR_ISSUER_SECRET,
           contractId: stellarDoc?.contract_id || env.STELLAR_NR_CONTRACT_ID,
@@ -391,11 +391,11 @@ adminRouter.get('/dual-rail/credentials', async (_req: AuthenticatedRequest, res
           distributorSecretKey: env.STELLAR_HOT_WALLET_SECRET,
           totalSupplyCap: stellarDoc?.total_supply_cap || 1_000_000,
           mintTxHash: stellarDoc?.mint_tx_hash,
-          explorerUrl: stellarDoc?.explorer_url || `https://stellar.expert/explorer/testnet/asset/NR-${env.STELLAR_NR_ISSUER_PUBLIC}`,
+          explorerUrl: stellarDoc?.explorer_url || `https://stellar.expert/explorer/testnet/asset/NXL-${stellarDoc?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC}`,
         },
         xrpl: {
-          currencyCode: env.XRPL_NR_CURRENCY_CODE || 'NR',
-          currencyHex: env.XRPL_NR_CURRENCY_HEX || '4E52000000000000000000000000000000000000',
+          currencyCode: env.XRPL_NR_CURRENCY_CODE || xrplDoc?.asset_code || 'NXL',
+          currencyHex: '',
           issuerAddress: xrplDoc?.issuer_address || env.XRPL_NR_ISSUER_ADDRESS,
           issuerSecretSeed: xrplDoc?.issuer_secret || env.XRPL_NR_ISSUER_SEED,
           ammAccount: xrplDoc?.amm_account || env.XRPL_NR_AMM_ACCOUNT,

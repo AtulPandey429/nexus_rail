@@ -149,7 +149,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
       const xlmAvailableUnits = (balance.XLM || 0) > 0 ? (balance.XLM / 100) : 340.0;
 
       // Real $NXL ledger holdings + live AMM spot price
-      const nrTokensUnits = ((balance.NXL ?? balance.NR) || 0) > 0 ? Number((((balance.NXL ?? balance.NR) || 0) / NR_MICRO_SCALE).toFixed(4)) : 0;
+      const nrTokensUnits = (balance.NXL || 0) > 0 ? Number(((balance.NXL || 0) / NR_MICRO_SCALE).toFixed(4)) : 0;
       const nrTokenUsdPrice = nrPool?.spotPriceUsd ?? 1.0;
       const ngoldUnits = 1.0; // 1g Allocated Gold Token
       const ngoldUsdPrice = 85.0; // $85.00

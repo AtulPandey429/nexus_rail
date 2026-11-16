@@ -35,7 +35,7 @@ import {
   payWithCrossmark,
 } from '@/lib/wallets';
 
-type SwapToken = 'XRP' | 'XLM' | 'NXL' | 'NR' | 'USD' | 'USDC' | 'RLUSD';
+type SwapToken = 'XRP' | 'XLM' | 'NXL' | 'USD' | 'USDC' | 'RLUSD';
 
 const SELECTABLE_TOKENS: Array<'XRP' | 'XLM' | 'NXL' | 'USD'> = ['XRP', 'XLM', 'NXL', 'USD'];
 
@@ -43,7 +43,6 @@ const TOKEN_DETAILS: Record<SwapToken, { name: string; chain: string; iconColor:
   XRP: { name: 'XRP', chain: 'XRPL TESTNET', iconColor: 'text-[#0081F2]' },
   XLM: { name: 'Stellar Lumens', chain: 'STELLAR TESTNET', iconColor: 'text-[#00E5FF]' },
   NXL: { name: 'Nexus Cross-Ledger ($NXL)', chain: 'DUAL-RAIL AMM POOL', iconColor: 'text-[var(--gold)]' },
-  NR: { name: 'NexusRail Token', chain: 'NEXUSRAIL AMM POOL', iconColor: 'text-[var(--gold)]' },
   USD: { name: 'Nexus Ledger USD', chain: 'INTERNAL LEDGER', iconColor: 'text-emerald-400' },
   USDC: { name: 'USD Coin', chain: 'STELLAR TESTNET', iconColor: 'text-[#2775CA]' },
   RLUSD: { name: 'Ripple USD', chain: 'XRPL TESTNET', iconColor: 'text-[#0081F2]' },
@@ -196,7 +195,7 @@ export default function SwapPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const toParam = params.get('to')?.toUpperCase();
-      if (toParam === 'NR' || toParam === 'NXL') {
+      if (toParam === 'NXL') {
         setFromToken('XLM');
         setToToken('NXL');
       }
@@ -205,7 +204,7 @@ export default function SwapPage() {
 
   const nrSpotUsd = nrPool?.spotPriceUsd || 1.0;
   const involvesNrOrUsd =
-    fromToken === 'NXL' || fromToken === 'NR' || toToken === 'NXL' || toToken === 'NR' || fromToken === 'USD' || toToken === 'USD';
+    fromToken === 'NXL' || toToken === 'NXL' || fromToken === 'USD' || toToken === 'USD';
 
   // Fetch authoritative AMM quote when $NR or USD is involved
   useEffect(() => {
@@ -246,7 +245,7 @@ export default function SwapPage() {
   const tokenUsdPrice = (tok: SwapToken) => {
     if (tok === 'XRP') return xrpUsd;
     if (tok === 'XLM') return xlmUsd;
-    if (tok === 'NR' || tok === 'NXL') return nrSpotUsd;
+    if (tok === 'NXL') return nrSpotUsd;
     return 1.0;
   };
 
@@ -264,12 +263,12 @@ export default function SwapPage() {
   // Compute output amount based on live rates / AMM curve
   const receiveAmount = useMemo(() => {
     if (ammQuote && involvesNrOrUsd) {
-      return ammQuote.receiveAmount.toFixed((fromToken === 'NR' || fromToken === 'NXL') && toToken === 'USD' ? 2 : 4);
+      return ammQuote.receiveAmount.toFixed(fromToken === 'NXL' && toToken === 'USD' ? 2 : 4);
     }
     const num = parseFloat(payAmount);
     if (isNaN(num) || num <= 0) return '0.00';
     const computed = num * liveRate;
-    return computed.toFixed(toToken === 'NR' || toToken === 'NXL' ? 4 : 2);
+    return computed.toFixed(toToken === 'NXL' ? 4 : 2);
   }, [payAmount, liveRate, ammQuote, involvesNrOrUsd, fromToken, toToken]);
 
   // Compute USD estimated values
@@ -290,7 +289,7 @@ export default function SwapPage() {
     const num = parseFloat(receiveAmount);
     if (isNaN(num) || num <= 0) return '0.00';
     const slipFactor = slippage === '0.1%' ? 0.001 : slippage === '0.5%' ? 0.005 : 0.01;
-    return (num * (1 - slipFactor)).toFixed(toToken === 'NR' || toToken === 'NXL' ? 4 : 2);
+    return (num * (1 - slipFactor)).toFixed(toToken === 'NXL' ? 4 : 2);
   }, [receiveAmount, slippage, toToken]);
 
   // Invert tokens
@@ -319,13 +318,13 @@ export default function SwapPage() {
   const getTokenDisplayBalance = (tok: SwapToken) => {
     if (tok === 'XRP') return `${xrpBalance.toFixed(2)} XRP`;
     if (tok === 'XLM') return `${xlmBalance.toFixed(2)} XLM`;
-    if (tok === 'NR' || tok === 'NXL') return `${nrBalance.toFixed(4)} NXL`;
+    if (tok === 'NXL') return `${nrBalance.toFixed(4)} NXL`;
     if (tok === 'USD') return `$${usdBalance.toFixed(2)} USD`;
     return '0.00';
   };
 
   const effectiveDestination =
-    toToken === 'NR' || toToken === 'NXL' || toToken === 'USD'
+    toToken === 'NXL' || toToken === 'USD'
       ? user?.id
         ? `nexus_wallet_${user.id.slice(0, 8)}`
         : 'NEXUS_INTERNAL_LEDGER'
@@ -383,7 +382,7 @@ export default function SwapPage() {
     // Fallback order state
     const fallbackId = `SWAP-${Date.now().toString(36).toUpperCase()}`;
     const fallbackDeposit =
-      fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL'
+      fromToken === 'USD' || fromToken === 'NXL'
         ? 'NEXUS_INTERNAL_LEDGER'
         : fromToken === 'XRP'
         ? PLATFORM_XRPL_VAULT
@@ -392,13 +391,13 @@ export default function SwapPage() {
       swapId: fallbackId,
       depositAddress: fallbackDeposit,
       identifierType:
-        fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL'
+        fromToken === 'USD' || fromToken === 'NXL'
           ? ('internal_ledger' as any)
           : fromToken === 'XRP'
           ? 'destination_tag'
           : 'memo_text',
       identifier:
-        fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL'
+        fromToken === 'USD' || fromToken === 'NXL'
           ? fallbackId
           : fromToken === 'XRP'
           ? Math.floor(100000 + Math.random() * 900000)
@@ -412,7 +411,7 @@ export default function SwapPage() {
     if (!activeSwapOrder) return;
     setSwapError('');
     let resolvedDepositHash = '';
-    const isInternalIngress = fromToken === 'USD' || fromToken === 'NR' || fromToken === 'NXL';
+    const isInternalIngress = fromToken === 'USD' || fromToken === 'NXL';
 
     // 1. If using Extension (Freighter / GemWallet) for XLM/XRP ingress
     if (!isInternalIngress && depositMethod === 'extension') {
@@ -578,12 +577,12 @@ export default function SwapPage() {
     const recvNum = parseFloat(receiveAmount) || 0;
     if (fromToken === 'XRP') setXrpBalance((b) => Math.max(0, b - payNum));
     if (fromToken === 'XLM') setXlmBalance((b) => Math.max(0, b - payNum));
-    if (fromToken === 'NR') setNrBalance((b) => Math.max(0, b - payNum));
+    if (fromToken === 'NXL') setNrBalance((b) => Math.max(0, b - payNum));
     if (fromToken === 'USD') setUsdBalance((b) => Math.max(0, b - payNum));
 
     if (toToken === 'XRP') setXrpBalance((b) => b + recvNum);
     if (toToken === 'XLM') setXlmBalance((b) => b + recvNum);
-    if (toToken === 'NR') setNrBalance((b) => b + recvNum);
+    if (toToken === 'NXL') setNrBalance((b) => b + recvNum);
     if (toToken === 'USD') setUsdBalance((b) => b + recvNum);
   };
 
@@ -602,25 +601,25 @@ export default function SwapPage() {
             Cross-Chain Liquidity Bridge
           </h1>
           <p className="text-sm sm:text-base text-[var(--muted)] mt-1.5 font-normal">
-            Deposit from your connected wallet to the NexusRail Escrow Vault, or swap directly into the native $NR AMM bonding curve pool.
+            Deposit from your connected wallet to the NexusRail Escrow Vault, or swap directly into the native $NXL AMM bonding curve pool.
           </p>
         </div>
 
-        {/* Live $NR Native Tokenomics & AMM Pool Banner */}
+        {/* Live $NXL Native Tokenomics & AMM Pool Banner */}
         <div className="mb-8 rounded-2xl nexus-glass-card border border-[var(--gold)]/30 p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-lg">
           <div className="flex items-center gap-4">
             <div className="w-11 h-11 rounded-xl bg-[var(--gold)]/15 border border-[var(--gold)]/40 flex items-center justify-center font-mono font-bold text-[var(--gold-bright)] text-sm shrink-0">
-              $NR
+              $NXL
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-[var(--foreground)]">NexusRail Protocol Token ($NR)</span>
+                <span className="text-sm font-bold text-[var(--foreground)]">Nexus Cross-Ledger Token ($NXL)</span>
                 <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[10px] font-mono font-bold text-[var(--gold-bright)]">
                   x · y = k AMM
                 </span>
               </div>
               <p className="text-xs font-mono text-[var(--muted)] mt-0.5">
-                50% of swap fees &amp; platform revenue back the $NR reserve pool. Pay at checkout for 10% off.
+                50% of swap fees &amp; platform revenue back the $NXL reserve pool. Pay at checkout for 10% off.
               </p>
             </div>
           </div>
@@ -642,21 +641,21 @@ export default function SwapPage() {
               </span>
             </div>
             <div className="px-3 py-2 rounded-xl nexus-glass-surface border border-[var(--border)]">
-              <span className="text-[10px] text-[var(--muted)] uppercase block">Your $NR</span>
+              <span className="text-[10px] text-[var(--muted)] uppercase block">Your $NXL</span>
               <span className="text-sm font-bold text-[var(--foreground)]">
-                {nrBalance.toFixed(2)} NR
+                {nrBalance.toFixed(2)} NXL
               </span>
             </div>
             <button
               type="button"
               onClick={() => {
                 setFromToken('USD');
-                setToToken('NR');
+                setToToken('NXL');
                 setPayAmount('100.00');
               }}
               className="px-3 py-2 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
-              <span>Buy $NR</span>
+              <span>Buy $NXL</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -717,7 +716,7 @@ export default function SwapPage() {
               <div className="p-4 sm:p-5 rounded-xl nexus-glass-surface space-y-3">
                 <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)]">
                   <span className="flex items-center gap-1.5">
-                    <span>{fromToken === 'USD' || fromToken === 'NR' ? 'You pay from NexusRail wallet' : 'You pay from connected wallet'}</span>
+                    <span>{fromToken === 'USD' || fromToken === 'NXL' ? 'You pay from NexusRail wallet' : 'You pay from connected wallet'}</span>
                   </span>
                   <span>Balance: {getTokenDisplayBalance(fromToken)}</span>
                 </div>
@@ -762,7 +761,7 @@ export default function SwapPage() {
                             ? xrpBalance
                             : fromToken === 'XLM'
                             ? xlmBalance
-                            : fromToken === 'NR'
+                            : fromToken === 'NXL'
                             ? nrBalance
                             : usdBalance;
                         setPayAmount(maxVal > 0 ? maxVal.toFixed(2) : '100.00');
@@ -790,7 +789,7 @@ export default function SwapPage() {
               {/* Box 2: You Receive (Target Chain Payout) */}
               <div className="p-4 sm:p-5 rounded-xl nexus-glass-surface space-y-3">
                 <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)]">
-                  <span>{toToken === 'NR' || toToken === 'USD' ? 'Credited to your NexusRail wallet' : 'Server deposits to your address'}</span>
+                  <span>{toToken === 'NXL' || toToken === 'USD' ? 'Credited to your NexusRail wallet' : 'Server deposits to your address'}</span>
                   <span>Balance: {getTokenDisplayBalance(toToken)}</span>
                 </div>
 
@@ -867,7 +866,7 @@ export default function SwapPage() {
                     1 {fromToken} = {liveRate.toFixed(4)} {toToken}
                   </span>
                 </div>
-                {ammQuote && (fromToken === 'NR' || toToken === 'NR') && (
+                {ammQuote && (fromToken === 'NXL' || toToken === 'NXL') && (
                   <>
                     <div className="flex items-center justify-between">
                       <span>AMM Price Impact</span>
@@ -876,7 +875,7 @@ export default function SwapPage() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Post-Swap $NR Price</span>
+                      <span>Post-Swap $NXL Price</span>
                       <span className="text-[var(--gold-bright)] font-medium">
                         ${ammQuote.spotPriceBeforeUsd.toFixed(4)} &rarr; ${ammQuote.spotPriceAfterUsd.toFixed(4)}
                       </span>
@@ -1178,13 +1177,13 @@ export default function SwapPage() {
                 </div>
 
                 {/* Choose Deposit Payment Method (Internal Wallet vs On-Chain) */}
-                {(fromToken === 'USD' || fromToken === 'NR') ? (
+                {(fromToken === 'USD' || fromToken === 'NXL') ? (
                   <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2 text-xs">
                     <p className="text-emerald-300 font-bold">Internal NexusRail Ledger Settlement (0 Gas · Instant)</p>
                     <p className="text-[var(--muted)] text-[11px]">
                       {user
-                        ? `Debits ${payAmount} ${fromToken} atomically from your authenticated wallet and executes against the $NR AMM pool.`
-                        : 'Please sign in first to execute swaps using your NexusRail USD or $NR wallet balance.'}
+                        ? `Debits ${payAmount} ${fromToken} atomically from your authenticated wallet and executes against the $NXL AMM pool.`
+                        : 'Please sign in first to execute swaps using your NexusRail USD or $NXL wallet balance.'}
                     </p>
                   </div>
                 ) : (
@@ -1274,7 +1273,7 @@ export default function SwapPage() {
                   onClick={handleExecuteCrossChainSwap}
                   className="w-full py-4 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-[var(--gold)]/20 cursor-pointer"
                 >
-                  {fromToken === 'USD' || fromToken === 'NR'
+                  {fromToken === 'USD' || fromToken === 'NXL'
                     ? `Execute Instant ${fromToken} → ${toToken} Swap`
                     : depositMethod === 'extension'
                     ? `Sign & Deposit ${payAmount} ${fromToken} via Extension`

@@ -64,7 +64,7 @@ export class PortfolioService {
           source: 'binance',
           change24h: 0,
         };
-      case 'NR':
+      case 'NXL':
         return {
           priceCents: Math.max(1, nrSpotCents),
           source: 'amm',
@@ -94,8 +94,8 @@ export class PortfolioService {
         return 'Stellar Lumens (XLM)';
       case 'USDC':
         return 'USD Coin (USDC)';
-      case 'NR':
-        return '$NR Native Utility Token';
+      case 'NXL':
+        return '$NXL Native Utility Token';
       default:
         return symbol;
     }
@@ -150,10 +150,10 @@ export class PortfolioService {
 
       let allocations = product.allocations || [];
 
-      // Fallback for single asset packs or NR token if allocations array is absent
+      // Fallback for single asset packs or NXL token if allocations array is absent
       if (allocations.length === 0) {
-        if (item.sku === 'NR-TOKEN' || item.sku === 'NR-PACK-50') {
-          allocations = [{ symbol: 'NR', label: '$NR Native Utility Token', unitQty: item.sku === 'NR-PACK-50' ? 50 : 1 }];
+        if (item.sku === 'NXL-TOKEN' || item.sku === 'NXL-PACK-50' || item.sku === 'NR-TOKEN' || item.sku === 'NR-PACK-50') {
+          allocations = [{ symbol: 'NXL', label: '$NXL Native Utility Token', unitQty: (item.sku === 'NXL-PACK-50' || item.sku === 'NR-PACK-50') ? 50 : 1 }];
         } else if (item.sku === 'NGOLD-1G') {
           allocations = [{ symbol: 'GOLD_G', label: 'Physical 24K Gold (1g)', unitQty: 1.0 }];
         } else if (item.sku === 'NSILVER-10G') {
@@ -225,20 +225,20 @@ export class PortfolioService {
           session ? { session } : undefined
         );
 
-        // Sync NR internal balance if the credited asset is NR
-        if (alloc.symbol === 'NR') {
+        // Sync NXL internal balance if the credited asset is NXL
+        if (alloc.symbol === 'NXL') {
           const nrMicro = Math.round(deltaQty * 1_000_000);
           try {
             await walletService.applyEntry(
               order.user_id,
               nrMicro,
               'CREDIT',
-              'NR',
+              'NXL',
               order.order_number,
               session
             );
           } catch (walletErr: any) {
-            console.warn(`⚠️ [PortfolioService] NR balance sync warning:`, walletErr.message);
+            console.warn(`⚠️ [PortfolioService] NXL balance sync warning:`, walletErr.message);
           }
         }
       }
@@ -247,7 +247,7 @@ export class PortfolioService {
     // Module 4: Record Order Routing Fee & Gas Arbitrage in Platform Treasury
     try {
       const config = await TreasuryService.getConfig();
-      const isPaidWithNr = order.payment_rail === 'NR';
+      const isPaidWithNr = order.payment_rail === 'NXL_TOKEN';
       const orderFeeCents = isPaidWithNr ? 0 : Math.round((order.total_cents * config.order_fee_bps) / 10000);
       const isCryptoRail = ['STELLAR', 'XRPL', 'XLM', 'XRP', 'STELLAR_USDC', 'USDC'].includes(order.payment_rail);
       const gasArbitrageCents = isCryptoRail ? config.gas_flat_cents : 0;
@@ -283,20 +283,20 @@ export class PortfolioService {
     const snapshot = await getExtendedMarketSnapshot();
     const nrPool = await NrTokenService.getPoolStats();
 
-    // Check if user has NR wallet balance that can be synced or included
+    // Check if user has NXL wallet balance that can be synced or included
     try {
       const balances = await walletService.getBalance(userId);
-      const nrMicro = balances.NR || 0;
+      const nrMicro = balances.NXL || 0;
       const nrUnits = Number((nrMicro / 1_000_000).toFixed(6));
-      const hasNrHolding = rawHoldings.some((h) => h.symbol === 'NR');
+      const hasNrHolding = rawHoldings.some((h) => h.symbol === 'NXL');
 
       if (!hasNrHolding && nrUnits > 0) {
         rawHoldings.push({
           _id: undefined as any,
-          id: `hld_wallet_nr_${userId}`,
+          id: `hld_wallet_nxl_${userId}`,
           user_id: userId,
-          symbol: 'NR',
-          label: '$NR Native Utility Token',
+          symbol: 'NXL',
+          label: '$NXL Native Utility Token',
           quantity: nrUnits,
           total_cost_cents: Math.round(nrUnits * nrPool.spotPriceCents),
           avg_buy_price_cents: nrPool.spotPriceCents,
@@ -468,13 +468,13 @@ export class PortfolioService {
       created_at: now,
     });
 
-    // Debit NR wallet if selling NR
-    if (symbol === 'NR') {
+    // Debit NXL wallet if selling NXL
+    if (symbol === 'NXL') {
       const nrMicro = Math.round(quantity * 1_000_000);
       try {
-        await walletService.applyEntry(userId, nrMicro, 'DEBIT', 'NR', eventId);
+        await walletService.applyEntry(userId, nrMicro, 'DEBIT', 'NXL', eventId);
       } catch (err: any) {
-        console.warn('⚠️ [PortfolioService] NR debit warning:', err.message);
+        console.warn('⚠️ [PortfolioService] NXL debit warning:', err.message);
       }
     }
 

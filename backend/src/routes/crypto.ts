@@ -105,15 +105,13 @@ const handleTokenWithdraw = async (req: Request, res: Response) => {
 
   try {
     const balances = await walletService.getBalance(userId);
-    const availableNrMicro = balances.NR || 0;
     const availableNxlMicro = balances.NXL || 0;
-    const totalAvailableMicro = availableNxlMicro + availableNrMicro;
     const requestedMicro = Math.round(numAmount * 1_000_000);
 
-    if (totalAvailableMicro < requestedMicro) {
+    if (availableNxlMicro < requestedMicro) {
       return res.status(400).json({
         success: false,
-        error: `Insufficient $NXL balance. You have ${(totalAvailableMicro / 1_000_000).toFixed(6)} $NXL available.`,
+        error: `Insufficient $NXL balance. You have ${(availableNxlMicro / 1_000_000).toFixed(6)} $NXL available.`,
       });
     }
 
@@ -139,9 +137,8 @@ const handleTokenWithdraw = async (req: Request, res: Response) => {
       withdrawalId = withdrawal.id;
     }
 
-    // Atomic debit of user's internal wallet (debit whichever balance holds the tokens)
-    const debitCurrency = availableNxlMicro >= requestedMicro ? 'NXL' : 'NR';
-    await walletService.applyEntry(userId, requestedMicro, 'DEBIT', debitCurrency, withdrawalId);
+    // Atomic debit of user's internal wallet
+    await walletService.applyEntry(userId, requestedMicro, 'DEBIT', 'NXL', withdrawalId);
     const updatedBalances = await walletService.getBalance(userId);
 
     res.json({
@@ -155,8 +152,8 @@ const handleTokenWithdraw = async (req: Request, res: Response) => {
         destinationStellarAddress: targetAddress, // backward compat
         txHash,
         ledgerSeq,
-        remainingBalance: Number((((updatedBalances.NXL || 0) + (updatedBalances.NR || 0)) / 1_000_000).toFixed(6)),
-        remainingNrBalance: Number(((updatedBalances.NR || 0) / 1_000_000).toFixed(6)),
+        remainingBalance: Number(((updatedBalances.NXL || 0) / 1_000_000).toFixed(6)),
+        remainingNrBalance: Number(((updatedBalances.NXL || 0) / 1_000_000).toFixed(6)),
         explorerUrl,
       },
     });

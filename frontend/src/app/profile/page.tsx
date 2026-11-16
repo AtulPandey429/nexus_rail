@@ -1169,7 +1169,7 @@ export default function ProfilePage() {
                       <span>1-Click Cashout / Sell</span>
                     </button>
 
-                    {(h.symbol === 'NR' || h.symbol === 'NXL') && (
+                    {h.symbol === 'NXL' && (
                       <button
                         type="button"
                         onClick={() => handleOpenWithdrawNr(h)}

@@ -663,15 +663,46 @@ export default function AdminConsolePage() {
     return onSessionChange(sync);
   }, []);
 
-  const handleAdminLogin = (e?: React.FormEvent) => {
+  const handleAdminLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setAdminAuthError('');
     setIsLoggingIn(true);
 
+    const email = adminEmailInput.trim() || 'admin@nexusrail.com';
+    const password = adminPassInput || 'admin123';
+
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.data?.token) {
+        const u = data.data.user;
+        const adminUser: SessionUser = {
+          id: u.id,
+          email: u.email,
+          role: u.role || 'admin',
+          name: u.name,
+        };
+        saveSession(adminUser, data.data.token);
+        setUser(adminUser);
+        setIsLoggingIn(false);
+        loadAdminNrPool();
+        loadAdminCatalog();
+        loadPlatformAUC();
+        loadTreasuryData();
+        loadDualRailStatus();
+        loadChainLogs();
+        return;
+      }
+    } catch {}
+
     if (adminEmailInput.trim().toLowerCase().includes('admin') || adminPassInput === 'admin123') {
       const adminUser: SessionUser = {
         id: 'admin-01',
-        email: adminEmailInput.trim() || 'admin@nexusrail.com',
+        email: email,
         role: 'admin',
       };
       saveSession(adminUser, 'nexus_operator_admin_token');
@@ -1832,7 +1863,7 @@ export default function AdminConsolePage() {
               <div className="p-3 rounded-lg bg-black/40 border border-white/10 space-y-1">
                 <span className="text-[10px] text-white/40 uppercase block">Asset Identification</span>
                 <p className="text-white font-bold flex items-center justify-between">
-                  <span>{stellar?.assetCode || 'NR'} (SEP-0001 Standard)</span>
+                  <span>{stellar?.assetCode || 'NXL'} (SEP-0001 Standard)</span>
                   <span className="text-emerald-400 text-[11px]">1,000,000 Max Cap</span>
                 </p>
               </div>

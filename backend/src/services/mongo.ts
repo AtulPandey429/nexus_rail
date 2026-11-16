@@ -141,7 +141,7 @@ export interface MongoWalletTxDoc {
   _id?: any;
   id: string;
   user_id: string;
-  currency: 'USD' | 'XRP' | 'XLM' | 'NR' | 'NXL';
+  currency: 'USD' | 'XRP' | 'XLM' | 'NXL';
   amount_cents: number;
   type: 'CREDIT' | 'DEBIT';
   reference_id: string;
@@ -152,7 +152,7 @@ export interface MongoWalletTxDoc {
 export interface MongoWalletBalanceDoc {
   _id?: any;
   user_id: string;
-  currency: 'USD' | 'XRP' | 'XLM' | 'NR' | 'NXL';
+  currency: 'USD' | 'XRP' | 'XLM' | 'NXL';
   available_cents: number;
   locked_cents: number;
   version: number;
@@ -161,7 +161,7 @@ export interface MongoWalletBalanceDoc {
 
 export interface MongoTokenPoolDoc {
   _id?: any;
-  symbol: 'NR' | 'NXL' | string;
+  symbol: 'NXL';
   name: string;
   reserve_usd_cents: number;
   pool_nr_micro: number;
@@ -178,7 +178,7 @@ export interface MongoTokenPoolDoc {
 export interface MongoTokenPriceTickDoc {
   _id?: any;
   id: string;
-  symbol: 'NR' | 'NXL' | string;
+  symbol: 'NXL';
   spot_price_cents: number;
   spot_price_usd: number;
   reserve_usd_cents: number;
@@ -252,7 +252,7 @@ export interface MongoTreasuryEntryDoc {
   total_revenue_cents: number;
   net_owner_profit_cents: number;
   nr_pool_injected_cents: number;
-  rail: 'STELLAR' | 'XRPL' | 'STRIPE' | 'NR' | 'INTERNAL';
+  rail: 'STELLAR' | 'XRPL' | 'STRIPE' | 'NXL' | 'INTERNAL';
   created_at: string;
 }
 
@@ -302,7 +302,7 @@ export interface MongoSmartContractDoc {
 
 export interface MongoPlatformTokenDoc {
   _id?: any;
-  symbol: 'NR' | 'NXL' | string;
+  symbol: 'NXL';
   name: string;
   chain: 'STELLAR' | 'XRPL';
   asset_code: string;

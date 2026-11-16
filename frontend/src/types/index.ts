@@ -19,12 +19,12 @@ export interface HealthResponse {
   timestamp: string;
 }
 
-export type PaymentRail = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR' | 'NR_TOKEN' | 'NXL_TOKEN';
+export type PaymentRail = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR' | 'NXL_TOKEN';
 export type OrderStatus = 'PENDING' | 'PAID' | 'CANCELLED' | 'REFUNDED';
-export type WalletCurrency = 'USD' | 'XRP' | 'XLM' | 'NR' | 'NXL';
+export type WalletCurrency = 'USD' | 'XRP' | 'XLM' | 'NXL';
 export type TransactionType = 'CREDIT' | 'DEBIT';
 
-export type AssetSymbol = 'GOLD_G' | 'SILVER_G' | 'XRP' | 'XLM' | 'USDC' | 'NR' | 'NXL';
+export type AssetSymbol = 'GOLD_G' | 'SILVER_G' | 'XRP' | 'XLM' | 'USDC' | 'NXL';
 
 export interface ProductAllocation {
   symbol: AssetSymbol;
@@ -230,7 +230,7 @@ export interface SmartContractDTO {
 }
 
 export interface OnChainTokenDTO {
-  symbol: 'NR' | 'NXL' | string;
+  symbol: 'NXL';
   name: string;
   chain: 'STELLAR' | 'XRPL';
   assetCode: string;
