@@ -6,8 +6,8 @@ HORIZON_URL = "https://horizon-testnet.stellar.org"
 
 [DOCUMENTATION]
 ORG_NAME = "NexusRail Global Commerce"
-ORG_URL = "https://nexusrail.vercel.app"
-ORG_LOGO = "https://nexusrail.vercel.app/logo-256.png"
+ORG_URL = "https://github.com/AtulPandey429/nexus_rail"
+ORG_LOGO = "https://raw.githubusercontent.com/AtulPandey429/nexus_rail/main/frontend/public/logo-256.png"
 ORG_DESCRIPTION = "Multi-rail institutional bridge & asset custody platform supporting Stellar, XRPL, and Real-World Assets."
 ORG_TWITTER = "nexusrail"
 ORG_OFFICIAL_EMAIL = "contact@nexusrail.com"
@@ -20,6 +20,6 @@ name = "NexusRail Protocol Token"
 desc = "NexusRail native utility, AMM liquidity reserve, and 50% revenue-share token under Stellar Protocol 22."
 is_asset_anchored = false
 fixed_number = 1000000
-image = "https://nexusrail.vercel.app/logo-256.png"
+image = "https://raw.githubusercontent.com/AtulPandey429/nexus_rail/main/frontend/public/logo-256.png"
 status = "live"
 contract = "CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N"
