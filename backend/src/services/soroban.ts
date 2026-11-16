@@ -30,7 +30,7 @@ export const DEFAULT_NEXUS_VAULT_CONTRACT: MongoSmartContractDoc = {
     {
       wasm_hash: '4f9a32c7e8d1b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7',
       upgraded_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),
-      tx_hash: '4945f74bef92a0ab1f3842a8b72f79c252f187b1d7ea0b47a8f14a38929c837b',
+      tx_hash: '50077e3304e5e93926d17bc1eead7a5bb363ec264f6998ea5b4c4da7e7629894',
       upgraded_by: 'SYSTEM_GENESIS',
       protocol_version: 22,
       notes: 'Initial Protocol 22 CAP-0058 atomic constructor deployment',
