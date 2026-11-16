@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth.js';
-import { MongoService, MongoOrderDoc } from '../services/mongo.js';
+import { MongoService, MongoOrderDoc, MongoPlatformTokenDoc } from '../services/mongo.js';
 import { ProductService } from '../services/products.js';
 import { NrTokenService } from '../services/nrTokenService.js';
 import { RedisCacheService } from '../services/redis.js';
@@ -9,6 +9,7 @@ import { TreasuryService } from '../services/treasuryService.js';
 import { SorobanService } from '../services/soroban.js';
 import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
 import { DualRailTokenService } from '../services/dualRailTokenService.js';
+import { env } from '../config/env.js';
 import { z } from 'zod';
 
 export const adminRouter = Router();
@@ -365,5 +366,49 @@ adminRouter.get('/dual-rail/logs', async (_req: AuthenticatedRequest, res: Respo
     res.json({ success: true, data: { items: logs } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to fetch chain logs' });
+  }
+});
+
+/**
+ * RESTRICTED: Admin-only extraction of on-chain token credentials, addresses, and secret keys/seeds
+ * Guaranteed role gate: requireAuth + requireAdmin
+ */
+adminRouter.get('/dual-rail/credentials', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
+    const stellarDoc = await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NR' });
+    const xrplDoc = await tokensCol.findOne({ chain: 'XRPL', symbol: 'NR' });
+
+    res.json({
+      success: true,
+      data: {
+        stellar: {
+          assetCode: env.STELLAR_NR_ASSET_CODE || 'NR',
+          issuerAddress: stellarDoc?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC,
+          issuerSecretKey: stellarDoc?.issuer_secret || env.STELLAR_NR_ISSUER_SECRET,
+          contractId: stellarDoc?.contract_id || env.STELLAR_NR_CONTRACT_ID,
+          distributorVault: stellarDoc?.distribution_address || env.STELLAR_NR_DISTRIBUTOR_VAULT,
+          distributorSecretKey: env.STELLAR_HOT_WALLET_SECRET,
+          totalSupplyCap: stellarDoc?.total_supply_cap || 1_000_000,
+          mintTxHash: stellarDoc?.mint_tx_hash,
+          explorerUrl: stellarDoc?.explorer_url || `https://stellar.expert/explorer/testnet/asset/NR-${env.STELLAR_NR_ISSUER_PUBLIC}`,
+        },
+        xrpl: {
+          currencyCode: env.XRPL_NR_CURRENCY_CODE || 'NR',
+          currencyHex: env.XRPL_NR_CURRENCY_HEX || '4E52000000000000000000000000000000000000',
+          issuerAddress: xrplDoc?.issuer_address || env.XRPL_NR_ISSUER_ADDRESS,
+          issuerSecretSeed: xrplDoc?.issuer_secret || env.XRPL_NR_ISSUER_SEED,
+          ammAccount: xrplDoc?.amm_account || env.XRPL_NR_AMM_ACCOUNT,
+          distributorVault: xrplDoc?.distribution_address || env.PLATFORM_XRPL_VAULT,
+          distributorSecretSeed: env.XRPL_HOT_WALLET_SEED,
+          totalSupplyCap: xrplDoc?.total_supply_cap || 1_000_000,
+          ammTxHash: xrplDoc?.amm_tx_hash,
+          mintTxHash: xrplDoc?.mint_tx_hash,
+          explorerUrl: xrplDoc?.explorer_url || `https://testnet.xrpl.org/accounts/${env.XRPL_NR_ISSUER_ADDRESS}`,
+        },
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch credentials' });
   }
 });

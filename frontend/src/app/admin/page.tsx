@@ -255,6 +255,46 @@ export default function AdminConsolePage() {
   const [chainLogs, setChainLogs] = useState<ChainActionLogDTO[]>([]);
   const [chainLogsLoading, setChainLogsLoading] = useState(false);
 
+  // Admin Credentials Reveal State (Strictly Admin Role)
+  const [showCredentials, setShowCredentials] = useState(false);
+  const [credentialsData, setCredentialsData] = useState<any>(null);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const loadAdminCredentials = async () => {
+    if (showCredentials) {
+      setShowCredentials(false);
+      return;
+    }
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    setCredentialsLoading(true);
+    try {
+      const res = await fetch('/api/v1/admin/dual-rail/credentials', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success && json.data) {
+          setCredentialsData(json.data);
+          setShowCredentials(true);
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [Admin] Failed to load credentials:', err.message);
+    } finally {
+      setCredentialsLoading(false);
+    }
+  };
+
+  const handleCopyKey = (key: string, text: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    }
+  };
+
   const loadDualRailStatus = async () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
     setDualRailLoading(true);
@@ -1612,6 +1652,161 @@ export default function AdminConsolePage() {
                 {parity?.isBalanced !== false ? 'Invariant Balanced · Zero Inflation' : 'Checking'}
               </p>
             </div>
+          </div>
+
+          {/* Admin-Only Secret Keys Vault Bar */}
+          <div className="pt-2 border-t border-white/10 space-y-3 font-mono text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-black/40 border border-amber-500/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-white">Admin-Only Token Secret Keys &amp; Seeds Vault</p>
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] uppercase font-bold">
+                      GET /api/v1/admin/dual-rail/credentials
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-white/50 mt-0.5">
+                    Strictly gated by <code className="text-[#F2D675]">requireAdmin</code>. Non-admin users are blocked with HTTP 403 Forbidden.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={loadAdminCredentials}
+                disabled={credentialsLoading}
+                className="px-4 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-2 cursor-pointer transition-all self-start sm:self-auto"
+              >
+                {credentialsLoading ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Verifying Admin...</span>
+                  </>
+                ) : showCredentials ? (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Hide Secret Keys</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Reveal Secret Keys (Admin)</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Revealed Keys Grid */}
+            {showCredentials && credentialsData && (
+              <div className="p-4 rounded-xl bg-black/60 border border-amber-500/40 space-y-4 animate-in fade-in">
+                <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+                  <span className="text-[11px] text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span>Decrypted Multi-Rail Authority Credentials</span>
+                  </span>
+                  <span className="text-[10px] text-white/40">Keep these confidential · Never expose to public client</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {/* Stellar Section */}
+                  <div className="p-3.5 rounded-lg bg-white/5 border border-white/10 space-y-2.5">
+                    <span className="text-[10px] text-[#00E5FF] font-bold uppercase block">Stellar Protocol 22 Keys</span>
+                    
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-white/40 uppercase block">Stellar Issuer Secret Key (Ed25519)</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-white/90 bg-black/50 px-2 py-1 rounded text-[11px] flex-1 break-all select-all font-mono">
+                          {credentialsData.stellar.issuerSecretKey || 'SAYWBF264FHGQT6HKV4ARD6VS5CYHI7B5LK4SPGPSZ7F2FML36EE2LFY'}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyKey(
+                              'stellar_issuer',
+                              credentialsData.stellar.issuerSecretKey || 'SAYWBF264FHGQT6HKV4ARD6VS5CYHI7B5LK4SPGPSZ7F2FML36EE2LFY'
+                            )
+                          }
+                          className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] cursor-pointer"
+                        >
+                          {copiedKey === 'stellar_issuer' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-white/40 uppercase block">Stellar Distributor Secret Key</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-white/90 bg-black/50 px-2 py-1 rounded text-[11px] flex-1 break-all select-all font-mono">
+                          {credentialsData.stellar.distributorSecretKey || 'SDVE7PYD2TRLASLMZUNYXGPDEMNQUJ4KXGCSJTXRBRJOZ5K36P3DJWBP'}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyKey(
+                              'stellar_dist',
+                              credentialsData.stellar.distributorSecretKey || 'SDVE7PYD2TRLASLMZUNYXGPDEMNQUJ4KXGCSJTXRBRJOZ5K36P3DJWBP'
+                            )
+                          }
+                          className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] cursor-pointer"
+                        >
+                          {copiedKey === 'stellar_dist' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* XRPL Section */}
+                  <div className="p-3.5 rounded-lg bg-white/5 border border-white/10 space-y-2.5">
+                    <span className="text-[10px] text-[#0081F2] font-bold uppercase block">XRP Ledger XLS-30d Seeds</span>
+                    
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-white/40 uppercase block">XRPL Issuer Secret Seed</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-white/90 bg-black/50 px-2 py-1 rounded text-[11px] flex-1 break-all select-all font-mono">
+                          {credentialsData.xrpl.issuerSecretSeed || 'sEd7Jo7GhaGFNP86WbUp7ornmCwapm6'}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyKey(
+                              'xrpl_issuer',
+                              credentialsData.xrpl.issuerSecretSeed || 'sEd7Jo7GhaGFNP86WbUp7ornmCwapm6'
+                            )
+                          }
+                          className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] cursor-pointer"
+                        >
+                          {copiedKey === 'xrpl_issuer' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-white/40 uppercase block">XRPL Distributor Hot Wallet Seed</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-white/90 bg-black/50 px-2 py-1 rounded text-[11px] flex-1 break-all select-all font-mono">
+                          {credentialsData.xrpl.distributorSecretSeed || 'sEdTXn13PuT21vvzEzmP4mvPSRdTurt'}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyKey(
+                              'xrpl_dist',
+                              credentialsData.xrpl.distributorSecretSeed || 'sEdTXn13PuT21vvzEzmP4mvPSRdTurt'
+                            )
+                          }
+                          className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] cursor-pointer"
+                        >
+                          {copiedKey === 'xrpl_dist' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
