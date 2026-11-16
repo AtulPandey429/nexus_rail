@@ -29,10 +29,35 @@ const config: Config = {
         'state-success': '#10B981',
         'state-error': '#EF4444',
         'state-warning': '#F59E0B',
+        // Admin-only console palette. Scoped by usage so the storefront keeps its
+        // existing multi-theme design tokens untouched.
+        admin: {
+          bg: '#07090D',
+          sidebar: '#0A0D13',
+          surface: '#0F131B',
+          raised: '#131824',
+          hover: '#171D2A',
+          border: '#1E2533',
+          'border-soft': 'rgba(255, 255, 255, 0.06)',
+          muted: '#8B95A8',
+          faint: '#5E697C',
+          gold: '#E9B949',
+          'gold-soft': '#F6D68A',
+          cyan: '#38BDF8',
+          violet: '#A78BFA',
+          emerald: '#34D399',
+          rose: '#FB7185',
+        },
       },
       fontFamily: {
-        sans: ['var(--font-geist-sans)', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['var(--font-inter)', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'SFMono-Regular', 'Menlo', 'monospace'],
+        'admin-mono': ['var(--font-admin-mono)', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
+      boxShadow: {
+        'admin-card': '0 1px 0 0 rgba(255,255,255,0.035) inset, 0 18px 40px -28px rgba(0,0,0,0.9)',
+        'admin-pop': '0 24px 70px -24px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.04)',
+        'admin-glow': '0 0 0 1px rgba(233,185,73,0.22), 0 14px 40px -18px rgba(233,185,73,0.35)',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
@@ -46,6 +71,10 @@ const config: Config = {
         'shimmer': 'shimmer 2.5s infinite linear',
         'fade-in-up': 'fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'glow': 'glow 3s ease-in-out infinite alternate',
+        'admin-fade': 'admin-fade 0.35s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'admin-rise': 'admin-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'admin-drawer': 'admin-drawer 0.28s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'admin-shimmer': 'admin-shimmer 2.4s linear infinite',
       },
       keyframes: {
         float: {
@@ -71,6 +100,22 @@ const config: Config = {
         glow: {
           '0%': { boxShadow: '0 0 15px rgba(16, 185, 129, 0.15)' },
           '100%': { boxShadow: '0 0 30px rgba(16, 185, 129, 0.35)' },
+        },
+        'admin-fade': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        'admin-rise': {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'admin-drawer': {
+          '0%': { opacity: '0', transform: 'translateX(-24px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+        'admin-shimmer': {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
         },
       },
     },

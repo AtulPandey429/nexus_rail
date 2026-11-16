@@ -302,3 +302,88 @@ html.lenis, html.lenis body {
   pointer-events: none;
 }
 
+/* =========================================================================
+   ADMIN OPERATOR CONSOLE — SCOPED DESIGN SYSTEM
+   All selectors are namespaced under .admin-scope so storefront themes,
+   typography, and component styles remain completely untouched.
+   ========================================================================= */
+
+.admin-scope {
+  --admin-bg: #07090d;
+  --admin-sidebar: #0a0d13;
+  --admin-surface: #0f131b;
+  --admin-raised: #131824;
+  --admin-border: #1e2533;
+  --admin-gold: #e9b949;
+  color-scheme: dark;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+}
+
+.admin-scope ::selection {
+  background: rgba(233, 185, 73, 0.28);
+  color: #fff7e4;
+}
+
+.admin-scope .admin-canvas {
+  background-color: var(--admin-bg);
+  background-image:
+    radial-gradient(ellipse 70% 55% at 82% -12%, rgba(233, 185, 73, 0.075), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 8% 0%, rgba(56, 189, 248, 0.055), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
+  background-size: auto, auto, 64px 64px, 64px 64px;
+}
+
+.admin-scope ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.admin-scope ::-webkit-scrollbar-thumb {
+  background: #242c3c;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.admin-scope ::-webkit-scrollbar-thumb:hover {
+  background: #354054;
+  background-clip: content-box;
+}
+
+.admin-scope :focus-visible {
+  outline: 2px solid rgba(233, 185, 73, 0.65);
+  outline-offset: 2px;
+}
+
+.admin-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.035) 25%,
+    rgba(255, 255, 255, 0.08) 37%,
+    rgba(255, 255, 255, 0.035) 63%
+  );
+  background-size: 200% 100%;
+  animation: admin-shimmer 2.4s linear infinite;
+}
+
+@keyframes admin-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-scope .admin-skeleton {
+    animation: none;
+  }
+}
+
+

@@ -5,7 +5,7 @@ import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { SmoothScroll } from '@/components/layout/SmoothScroll';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'], display: 'swap' });
+const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-inter' });
 
 export const metadata: Metadata = {
   title: 'NexusRail | Multi-Rail Crypto Commerce Engine',
@@ -36,7 +36,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.className} bg-[var(--background)] text-[var(--foreground)] antialiased selection:bg-rail-emerald/30 min-h-screen flex flex-col`}>
+      <body className={`${inter.variable} ${inter.className} bg-[var(--background)] text-[var(--foreground)] antialiased selection:bg-rail-emerald/30 min-h-screen flex flex-col`}>
         {/* Subtle Cinematic Film Grain Texture (Adapted from atul-portfolio) */}
         <div className="site-grain pointer-events-none fixed inset-0 z-[1]" aria-hidden="true" />
         <ThemeProvider>
