@@ -24,13 +24,15 @@ export class StellarTokenIssuerService {
       name: 'NexusRail Protocol Token',
       chain: 'STELLAR',
       asset_code: STELLAR_NR_ASSET_CODE,
-      issuer_address: 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ',
-      distribution_address: 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC',
+      issuer_address: env.STELLAR_NR_ISSUER_PUBLIC || 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ',
+      issuer_secret: env.STELLAR_NR_ISSUER_SECRET || 'SAYWBF264FHGQT6HKV4ARD6VS5CYHI7B5LK4SPGPSZ7F2FML36EE2LFY',
+      contract_id: env.STELLAR_NR_CONTRACT_ID || 'CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N',
+      distribution_address: env.STELLAR_NR_DISTRIBUTOR_VAULT || 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC',
       initial_mint_amount: NR_TOTAL_ON_CHAIN_CAP,
       total_supply_cap: NR_TOTAL_ON_CHAIN_CAP,
       mint_tx_hash: '4945f74bef92a0ab1f3842a8b72f79c252f187b1d7ea0b47a8f14a38929c837b',
       created_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),
-      explorer_url: 'https://stellar.expert/explorer/testnet/asset/NR-GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ',
+      explorer_url: `https://stellar.expert/explorer/testnet/asset/NR-${env.STELLAR_NR_ISSUER_PUBLIC || 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ'}`,
     };
 
     await tokensCol.updateOne(

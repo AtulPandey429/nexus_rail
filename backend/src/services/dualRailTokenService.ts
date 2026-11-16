@@ -78,8 +78,9 @@ export class DualRailTokenService {
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
     const existing = await tokensCol.findOne({ symbol: 'NR', chain: 'XRPL' });
 
-    if (existing && existing.issuer_secret) {
-      const issuerWallet = Wallet.fromSeed(existing.issuer_secret);
+    const seed = env.XRPL_NR_ISSUER_SEED || existing?.issuer_secret;
+    if (seed) {
+      const issuerWallet = Wallet.fromSeed(seed);
       return { issuerWallet, isNew: false };
     }
 
