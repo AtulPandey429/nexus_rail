@@ -29,8 +29,17 @@ import {
 } from '@/lib/shop';
 import { useLiveExchangeRates } from '@/lib/rates';
 
-type CategoryFilter = 'all' | 'hardware' | 'workspace' | 'essentials';
+type CategoryFilter = 'all' | 'baskets' | 'live-assets' | 'hardware' | 'workspace' | 'essentials';
 type SortOption = 'featured' | 'price-asc' | 'price-desc' | 'rating';
+
+const ALLOCATION_COLORS: Record<string, string> = {
+  GOLD_G: 'bg-amber-400',
+  SILVER_G: 'bg-slate-300',
+  USDC: 'bg-emerald-400',
+  XRP: 'bg-blue-400',
+  XLM: 'bg-cyan-400',
+  NR: 'bg-violet-400',
+};
 
 const PRODUCT_IMAGES: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -43,11 +52,19 @@ const PRODUCT_IMAGES: Record<string, string> = {
   'PROD-XLM-PASS': '/products/rail-one.png',
   'PROD-AGENT-PRO': '/products/relay-mat.png',
   'PROD-LEDGER-COLD': '/products/rail-cables.png',
+  'BASKET-INFLATION-SHIELD': '/products/rail-one.png',
+  'BASKET-DUAL-RAIL': '/products/relay-mat.png',
+  'BASKET-AI-ALPHA': '/products/node-stand.png',
+  'NGOLD-1G': '/products/rail-one.png',
+  'NGOLD-TOKEN': '/products/rail-one.png',
+  'NSILVER-10G': '/products/node-stand.png',
+  'NR-PACK-50': '/products/rail-cables.png',
+  'NR-TOKEN': '/products/rail-cables.png',
 };
 
 export default function StoreCatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
-  const [maxPrice, setMaxPrice] = useState<number>(150);
+  const [maxPrice, setMaxPrice] = useState<number>(600);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('featured');
@@ -69,7 +86,7 @@ export default function StoreCatalogPage() {
     return cached && cached.products.length > 0 ? cached.products : FIGMA_CATALOG;
   });
   const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogSource, setCatalogSource] = useState<'api' | 'cache' | 'fallback'>('cache');
+  const [catalogSource, setCatalogSource] = useState<'api' | 'cache'>('cache');
 
   // Live Conversion Rates with 30-minute caching
   const { xlmUsd, xrpUsd, refreshRates, loading: ratesLoading } = useLiveExchangeRates();
@@ -84,7 +101,23 @@ export default function StoreCatalogPage() {
     return onSessionChange(syncUser);
   }, []);
 
-  // Fetch product catalog from API (cached for 30m)
+  // Fetch product catalog from API + auto-refresh every 60s for live oracle accuracy
+  const syncLivePrices = async () => {
+    setCatalogLoading(true);
+    try {
+      const [items] = await Promise.all([
+        fetchCatalog(true),
+        refreshRates().catch(() => {}),
+      ]);
+      setCatalog(items);
+      setCatalogSource('api');
+    } catch {
+      // keep existing catalog on transient error
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchCatalog()
       .then((items) => {
@@ -102,7 +135,15 @@ export default function StoreCatalogPage() {
       }
     };
     window.addEventListener('nexus-catalog-updated', onCatalogUpdate);
-    return () => window.removeEventListener('nexus-catalog-updated', onCatalogUpdate);
+
+    const interval = setInterval(() => {
+      fetchCatalog(true).then(setCatalog).catch(() => {});
+    }, 60 * 1000);
+
+    return () => {
+      window.removeEventListener('nexus-catalog-updated', onCatalogUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -127,35 +168,39 @@ export default function StoreCatalogPage() {
     }
   };
 
-  // 6 Primary Curated Products for Figma Screen 3
-  const primarySix = useMemo(() => {
-    const skus = ['RAIL-ONE', 'RELAY-MAT', 'NEXUS-TEE', 'NODE-STAND', 'SIGNAL-CAP', 'RAIL-CABLES'];
-    return skus.map((sku) => {
-      const found = catalog.find((p) => p.sku === sku);
-      if (found) return found;
-      return FIGMA_CATALOG.find((p) => p.sku === sku)!;
-    }).filter(Boolean);
+  // Normalized live-asset category grouping + unrestricted full catalog visibility
+  const resolvedCatalog = useMemo(() => {
+    const items = catalog && catalog.length > 0 ? catalog : FIGMA_CATALOG;
+    return items.map((p) => {
+      const cat = p.category === 'crypto' ? 'live-assets' : p.category;
+      return { ...p, normalizedCategory: cat };
+    });
   }, [catalog]);
 
   // Filtered Products using debounced search
   const filteredProducts = useMemo(() => {
-    return primarySix.filter((product) => {
-      const matchesCategory =
-        selectedCategory === 'all' || product.category === selectedCategory;
-      const matchesSearch =
-        !debouncedSearch ||
-        product.title.toLowerCase().includes(debouncedSearch) ||
-        product.description.toLowerCase().includes(debouncedSearch) ||
-        product.sku.toLowerCase().includes(debouncedSearch);
-      const matchesPrice = (product.priceCents / 100) <= maxPrice;
-      return matchesCategory && matchesSearch && matchesPrice;
-    }).sort((a, b) => {
-      if (sortBy === 'price-asc') return a.priceCents - b.priceCents;
-      if (sortBy === 'price-desc') return b.priceCents - a.priceCents;
-      if (sortBy === 'rating') return b.rating - a.rating;
-      return 0;
-    });
-  }, [primarySix, selectedCategory, debouncedSearch, maxPrice, sortBy]);
+    return resolvedCatalog
+      .filter((product) => {
+        const matchesCategory =
+          selectedCategory === 'all' || product.normalizedCategory === selectedCategory;
+        const matchesSearch =
+          !debouncedSearch ||
+          product.title.toLowerCase().includes(debouncedSearch) ||
+          product.description.toLowerCase().includes(debouncedSearch) ||
+          product.sku.toLowerCase().includes(debouncedSearch);
+        const matchesPrice = product.priceCents / 100 <= maxPrice;
+        return matchesCategory && matchesSearch && matchesPrice;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'price-asc') return a.priceCents - b.priceCents;
+        if (sortBy === 'price-desc') return b.priceCents - a.priceCents;
+        if (sortBy === 'rating') return b.rating - a.rating;
+        // Featured: Smart Baskets -> Live RWA/Tokens -> Hardware/Merch by upvotes
+        const score = (item: typeof a) =>
+          (item.isBasket ? 10000 : item.isLiveAsset ? 5000 : 0) + item.upvotes;
+        return score(b) - score(a);
+      });
+  }, [resolvedCatalog, selectedCategory, debouncedSearch, maxPrice, sortBy]);
 
   const cartTotalCents = cartLines.reduce((sum, item) => sum + item.priceCents * item.qty, 0);
   const cartTotalItems = cartLines.reduce((sum, item) => sum + item.qty, 0);
@@ -163,12 +208,14 @@ export default function StoreCatalogPage() {
   // Category counts
   const categoryCounts = useMemo(() => {
     return {
-      all: primarySix.length,
-      hardware: primarySix.filter((p) => p.category === 'hardware').length,
-      workspace: primarySix.filter((p) => p.category === 'workspace').length,
-      essentials: primarySix.filter((p) => p.category === 'essentials').length,
+      all: resolvedCatalog.length,
+      baskets: resolvedCatalog.filter((p) => p.normalizedCategory === 'baskets').length,
+      liveAssets: resolvedCatalog.filter((p) => p.normalizedCategory === 'live-assets').length,
+      hardware: resolvedCatalog.filter((p) => p.normalizedCategory === 'hardware').length,
+      workspace: resolvedCatalog.filter((p) => p.normalizedCategory === 'workspace').length,
+      essentials: resolvedCatalog.filter((p) => p.normalizedCategory === 'essentials').length,
     };
-  }, [primarySix]);
+  }, [resolvedCatalog]);
 
   const getItemCartQty = (sku: string) => {
     const line = cartLines.find((c) => c.sku === sku);
@@ -201,10 +248,19 @@ export default function StoreCatalogPage() {
               <div className="w-5 h-5 rounded-md nexus-glass-card border border-[var(--border)] flex items-center justify-center text-[var(--gold)]">
                 <Box className="w-3 h-3" />
               </div>
-              <span>Real design. Illustrative products. Testnet checkout.</span>
+              <span>Live Smart Baskets &amp; RWA tokens auto-synced every 60s via CoinGecko, Binance &amp; $NR AMM.</span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={syncLivePrices}
+                disabled={catalogLoading || ratesLoading}
+                className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-mono font-bold tracking-wider text-emerald-300 hover:bg-emerald-500/25 transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${(catalogLoading || ratesLoading) ? 'animate-spin' : ''}`} />
+                <span>{catalogLoading ? 'SYNCING ORACLE...' : 'SYNC LIVE PRICES'}</span>
+              </button>
               <span className="px-2.5 py-1 rounded-md bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[10px] font-mono font-bold tracking-wider text-[var(--gold)]">
                 STELLAR TESTNET
               </span>
@@ -278,6 +334,8 @@ export default function StoreCatalogPage() {
               <div className="space-y-1">
                 {[
                   { id: 'all', label: 'All products', count: categoryCounts.all },
+                  { id: 'baskets', label: 'Smart Baskets', count: categoryCounts.baskets },
+                  { id: 'live-assets', label: 'Live RWA & Tokens', count: categoryCounts.liveAssets },
                   { id: 'hardware', label: 'Hardware', count: categoryCounts.hardware },
                   { id: 'workspace', label: 'Workspace', count: categoryCounts.workspace },
                   { id: 'essentials', label: 'Essentials', count: categoryCounts.essentials },
@@ -295,7 +353,7 @@ export default function StoreCatalogPage() {
                       }`}
                     >
                       <span>{cat.label}</span>
-                      <span className="text-[11px] opacity-70">0{cat.count}</span>
+                      <span className="text-[11px] opacity-70">{cat.count < 10 ? `0${cat.count}` : cat.count}</span>
                     </button>
                   );
                 })}
@@ -312,8 +370,8 @@ export default function StoreCatalogPage() {
                 <input
                   type="range"
                   min="0"
-                  max="150"
-                  step="5"
+                  max="600"
+                  step="10"
                   value={maxPrice}
                   onChange={(e) => setMaxPrice(Number(e.target.value))}
                   className="w-full h-1 bg-[var(--card)] rounded-lg appearance-none cursor-pointer accent-[var(--gold)]"
@@ -345,24 +403,27 @@ export default function StoreCatalogPage() {
             
             {/* Header info */}
             <div className="flex items-center justify-between text-[11px] font-mono text-[var(--muted)]">
-              <span>0{filteredProducts.length} PRODUCTS</span>
-              <span>NexusRail Collection / 2026</span>
+              <span>{filteredProducts.length < 10 ? `0${filteredProducts.length}` : filteredProducts.length} PRODUCTS</span>
+              <span>NexusRail Live Catalog / 2026</span>
             </div>
 
-            {/* 3x2 Grid */}
+            {/* Product & Basket Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
               {filteredProducts.map((product) => {
                 const qty = getItemCartQty(product.sku);
                 const inCart = qty > 0;
                 const isAdding = addingSku === product.sku;
                 const imgSrc = PRODUCT_IMAGES[product.sku] || '/products/rail-one.png';
+                const change24h = product.change24hPercent ?? 0;
 
                 return (
                   <div
                     key={product.sku}
-                    className="flex flex-col justify-between rounded-2xl nexus-glass-card hover:border-[var(--gold)]/60 transition-all overflow-hidden group shadow-lg hover:shadow-2xl hover:-translate-y-1.5 duration-300"
+                    className={`flex flex-col justify-between rounded-2xl nexus-glass-card hover:border-[var(--gold)]/60 transition-all overflow-hidden group shadow-lg hover:shadow-2xl hover:-translate-y-1.5 duration-300 ${
+                      product.isBasket ? 'ring-1 ring-[var(--gold)]/30' : ''
+                    }`}
                   >
-                    {/* Media Thumbnail with exact Figma badge */}
+                    {/* Media Thumbnail with Live Oracle & In-Cart Badges */}
                     <div className="relative aspect-[16/10] w-full nexus-glass-surface overflow-hidden">
                       <Image
                         src={imgSrc}
@@ -372,7 +433,7 @@ export default function StoreCatalogPage() {
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       />
 
-                      {/* Top-Left In-Cart Badge (Matching Figma Screen 3) */}
+                      {/* Top-Left In-Cart Badge */}
                       {inCart && (
                         <div className="absolute top-3 left-3 z-10">
                           <span className="px-2.5 py-1 rounded-md bg-[var(--gold)]/20 border border-[var(--gold)]/40 text-[10px] font-mono font-bold tracking-wider text-[var(--gold-bright)] shadow-sm backdrop-blur-md">
@@ -380,18 +441,45 @@ export default function StoreCatalogPage() {
                           </span>
                         </div>
                       )}
+
+                      {/* Top-Right Live Oracle + 24h Trend Badges */}
+                      {product.isLiveAsset && (
+                        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-md bg-black/75 border border-emerald-400/40 text-[10px] font-mono font-bold text-emerald-300 backdrop-blur-md inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>LIVE</span>
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md bg-black/75 border text-[10px] font-mono font-bold backdrop-blur-md ${
+                              change24h >= 0
+                                ? 'border-emerald-400/30 text-emerald-300'
+                                : 'border-rose-400/30 text-rose-300'
+                            }`}
+                          >
+                            {change24h >= 0 ? '+' : ''}
+                            {change24h.toFixed(2)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Content Section */}
                     <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
-                      <div>
+                      <div className="space-y-2">
                         {/* Category Label */}
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
-                          {product.category}
-                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
+                            {product.isBasket ? 'SMART BASKET' : product.isLiveAsset ? 'LIVE ORACLE' : product.category}
+                          </span>
+                          {product.oracleSource && (
+                            <span className="text-[10px] font-mono uppercase text-[var(--gold)]">
+                              {product.oracleSource}
+                            </span>
+                          )}
+                        </div>
 
-                        {/* Title and Price */}
-                        <div className="flex items-baseline justify-between gap-2 mt-1">
+                        {/* Title and Live Price */}
+                        <div className="flex items-baseline justify-between gap-2">
                           <h3 className="text-sm font-bold text-[var(--foreground)] group-hover:text-[var(--gold)] transition-colors">
                             {product.title}
                           </h3>
@@ -400,10 +488,43 @@ export default function StoreCatalogPage() {
                           </span>
                         </div>
 
+                        {product.priceInr && product.isLiveAsset && (
+                          <div className="flex items-center justify-between text-[11px] font-mono text-[var(--muted)]">
+                            <span>≈ ₹{product.priceInr.toLocaleString('en-IN')} INR</span>
+                            <span className="text-emerald-400">10% off w/ $NR</span>
+                          </div>
+                        )}
+
                         {/* Description */}
-                        <p className="mt-1 text-xs text-[var(--muted)] line-clamp-2 leading-relaxed">
+                        <p className="text-xs text-[var(--muted)] line-clamp-2 leading-relaxed">
                           {product.description}
                         </p>
+
+                        {/* Composition Bar & Allocation Chips for Baskets / Live Assets */}
+                        {product.allocations && product.allocations.length > 0 && (
+                          <div className="pt-1.5 space-y-1.5">
+                            <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden flex">
+                              {product.allocations.map((alloc) => (
+                                <div
+                                  key={`${product.sku}-${alloc.symbol}`}
+                                  className={ALLOCATION_COLORS[alloc.symbol] || 'bg-[var(--gold)]'}
+                                  style={{ width: `${alloc.weightPercent ?? 100}%` }}
+                                  title={`${alloc.label}: ${alloc.weightPercent ?? 100}%`}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {product.allocations.map((alloc) => (
+                                <span
+                                  key={`${product.sku}-chip-${alloc.symbol}`}
+                                  className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-[var(--muted)]"
+                                >
+                                  {alloc.unitQty} {alloc.symbol.replace('_G', 'g')} ({alloc.weightPercent ?? 100}%)
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Add Button */}

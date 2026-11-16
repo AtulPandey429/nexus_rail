@@ -49,6 +49,19 @@ export interface MongoProductDoc {
   rail?: 'stellar' | 'xrpl' | 'multi';
   tag?: string;
   rating?: number;
+  is_live_asset?: boolean;
+  is_basket?: boolean;
+  allocations?: Array<{
+    symbol: 'GOLD_G' | 'SILVER_G' | 'XRP' | 'XLM' | 'USDC' | 'NR';
+    label: string;
+    unitQty: number;
+    weightPercent?: number;
+    valueCents?: number;
+  }>;
+  price_inr?: number;
+  change_24h_percent?: number;
+  oracle_source?: 'coingecko' | 'binance' | 'amm';
+  price_updated_at?: string;
   created_at: string;
   updated_at: string;
 }

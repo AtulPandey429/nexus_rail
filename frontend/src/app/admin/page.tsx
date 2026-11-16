@@ -117,6 +117,131 @@ export default function AdminConsolePage() {
   const [adjustingReserve, setAdjustingReserve] = useState(false);
   const [reserveFeedback, setReserveFeedback] = useState('');
 
+  // Module 2: Live Smart Baskets & Oracle Catalog Admin State
+  const [adminProducts, setAdminProducts] = useState<any[]>([]);
+  const [catalogAdminFeedback, setCatalogAdminFeedback] = useState('');
+  const [savingProduct, setSavingProduct] = useState(false);
+  const [showAllAdminSkus, setShowAllAdminSkus] = useState(false);
+  const [newBasketSku, setNewBasketSku] = useState('BASKET-CUSTOM-01');
+  const [newBasketTitle, setNewBasketTitle] = useState('Balanced Dual-Rail Vault Basket');
+  const [newBasketCategory, setNewBasketCategory] = useState<'baskets' | 'live-assets'>('baskets');
+  const [newBasketRail, setNewBasketRail] = useState<'multi' | 'stellar' | 'xrpl'>('multi');
+  const [qtyGoldG, setQtyGoldG] = useState('0.25');
+  const [qtySilverG, setQtySilverG] = useState('10');
+  const [qtyUsdc, setQtyUsdc] = useState('25');
+  const [qtyXrp, setQtyXrp] = useState('10');
+  const [qtyXlm, setQtyXlm] = useState('50');
+  const [qtyNr, setQtyNr] = useState('15');
+
+  const loadAdminCatalog = async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    try {
+      const res = await fetch('/api/v1/admin/products', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success && Array.isArray(json.data?.products)) {
+          setAdminProducts(json.data.products);
+          return;
+        }
+      }
+    } catch {}
+
+    try {
+      const pubRes = await fetch('/api/v1/products?refresh=true', { cache: 'no-store' });
+      const pubJson = await pubRes.json().catch(() => null);
+      if (pubRes.ok && pubJson?.success && Array.isArray(pubJson.data)) {
+        setAdminProducts(pubJson.data);
+      }
+    } catch {}
+  };
+
+  const handleToggleProductActive = async (sku: string, currentActive: boolean) => {
+    setCatalogAdminFeedback('');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (!token || token === 'nexus_operator_admin_token') {
+      setCatalogAdminFeedback('Sign in with a real backend admin JWT to toggle product visibility.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/v1/admin/products/${encodeURIComponent(sku)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ active: !currentActive }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !json.data?.product) {
+        throw new Error(json?.error || 'Could not update product status');
+      }
+      setAdminProducts((prev) => prev.map((p) => (p.sku === sku ? json.data.product : p)));
+      setCatalogAdminFeedback(`Updated ${sku}: ${json.data.product.active ? 'ACTIVE' : 'PAUSED'}`);
+    } catch (err: any) {
+      setCatalogAdminFeedback(err.message || 'Failed to toggle product');
+    }
+  };
+
+  const handleCreateSmartBasket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCatalogAdminFeedback('');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (!token || token === 'nexus_operator_admin_token') {
+      setCatalogAdminFeedback('Sign in with a real backend admin JWT to create Smart Baskets.');
+      return;
+    }
+
+    const allocations = [
+      { symbol: 'GOLD_G', label: '24K Gold (PAXG)', unitQty: Number(qtyGoldG) },
+      { symbol: 'SILVER_G', label: 'Allocated Silver (KAG)', unitQty: Number(qtySilverG) },
+      { symbol: 'USDC', label: 'USDC Reserve', unitQty: Number(qtyUsdc) },
+      { symbol: 'XRP', label: 'XRP (XRPL Native)', unitQty: Number(qtyXrp) },
+      { symbol: 'XLM', label: 'XLM (Stellar Native)', unitQty: Number(qtyXlm) },
+      { symbol: 'NR', label: '$NR Protocol Token', unitQty: Number(qtyNr) },
+    ].filter((a) => Number.isFinite(a.unitQty) && a.unitQty > 0);
+
+    if (allocations.length === 0) {
+      setCatalogAdminFeedback('Provide at least one positive asset allocation quantity.');
+      return;
+    }
+
+    setSavingProduct(true);
+    try {
+      const res = await fetch('/api/v1/admin/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sku: newBasketSku.trim().toUpperCase(),
+          title: newBasketTitle.trim(),
+          description: `Live oracle ${newBasketCategory} hydrated across ${allocations.map((a) => `${a.unitQty} ${a.symbol}`).join(' + ')}.`,
+          category: newBasketCategory,
+          rail: newBasketRail,
+          is_basket: newBasketCategory === 'baskets',
+          is_live_asset: true,
+          allocations,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !json.data?.product) {
+        throw new Error(json?.error || 'Could not create Smart Basket');
+      }
+      const created = json.data.product;
+      setAdminProducts((prev) => [created, ...prev.filter((p) => p.sku !== created.sku)]);
+      setCatalogAdminFeedback(`Created ${created.sku} • Live NAV $${(created.price_cents / 100).toFixed(2)}`);
+    } catch (err: any) {
+      setCatalogAdminFeedback(err.message || 'Smart Basket creation failed');
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
   const loadAdminNrPool = async () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
     try {
@@ -188,6 +313,7 @@ export default function AdminConsolePage() {
     const sync = () => setUser(readSession().user);
     sync();
     loadAdminNrPool();
+    loadAdminCatalog();
     return onSessionChange(sync);
   }, []);
 
@@ -413,6 +539,194 @@ export default function AdminConsolePage() {
     </div>
   );
 
+  // Module 2 Smart Baskets & Live Oracle Catalog Manager Card
+  const renderSmartBasketsCatalogCard = () => {
+    const visibleProducts = showAllAdminSkus
+      ? adminProducts
+      : adminProducts.filter((p) => p.is_basket || p.is_live_asset);
+
+    return (
+      <div className="rounded-xl bg-[#10141A] border border-emerald-500/25 p-6 space-y-5 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-white tracking-tight">Smart Baskets &amp; Live Oracle Catalog</h3>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono font-bold">
+                60S ORACLE SYNC
+              </span>
+            </div>
+            <p className="text-xs font-mono text-white/40 mt-0.5">
+              Live CoinGecko / Binance / $NR AMM NAV valuations, visibility toggles, and custom basket creator
+            </p>
+          </div>
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <button
+              type="button"
+              onClick={() => setShowAllAdminSkus((v) => !v)}
+              className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/70 hover:text-white cursor-pointer"
+            >
+              {showAllAdminSkus ? 'Live Assets Only' : `Show All (${adminProducts.length})`}
+            </button>
+            <button
+              type="button"
+              onClick={loadAdminCatalog}
+              className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 cursor-pointer"
+            >
+              Sync Catalog
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left font-mono text-xs">
+            <thead className="text-[10px] uppercase text-white/40 border-b border-white/10">
+              <tr>
+                <th className="pb-2.5">SKU</th>
+                <th className="pb-2.5">Title &amp; Allocations</th>
+                <th className="pb-2.5">Live USD NAV</th>
+                <th className="pb-2.5">Approx. INR</th>
+                <th className="pb-2.5">24h %</th>
+                <th className="pb-2.5">Status</th>
+                <th className="pb-2.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {visibleProducts.map((item) => {
+                const change = typeof item.change_24h_percent === 'number' ? item.change_24h_percent : 0;
+                return (
+                  <tr key={item.sku} className="hover:bg-white/[0.02]">
+                    <td className="py-3 font-bold text-[#F2D675] whitespace-nowrap">{item.sku}</td>
+                    <td className="py-3 pr-4">
+                      <div className="text-white font-semibold">{item.title}</div>
+                      {Array.isArray(item.allocations) && item.allocations.length > 0 && (
+                        <div className="text-[10px] text-white/45 mt-0.5">
+                          {item.allocations.map((a: any) => `${a.unitQty} ${a.symbol}`).join(' · ')}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 font-bold text-white whitespace-nowrap">
+                      ${(Number(item.price_cents || 0) / 100).toFixed(2)}
+                    </td>
+                    <td className="py-3 text-white/70 whitespace-nowrap">
+                      {item.price_inr ? `₹${Number(item.price_inr).toLocaleString('en-IN')}` : '—'}
+                    </td>
+                    <td className={`py-3 whitespace-nowrap ${change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {`${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}
+                    </td>
+                    <td className="py-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          item.active
+                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                            : 'bg-white/5 border-white/15 text-white/40'
+                        }`}
+                      >
+                        {item.active ? 'ACTIVE' : 'PAUSED'}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleProductActive(item.sku, Boolean(item.active))}
+                        className="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-white/80 cursor-pointer"
+                      >
+                        {item.active ? 'Pause' : 'Activate'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {visibleProducts.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-white/40">
+                    Click &ldquo;Sync Catalog&rdquo; to load live Smart Baskets &amp; RWA oracle prices.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <form onSubmit={handleCreateSmartBasket} className="pt-4 border-t border-white/10 space-y-3 font-mono text-xs">
+          <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-bold">
+            + Create Custom Smart Basket / Live Asset
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <input
+              type="text"
+              value={newBasketSku}
+              onChange={(e) => setNewBasketSku(e.target.value)}
+              placeholder="SKU (e.g. BASKET-CUSTOM-01)"
+              className="px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white focus:outline-none focus:border-emerald-400"
+            />
+            <input
+              type="text"
+              value={newBasketTitle}
+              onChange={(e) => setNewBasketTitle(e.target.value)}
+              placeholder="Basket Title"
+              className="sm:col-span-2 px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white focus:outline-none focus:border-emerald-400"
+            />
+            <div className="flex gap-2">
+              <select
+                value={newBasketCategory}
+                onChange={(e) => setNewBasketCategory(e.target.value as 'baskets' | 'live-assets')}
+                className="flex-1 px-2.5 py-2 rounded-lg bg-[#0d1117] border border-white/15 text-white"
+              >
+                <option value="baskets">baskets</option>
+                <option value="live-assets">live-assets</option>
+              </select>
+              <select
+                value={newBasketRail}
+                onChange={(e) => setNewBasketRail(e.target.value as 'multi' | 'stellar' | 'xrpl')}
+                className="flex-1 px-2.5 py-2 rounded-lg bg-[#0d1117] border border-white/15 text-white"
+              >
+                <option value="multi">multi</option>
+                <option value="stellar">stellar</option>
+                <option value="xrpl">xrpl</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
+            {[
+              { label: 'Gold (g)', val: qtyGoldG, set: setQtyGoldG },
+              { label: 'Silver (g)', val: qtySilverG, set: setQtySilverG },
+              { label: 'USDC', val: qtyUsdc, set: setQtyUsdc },
+              { label: 'XRP', val: qtyXrp, set: setQtyXrp },
+              { label: 'XLM', val: qtyXlm, set: setQtyXlm },
+              { label: '$NR', val: qtyNr, set: setQtyNr },
+            ].map((field) => (
+              <div key={field.label}>
+                <label className="text-[10px] text-white/45 block mb-1">{field.label}</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={field.val}
+                  onChange={(e) => field.set(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/15 text-white focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <button
+              type="submit"
+              disabled={savingProduct}
+              className="px-4 py-2 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-black font-bold transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {savingProduct ? 'Saving Smart Basket...' : 'Save Live Smart Basket'}
+            </button>
+            {catalogAdminFeedback && (
+              <span className="text-xs text-[#F2D675]">{catalogAdminFeedback}</span>
+            )}
+          </div>
+        </form>
+      </div>
+    );
+  };
+
   // 2. FULL AUTHORIZED ADMIN CONSOLE
   return (
     <div className="min-h-screen bg-transparent text-[var(--foreground)] font-sans antialiased selection:bg-[var(--gold)]/30 selection:text-[var(--foreground)] flex">
@@ -561,6 +875,7 @@ export default function AdminConsolePage() {
               onClick={() => {
                 refreshRates();
                 loadAdminNrPool();
+                loadAdminCatalog();
               }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-white/80 self-start sm:self-auto hover:bg-white/10 transition-colors"
             >
@@ -648,6 +963,7 @@ export default function AdminConsolePage() {
               </div>
 
               {renderNrPoolMonitorCard()}
+              {renderSmartBasketsCatalogCard()}
             </>
           )}
 
@@ -772,25 +1088,29 @@ export default function AdminConsolePage() {
 
           {/* TAB 4: RATES & FX */}
           {activeTab === 'rates' && (
-            <div className="rounded-xl bg-[#10141A] border border-white/10 p-6 space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-white">Live Oracle FX Quotes</h3>
-                <span className="text-xs font-mono text-[#F2D675]">● Live Feed Connected</span>
+            <div className="space-y-6">
+              <div className="rounded-xl bg-[#10141A] border border-white/10 p-6 space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-base font-bold text-white">Live Oracle FX Quotes</h3>
+                  <span className="text-xs font-mono text-[#F2D675]">● Live Feed Connected</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-white/40 text-[10px] uppercase">XLM / USD</span>
+                    <p className="text-2xl font-bold text-[#00E5FF] mt-1">${xlmUsd.toFixed(4)}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-white/40 text-[10px] uppercase">XRP / USD</span>
+                    <p className="text-2xl font-bold text-[#0081F2] mt-1">${xrpUsd.toFixed(4)}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-white/40 text-[10px] uppercase">XRP / XLM Cross Rate</span>
+                    <p className="text-2xl font-bold text-[#F2D675] mt-1">{(xrpUsd / (xlmUsd || 1)).toFixed(4)}</p>
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <span className="text-white/40 text-[10px] uppercase">XLM / USD</span>
-                  <p className="text-2xl font-bold text-[#00E5FF] mt-1">${xlmUsd.toFixed(4)}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <span className="text-white/40 text-[10px] uppercase">XRP / USD</span>
-                  <p className="text-2xl font-bold text-[#0081F2] mt-1">${xrpUsd.toFixed(4)}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <span className="text-white/40 text-[10px] uppercase">XRP / XLM Cross Rate</span>
-                  <p className="text-2xl font-bold text-[#F2D675] mt-1">{(xrpUsd / (xlmUsd || 1)).toFixed(4)}</p>
-                </div>
-              </div>
+
+              {renderSmartBasketsCatalogCard()}
             </div>
           )}
 

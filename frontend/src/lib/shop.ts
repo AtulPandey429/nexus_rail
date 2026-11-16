@@ -1,3 +1,5 @@
+import type { ProductAllocation } from '@/types';
+
 export type SessionUser = {
   id: string;
   name?: string;
@@ -135,59 +137,222 @@ export function parseCatalog(payload: unknown): CatalogProduct[] {
   return rows.map(asProduct).filter((item): item is CatalogProduct => item !== null);
 }
 
+export type CatalogCategory =
+  | 'baskets'
+  | 'live-assets'
+  | 'hardware'
+  | 'workspace'
+  | 'essentials'
+  | 'crypto'
+  | 'software'
+  | 'subscription';
+
 export type CatalogItem = CatalogProduct & {
-  category: 'hardware' | 'workspace' | 'essentials';
+  category: CatalogCategory;
   rail: 'stellar' | 'xrpl' | 'multi';
   rating: number;
   upvotes: number;
   tag: string;
+  isLiveAsset?: boolean;
+  isBasket?: boolean;
+  allocations?: ProductAllocation[];
+  priceInr?: number;
+  change24hPercent?: number;
+  oracleSource?: 'coingecko' | 'binance' | 'amm';
+  priceUpdatedAt?: string;
 };
 
 export const FIGMA_CATALOG: CatalogItem[] = [
+  // --- MODULE 2: MULTI-RAIL SMART BASKETS (LIVE ORACLE NAV) ---
+  {
+    sku: 'BASKET-INFLATION-SHIELD',
+    title: 'Inflation Shield Basket',
+    description: 'Cross-asset store-of-value combo: 0.50g 24K Gold (PAXG), 30 USDC reserve, and 20g Silver (KAG).',
+    priceCents: 12227,
+    priceInr: 11490,
+    change24hPercent: 0.44,
+    oracleSource: 'binance',
+    isLiveAsset: true,
+    isBasket: true,
+    category: 'baskets',
+    rail: 'stellar',
+    rating: 5.0,
+    upvotes: 640,
+    tag: 'SMART BASKET • RWA HEDGE',
+    allocations: [
+      { symbol: 'GOLD_G', label: '24K Gold (PAXG)', unitQty: 0.5, weightPercent: 50.6, valueCents: 6183 },
+      { symbol: 'SILVER_G', label: 'Allocated Silver (KAG)', unitQty: 20, weightPercent: 24.9, valueCents: 3044 },
+      { symbol: 'USDC', label: 'USDC Reserve', unitQty: 30, weightPercent: 24.5, valueCents: 3000 },
+    ],
+  },
+  {
+    sku: 'BASKET-DUAL-RAIL',
+    title: 'Dual-Rail Flash Pack',
+    description: 'Simultaneous XRPL + Stellar liquidity combo combining 25 XRP and 150 XLM at live multi-rail oracle spot pricing.',
+    priceCents: 4494,
+    priceInr: 4223,
+    change24hPercent: 1.57,
+    oracleSource: 'binance',
+    isLiveAsset: true,
+    isBasket: true,
+    category: 'baskets',
+    rail: 'multi',
+    rating: 4.9,
+    upvotes: 585,
+    tag: 'SMART BASKET • XRPL + XLM',
+    allocations: [
+      { symbol: 'XRP', label: 'XRP (XRPL Native)', unitQty: 25, weightPercent: 53.5, valueCents: 2403 },
+      { symbol: 'XLM', label: 'XLM (Stellar Native)', unitQty: 150, weightPercent: 46.5, valueCents: 2091 },
+    ],
+  },
+  {
+    sku: 'BASKET-AI-ALPHA',
+    title: 'AI Dynamic Alpha Basket',
+    description: 'Diversified combo pairing 0.40g Gold, 25 $NR AMM Tokens, 15 XRP, and 100 XLM priced live every 60s.',
+    priceCents: 10282,
+    priceInr: 9662,
+    change24hPercent: 0.78,
+    oracleSource: 'binance',
+    isLiveAsset: true,
+    isBasket: true,
+    category: 'baskets',
+    rail: 'multi',
+    rating: 5.0,
+    upvotes: 720,
+    tag: 'SMART BASKET • ALPHA',
+    allocations: [
+      { symbol: 'GOLD_G', label: '24K Gold (PAXG)', unitQty: 0.4, weightPercent: 48.1, valueCents: 4946 },
+      { symbol: 'NR', label: '$NR Protocol Token', unitQty: 25, weightPercent: 24.3, valueCents: 2500 },
+      { symbol: 'XRP', label: 'XRP (XRPL Native)', unitQty: 15, weightPercent: 14.0, valueCents: 1442 },
+      { symbol: 'XLM', label: 'XLM (Stellar Native)', unitQty: 100, weightPercent: 13.6, valueCents: 1394 },
+    ],
+  },
+  // --- MODULE 2: LIVE RWA & PROTOCOL TOKENS ---
+  {
+    sku: 'NGOLD-1G',
+    title: '1g 24K Digital Gold (nGOLD)',
+    description: '1.00g allocated digital gold vault unit tracked directly to live PAXG USD & INR market feeds.',
+    priceCents: 12366,
+    priceInr: 11621,
+    change24hPercent: 0.74,
+    oracleSource: 'binance',
+    isLiveAsset: true,
+    isBasket: false,
+    category: 'live-assets',
+    rail: 'stellar',
+    rating: 4.9,
+    upvotes: 460,
+    tag: 'LIVE ORACLE • 1G GOLD',
+    allocations: [
+      { symbol: 'GOLD_G', label: '24K Gold (PAXG)', unitQty: 1, weightPercent: 100, valueCents: 12366 },
+    ],
+  },
+  {
+    sku: 'NSILVER-10G',
+    title: '10g Digital Silver (nSILVER)',
+    description: '10.00g tokenized physical silver bullion tracked directly to live KAG spot oracle feeds.',
+    priceCents: 1522,
+    priceInr: 1430,
+    change24hPercent: 0,
+    oracleSource: 'binance',
+    isLiveAsset: true,
+    isBasket: false,
+    category: 'live-assets',
+    rail: 'stellar',
+    rating: 4.8,
+    upvotes: 340,
+    tag: 'LIVE ORACLE • 10G SILVER',
+    allocations: [
+      { symbol: 'SILVER_G', label: 'Allocated Silver (KAG)', unitQty: 10, weightPercent: 100, valueCents: 1522 },
+    ],
+  },
+  {
+    sku: 'NR-PACK-50',
+    title: '50 $NR Protocol Pack',
+    description: 'Instant 50 $NR token allocation priced live against the x · y = k bonding curve AMM with 10% checkout utility.',
+    priceCents: 5000,
+    priceInr: 4699,
+    change24hPercent: 0,
+    oracleSource: 'amm',
+    isLiveAsset: true,
+    isBasket: false,
+    category: 'live-assets',
+    rail: 'multi',
+    rating: 5.0,
+    upvotes: 550,
+    tag: 'AMM LIVE • 50 $NR',
+    allocations: [
+      { symbol: 'NR', label: '$NR Protocol Token', unitQty: 50, weightPercent: 100, valueCents: 5000 },
+    ],
+  },
   // --- STELLAR SOROBAN PRODUCTS ---
   {
     sku: 'RAIL-ONE',
     title: 'Rail One (Stellar Signer)',
     description: 'Self-custody, beautifully offline. Dual-chip cold storage hardware signer with native Stellar Soroban key generation.',
-    priceCents: 12900,
+    priceCents: 12788,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'hardware',
     rail: 'stellar',
     rating: 4.9,
     upvotes: 248,
     tag: 'STELLAR &bull; HARDWARE',
+    allocations: [
+      { symbol: 'USDC', label: 'Hardware Base', unitQty: 100, weightPercent: 78.2, valueCents: 10000 },
+      { symbol: 'XLM', label: 'Stellar Stake', unitQty: 200, weightPercent: 21.8, valueCents: 2788 },
+    ],
   },
   {
     sku: 'PROD-XLM-PASS',
     title: 'Stellar Soroban License Pass',
     description: 'Lifetime developer key for automated Soroban smart contract deployment suite and testnet RPC priority.',
-    priceCents: 19900,
+    priceCents: 19788,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'workspace',
     rail: 'stellar',
     rating: 4.8,
     upvotes: 182,
     tag: 'STELLAR &bull; DEV PASS',
+    allocations: [
+      { symbol: 'USDC', label: 'Soroban License Base', unitQty: 170, weightPercent: 85.9, valueCents: 17000 },
+      { symbol: 'XLM', label: 'Soroban Gas Reserve', unitQty: 200, weightPercent: 14.1, valueCents: 2788 },
+    ],
   },
   {
     sku: 'PROD-AGENT-PRO',
     title: 'NexusRail AI Agent Desk Key',
     description: 'High-throughput Groq & Gemini agent desk license key with Redis proposal locks for Stellar state monitoring.',
-    priceCents: 2990,
+    priceCents: 3000,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'workspace',
     rail: 'stellar',
     rating: 4.9,
     upvotes: 310,
     tag: 'STELLAR &bull; AI AGENT',
+    allocations: [
+      { symbol: 'USDC', label: 'AI Compute Quota', unitQty: 15, weightPercent: 50, valueCents: 1500 },
+      { symbol: 'NR', label: '$NR Agent Credits', unitQty: 15, weightPercent: 50, valueCents: 1500 },
+    ],
   },
   {
     sku: 'NODE-STAND',
     title: 'Node stand (Stellar Edition)',
     description: 'Built for a more considered desk. Precision CNC machined aluminum hardware dock with silicone cable channel.',
-    priceCents: 5800,
+    priceCents: 5794,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'hardware',
     rail: 'stellar',
     rating: 4.7,
     upvotes: 112,
     tag: 'STELLAR &bull; ACCESSORY',
+    allocations: [
+      { symbol: 'USDC', label: 'CNC Hardware Base', unitQty: 44, weightPercent: 75.9, valueCents: 4400 },
+      { symbol: 'XLM', label: 'Stellar Stake', unitQty: 100, weightPercent: 24.1, valueCents: 1394 },
+    ],
   },
 
   // --- XRPL CONSENSUS PRODUCTS ---
@@ -195,45 +360,69 @@ export const FIGMA_CATALOG: CatalogItem[] = [
     sku: 'PROD-XRP-KIT',
     title: 'XRPL Starter Validator Node',
     description: 'Turnkey XRPL validator node hardware kit with pre-loaded ledger sync module and ripple bridge.',
-    priceCents: 49900,
+    priceCents: 49612,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'hardware',
     rail: 'xrpl',
     rating: 4.9,
     upvotes: 194,
     tag: 'XRPL &bull; VALIDATOR',
+    allocations: [
+      { symbol: 'USDC', label: 'Validator Node Hardware', unitQty: 400, weightPercent: 80.6, valueCents: 40000 },
+      { symbol: 'XRP', label: 'XRPL Validator Reserve', unitQty: 100, weightPercent: 19.4, valueCents: 9612 },
+    ],
   },
   {
     sku: 'PROD-LEDGER-COLD',
     title: 'NexusRail XRPL Security Module',
     description: 'Dual-chip cold storage hardware signer with native XRPL key generation and destination tag tracking.',
-    priceCents: 14900,
+    priceCents: 14884,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'hardware',
     rail: 'xrpl',
     rating: 4.8,
     upvotes: 165,
     tag: 'XRPL &bull; COLD SIGNER',
+    allocations: [
+      { symbol: 'USDC', label: 'HSM Hardware Base', unitQty: 120, weightPercent: 80.6, valueCents: 12000 },
+      { symbol: 'XRP', label: 'XRPL Signer Reserve', unitQty: 30, weightPercent: 19.4, valueCents: 2884 },
+    ],
   },
   {
     sku: 'RELAY-MAT',
     title: 'Relay desk mat (XRPL Edition)',
     description: 'A grounded space for your next move. High-density micro-weave workspace base with stitched non-fray edge.',
-    priceCents: 3900,
+    priceCents: 3922,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'workspace',
     rail: 'xrpl',
     rating: 4.8,
     upvotes: 182,
     tag: 'XRPL &bull; WORKSPACE',
+    allocations: [
+      { symbol: 'USDC', label: 'Workspace Base', unitQty: 20, weightPercent: 51.0, valueCents: 2000 },
+      { symbol: 'XRP', label: 'XRPL Fuel', unitQty: 20, weightPercent: 49.0, valueCents: 1922 },
+    ],
   },
   {
     sku: 'RAIL-CABLES',
     title: 'Rail cable kit',
     description: 'One kit. Every connection. High-spec braided silicone USB-C custom engineered for zero-interference hardware signing.',
-    priceCents: 2400,
+    priceCents: 2397,
+    isLiveAsset: true,
+    oracleSource: 'binance',
     category: 'hardware',
     rail: 'xrpl',
     rating: 4.9,
     upvotes: 88,
     tag: 'XRPL &bull; CABLES',
+    allocations: [
+      { symbol: 'USDC', label: 'Cable Kit Base', unitQty: 17, weightPercent: 70.9, valueCents: 1700 },
+      { symbol: 'XLM', label: 'Stellar Stake', unitQty: 50, weightPercent: 29.1, valueCents: 697 },
+    ],
   },
 
   // --- CROSS-RAIL EVERYDAY ESSENTIALS ---
@@ -242,22 +431,34 @@ export const FIGMA_CATALOG: CatalogItem[] = [
     title: 'Nexus tee',
     description: 'A uniform for the onchain everyday. Heavyweight 240gsm organic combed cotton with custom tonal embroidery.',
     priceCents: 3200,
+    isLiveAsset: true,
+    oracleSource: 'amm',
     category: 'essentials',
     rail: 'multi',
     rating: 4.9,
     upvotes: 145,
     tag: 'CROSS-RAIL &bull; APPAREL',
+    allocations: [
+      { symbol: 'USDC', label: 'Apparel Base', unitQty: 22, weightPercent: 68.8, valueCents: 2200 },
+      { symbol: 'NR', label: '$NR Protocol Stake', unitQty: 10, weightPercent: 31.2, valueCents: 1000 },
+    ],
   },
   {
     sku: 'SIGNAL-CAP',
     title: 'Signal cap',
     description: 'Low profile. Clear signal. Structured 6-panel silhouette with subtle high-density micro-rail embroidery.',
     priceCents: 2800,
+    isLiveAsset: true,
+    oracleSource: 'amm',
     category: 'essentials',
     rail: 'multi',
     rating: 4.8,
     upvotes: 94,
     tag: 'CROSS-RAIL &bull; HEADWEAR',
+    allocations: [
+      { symbol: 'USDC', label: 'Headwear Base', unitQty: 18, weightPercent: 64.3, valueCents: 1800 },
+      { symbol: 'NR', label: '$NR Protocol Stake', unitQty: 10, weightPercent: 35.7, valueCents: 1000 },
+    ],
   },
 ];
 
@@ -279,14 +480,14 @@ function setLocalCart(items: { sku: string; qty: number }[]) {
   notifyCart();
 }
 
-const CATALOG_STORAGE_KEY = 'nexus_products_catalog_cache_v1';
-const CATALOG_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes cache window
+const CATALOG_STORAGE_KEY = 'nexus_products_catalog_cache_v3';
+const CATALOG_CACHE_TTL_MS = 60 * 1000; // 60 seconds live oracle cache window
 
 export interface CachedCatalogData {
   products: CatalogItem[];
   expiresAt: number;
   cachedAt: string;
-  source: 'api' | 'cache' | 'fallback';
+  source: 'api' | 'cache';
 }
 
 export function getCachedCatalog(): CachedCatalogData | null {
@@ -311,7 +512,7 @@ export async function fetchCatalog(forceRefresh = false): Promise<CatalogItem[]>
   }
 
   try {
-    const res = await fetch('/api/v1/products', { cache: 'no-store' });
+    const res = await fetch(`/api/v1/products${forceRefresh ? '?refresh=true' : ''}`, { cache: 'no-store' });
     const payload = await readJson(res);
     if (res.ok && payload?.success === true && Array.isArray(payload.data)) {
       const items: CatalogItem[] = payload.data.map((doc: any) => ({
@@ -319,11 +520,18 @@ export async function fetchCatalog(forceRefresh = false): Promise<CatalogItem[]>
         title: String(doc.title),
         description: String(doc.description || ''),
         priceCents: Number(doc.price_cents || doc.priceCents || 0),
-        category: (doc.category as any) || 'hardware',
+        category: (doc.category as CatalogCategory) || 'hardware',
         rail: (doc.rail as any) || (doc.sku.includes('XRP') || doc.sku === 'RELAY-MAT' || doc.sku === 'PROD-LEDGER-COLD' ? 'xrpl' : doc.sku.includes('XLM') || doc.sku === 'RAIL-ONE' || doc.sku === 'NODE-STAND' || doc.sku === 'RAIL-CABLES' || doc.sku === 'PROD-AGENT-PRO' ? 'stellar' : 'multi'),
         tag: String(doc.tag || (doc.category === 'hardware' ? 'Hardware' : 'Official')),
         rating: Number(doc.rating || 4.9),
         upvotes: Number(doc.upvotes_count || doc.upvotes || 100),
+        isLiveAsset: Boolean(doc.is_live_asset),
+        isBasket: Boolean(doc.is_basket),
+        allocations: Array.isArray(doc.allocations) ? doc.allocations : undefined,
+        priceInr: typeof doc.price_inr === 'number' ? doc.price_inr : undefined,
+        change24hPercent: typeof doc.change_24h_percent === 'number' ? doc.change_24h_percent : undefined,
+        oracleSource: (doc.oracle_source === 'coingecko' || doc.oracle_source === 'binance' || doc.oracle_source === 'amm') ? doc.oracle_source : undefined,
+        priceUpdatedAt: typeof doc.price_updated_at === 'string' ? doc.price_updated_at : undefined,
       }));
 
       if (items.length > 0) {

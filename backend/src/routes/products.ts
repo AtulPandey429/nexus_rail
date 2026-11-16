@@ -4,11 +4,12 @@ import { RedisCacheService } from '../services/redis.js';
 
 export const productRouter = Router();
 
-// GET /api/v1/products - Fetch active product catalog with Redis Cache-Aside
-productRouter.get('/', async (_req: Request, res: Response) => {
+// GET /api/v1/products - Fetch active live-hydrated catalog with 60s Redis Cache-Aside
+productRouter.get('/', async (req: Request, res: Response) => {
   try {
+    const forceRefresh = req.query.refresh === 'true';
     const cacheKey = 'products:active';
-    const cachedData = await RedisCacheService.getCache<any[]>(cacheKey);
+    const cachedData = !forceRefresh ? await RedisCacheService.getCache<any[]>(cacheKey) : null;
 
     if (cachedData) {
       return res.json({
@@ -19,8 +20,8 @@ productRouter.get('/', async (_req: Request, res: Response) => {
       });
     }
 
-    const products = await ProductService.getActiveProducts();
-    await RedisCacheService.setCache(cacheKey, products, 300);
+    const products = await ProductService.getActiveProducts(forceRefresh);
+    await RedisCacheService.setCache(cacheKey, products, 60);
 
     res.json({
       success: true,

@@ -8,7 +8,7 @@ describe('Suite: FX Rates & Conversion Math', () => {
     assert.equal(fx.usd, 1);
     assert.ok(typeof fx.xrpUsd === 'number' && fx.xrpUsd > 0, 'XRP rate must be positive number');
     assert.ok(typeof fx.xlmUsd === 'number' && fx.xlmUsd > 0, 'XLM rate must be positive number');
-    assert.ok(['coingecko', 'binance', 'fallback'].includes(fx.source));
+    assert.ok(['coingecko', 'binance'].includes(fx.source), `Expected strictly live FX source, got ${fx.source}`);
   });
 
   test('usdCentsToAsset correctly calculates token quantities', async () => {
