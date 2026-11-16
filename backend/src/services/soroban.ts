@@ -15,7 +15,7 @@ export interface StellarRpcHealthResult {
 }
 
 export const DEFAULT_NEXUS_VAULT_CONTRACT: MongoSmartContractDoc = {
-  contract_id: 'CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N',
+  contract_id: env.STELLAR_NR_CONTRACT_ID || 'CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC',
   name: 'NexusVault',
   network: 'testnet',
   rpc_url: 'https://soroban-testnet.stellar.org',
@@ -30,16 +30,16 @@ export const DEFAULT_NEXUS_VAULT_CONTRACT: MongoSmartContractDoc = {
     {
       wasm_hash: '4f9a32c7e8d1b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7',
       upgraded_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),
-      tx_hash: '50077e3304e5e93926d17bc1eead7a5bb363ec264f6998ea5b4c4da7e7629894',
+      tx_hash: '2fd805157a5ae338f69ecbb1774337102304054af2d5fbeea2f424ec76b90189',
       upgraded_by: 'SYSTEM_GENESIS',
       protocol_version: 22,
-      notes: 'Initial Protocol 22 CAP-0058 atomic constructor deployment',
+      notes: 'Stellar Protocol 22 Asset Contract instantiation & ledger registration for NXL',
     },
   ],
   status: 'ACTIVE',
   deployed_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),
   last_verified_at: new Date().toISOString(),
-  explorer_url: 'https://stellar.expert/explorer/testnet/contract/CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N',
+  explorer_url: `https://stellar.expert/explorer/testnet/contract/${env.STELLAR_NR_CONTRACT_ID || 'CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC'}`,
 };
 
 export class SorobanService {

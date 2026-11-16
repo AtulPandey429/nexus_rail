@@ -3,11 +3,11 @@ import type { ClientSession } from 'mongodb';
 import { MongoService, MongoWalletTxDoc, MongoWalletBalanceDoc } from './mongo.js';
 import crypto from 'crypto';
 
-const currencies: WalletCurrency[] = ['USD', 'XRP', 'XLM', 'NR'];
+const currencies: WalletCurrency[] = ['USD', 'XRP', 'XLM', 'NR', 'NXL'];
 
 export class WalletService {
   private static formatInsufficientAmount(currency: WalletCurrency, units: number): string {
-    if (currency === 'NR') return `${(units / 1_000_000).toFixed(4)} NR`;
+    if (currency === 'NR' || currency === 'NXL') return `${(units / 1_000_000).toFixed(4)} ${currency}`;
     if (currency === 'USD') return `$${(units / 100).toFixed(2)}`;
     return `${(units / 100).toFixed(2)} ${currency}`;
   }
@@ -16,7 +16,7 @@ export class WalletService {
    * O(1) Atomic Account Balance Reader with lazy migration fallback
    */
   async getBalance(userId: string): Promise<Record<WalletCurrency, number>> {
-    const balance: Record<WalletCurrency, number> = { USD: 0, XRP: 0, XLM: 0, NR: 0 };
+    const balance: Record<WalletCurrency, number> = { USD: 0, XRP: 0, XLM: 0, NR: 0, NXL: 0 };
 
     try {
       const balancesCol = await MongoService.getCollection<MongoWalletBalanceDoc>('wallet_balances');

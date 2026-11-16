@@ -53,7 +53,7 @@ export interface MongoProductDoc {
   is_live_asset?: boolean;
   is_basket?: boolean;
   allocations?: Array<{
-    symbol: 'GOLD_G' | 'SILVER_G' | 'XRP' | 'XLM' | 'USDC' | 'NR';
+    symbol: AssetSymbol;
     label: string;
     unitQty: number;
     weightPercent?: number;
@@ -141,7 +141,7 @@ export interface MongoWalletTxDoc {
   _id?: any;
   id: string;
   user_id: string;
-  currency: 'USD' | 'XRP' | 'XLM' | 'NR';
+  currency: 'USD' | 'XRP' | 'XLM' | 'NR' | 'NXL';
   amount_cents: number;
   type: 'CREDIT' | 'DEBIT';
   reference_id: string;
@@ -152,7 +152,7 @@ export interface MongoWalletTxDoc {
 export interface MongoWalletBalanceDoc {
   _id?: any;
   user_id: string;
-  currency: 'USD' | 'XRP' | 'XLM' | 'NR';
+  currency: 'USD' | 'XRP' | 'XLM' | 'NR' | 'NXL';
   available_cents: number;
   locked_cents: number;
   version: number;
@@ -161,7 +161,7 @@ export interface MongoWalletBalanceDoc {
 
 export interface MongoTokenPoolDoc {
   _id?: any;
-  symbol: 'NR';
+  symbol: 'NR' | 'NXL' | string;
   name: string;
   reserve_usd_cents: number;
   pool_nr_micro: number;
@@ -178,7 +178,7 @@ export interface MongoTokenPoolDoc {
 export interface MongoTokenPriceTickDoc {
   _id?: any;
   id: string;
-  symbol: 'NR';
+  symbol: 'NR' | 'NXL' | string;
   spot_price_cents: number;
   spot_price_usd: number;
   reserve_usd_cents: number;
@@ -302,7 +302,7 @@ export interface MongoSmartContractDoc {
 
 export interface MongoPlatformTokenDoc {
   _id?: any;
-  symbol: 'NR';
+  symbol: 'NR' | 'NXL' | string;
   name: string;
   chain: 'STELLAR' | 'XRPL';
   asset_code: string;

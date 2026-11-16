@@ -1624,7 +1624,7 @@ export default function AdminConsolePage() {
             <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1">
               <span className="text-[10px] uppercase text-white/40">Total Dual-Rail Cap</span>
               <p className="text-xl font-bold text-[#F2D675]">
-                {(parity?.totalSupplyCap ?? 1000000).toLocaleString()} $NR
+                {(parity?.totalSupplyCap ?? 1000000).toLocaleString()} ${stellar?.assetCode || 'NXL'}
               </p>
               <p className="text-[10px] text-white/50">Strict Hard Supply Ceiling</p>
             </div>
@@ -1632,7 +1632,7 @@ export default function AdminConsolePage() {
             <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1">
               <span className="text-[10px] uppercase text-[#00E5FF]">Stellar Protocol 22</span>
               <p className="text-xl font-bold text-[#00E5FF]">
-                {(stellar?.supplyCap ?? 1000000).toLocaleString()} $NR
+                {(stellar?.supplyCap ?? 1000000).toLocaleString()} ${stellar?.assetCode || 'NXL'}
               </p>
               <p className="text-[10px] text-white/50">Minted &amp; Contract Bound</p>
             </div>
@@ -1640,14 +1640,14 @@ export default function AdminConsolePage() {
             <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1">
               <span className="text-[10px] uppercase text-[#0081F2]">XRPL Native AMM Pool</span>
               <p className="text-xl font-bold text-[#0081F2]">
-                {xrpl?.reserveNr ?? 10} NR · {xrpl?.reserveXrp ?? 10} XRP
+                {xrpl?.reserveNr ?? 10} {xrpl?.currencyCode || 'NXL'} · {xrpl?.reserveXrp ?? 10} XRP
               </p>
               <p className="text-[10px] text-white/50">Autonomous XLS-30d Pool</p>
             </div>
 
             <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1">
               <span className="text-[10px] uppercase text-white/40">Cross-Chain Parity</span>
-              <p className="text-xl font-bold text-emerald-400">1 NR ≡ 1 NR</p>
+              <p className="text-xl font-bold text-emerald-400">1 {stellar?.assetCode || 'NXL'} ≡ 1 {xrpl?.currencyCode || 'NXL'}</p>
               <p className="text-[10px] text-emerald-400/80">
                 {parity?.isBalanced !== false ? 'Invariant Balanced · Zero Inflation' : 'Checking'}
               </p>
@@ -1964,8 +1964,8 @@ export default function AdminConsolePage() {
                     <span className="text-white font-bold text-sm">{xrpl?.reserveXrp ?? 10} XRP</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-black/40 border border-white/10">
-                    <span className="text-white/40 text-[10px] uppercase block">$NR Reserve</span>
-                    <span className="text-[#0081F2] font-bold text-sm">{xrpl?.reserveNr ?? 10} NR</span>
+                    <span className="text-white/40 text-[10px] uppercase block">${xrpl?.currencyCode || 'NXL'} Reserve</span>
+                    <span className="text-[#0081F2] font-bold text-sm">{xrpl?.reserveNr ?? 10} {xrpl?.currencyCode || 'NXL'}</span>
                   </div>
                 </div>
 

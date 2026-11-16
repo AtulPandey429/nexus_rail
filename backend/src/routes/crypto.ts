@@ -76,11 +76,11 @@ cryptoRouter.get('/verify/:chain/:txHash', async (req: Request, res: Response) =
   }
 });
 
-// POST /api/v1/crypto/nr/withdraw - User 1-Click On-Chain $NR Withdrawal to External Stellar Wallet
-cryptoRouter.post('/nr/withdraw', async (req: Request, res: Response) => {
+// POST /api/v1/crypto/nr/withdraw or /nxl/withdraw - User 1-Click On-Chain Token Withdrawal to External Wallet
+const handleTokenWithdraw = async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'Sign in is required to withdraw $NR on-chain' });
+    return res.status(401).json({ success: false, error: 'Sign in is required to withdraw $NXL on-chain' });
   }
 
   let userId: string;
@@ -95,7 +95,7 @@ cryptoRouter.post('/nr/withdraw', async (req: Request, res: Response) => {
   const targetAddress = (destinationAddress || destinationStellarAddress || '').trim();
   const numAmount = Number(amount);
   if (!numAmount || isNaN(numAmount) || numAmount <= 0) {
-    return res.status(400).json({ success: false, error: 'Valid positive amount of $NR is required' });
+    return res.status(400).json({ success: false, error: 'Valid positive amount of $NXL is required' });
   }
   if (!targetAddress) {
     return res.status(400).json({ success: false, error: 'Destination wallet address is required' });
@@ -106,12 +106,14 @@ cryptoRouter.post('/nr/withdraw', async (req: Request, res: Response) => {
   try {
     const balances = await walletService.getBalance(userId);
     const availableNrMicro = balances.NR || 0;
+    const availableNxlMicro = balances.NXL || 0;
+    const totalAvailableMicro = availableNxlMicro + availableNrMicro;
     const requestedMicro = Math.round(numAmount * 1_000_000);
 
-    if (availableNrMicro < requestedMicro) {
+    if (totalAvailableMicro < requestedMicro) {
       return res.status(400).json({
         success: false,
-        error: `Insufficient $NR balance. You have ${(availableNrMicro / 1_000_000).toFixed(6)} $NR available.`,
+        error: `Insufficient $NXL balance. You have ${(totalAvailableMicro / 1_000_000).toFixed(6)} $NXL available.`,
       });
     }
 
@@ -137,20 +139,23 @@ cryptoRouter.post('/nr/withdraw', async (req: Request, res: Response) => {
       withdrawalId = withdrawal.id;
     }
 
-    // Atomic debit of user's internal wallet
-    await walletService.applyEntry(userId, requestedMicro, 'DEBIT', 'NR', withdrawalId);
+    // Atomic debit of user's internal wallet (debit whichever balance holds the tokens)
+    const debitCurrency = availableNxlMicro >= requestedMicro ? 'NXL' : 'NR';
+    await walletService.applyEntry(userId, requestedMicro, 'DEBIT', debitCurrency, withdrawalId);
     const updatedBalances = await walletService.getBalance(userId);
 
     res.json({
       success: true,
       data: {
         withdrawalId,
-        amountNr: numAmount,
+        amountNxl: numAmount,
+        amountNr: numAmount, // backward compat
         chain: isXrpl ? 'XRPL' : 'STELLAR',
         destinationAddress: targetAddress,
         destinationStellarAddress: targetAddress, // backward compat
         txHash,
         ledgerSeq,
+        remainingBalance: Number((((updatedBalances.NXL || 0) + (updatedBalances.NR || 0)) / 1_000_000).toFixed(6)),
         remainingNrBalance: Number(((updatedBalances.NR || 0) / 1_000_000).toFixed(6)),
         explorerUrl,
       },
@@ -158,4 +163,7 @@ cryptoRouter.post('/nr/withdraw', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message || 'On-chain withdrawal failed' });
   }
-});
+};
+
+cryptoRouter.post('/nr/withdraw', handleTokenWithdraw);
+cryptoRouter.post('/nxl/withdraw', handleTokenWithdraw);

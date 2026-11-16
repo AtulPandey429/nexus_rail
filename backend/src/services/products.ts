@@ -62,6 +62,7 @@ export function computeHydratedProduct(
     XLM: { unitCents: Math.max(1, Math.round(snapshot.xlmUsd * 100)), change24h: snapshot.xlm24hChange },
     USDC: { unitCents: 100, change24h: 0 },
     NR: { unitCents: Math.max(1, nrPool.spotPriceCents), change24h: nrPool.change24hPercent },
+    NXL: { unitCents: Math.max(1, nrPool.spotPriceCents), change24h: nrPool.change24hPercent },
   };
 
   const components = base.allocations.map((alloc) => {

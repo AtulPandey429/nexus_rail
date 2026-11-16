@@ -1,4 +1,4 @@
-# Stellar SEP-0001 Configuration for NexusRail ($NR)
+# Stellar SEP-0001 Configuration for NexusRail ($NXL)
 # https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0001.md
 
 NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
@@ -13,13 +13,13 @@ ORG_TWITTER = "nexusrail"
 ORG_OFFICIAL_EMAIL = "contact@nexusrail.com"
 
 [[CURRENCIES]]
-code = "NR"
+code = "NXL"
 issuer = "GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ"
 display_decimals = 6
-name = "NexusRail Protocol Token"
-desc = "NexusRail native utility, AMM liquidity reserve, and 50% revenue-share token under Stellar Protocol 22."
+name = "NexusRail Cross-Ledger Token"
+desc = "NexusRail native utility, dual-rail AMM liquidity reserve, and 50% revenue-share token under Stellar Protocol 22."
 is_asset_anchored = false
 fixed_number = 1000000
 image = "https://raw.githubusercontent.com/AtulPandey429/nexus_rail/main/frontend/public/logo-256.png"
 status = "live"
-contract = "CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N"
+contract = "CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC"

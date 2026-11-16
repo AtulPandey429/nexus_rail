@@ -11,13 +11,14 @@ import {
 } from './mongo.js';
 import type { DualRailTokenSummaryDTO, ChainActionLogDTO } from '../types/index.js';
 
-export const STELLAR_NR_ASSET_CODE = 'NR';
-export const STELLAR_NR_ISSUER = 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ';
-export const STELLAR_NR_CONTRACT_ID = 'CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N';
-export const STELLAR_DISTRIBUTOR_VAULT = 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC';
+export const STELLAR_NR_ASSET_CODE = env.STELLAR_NR_ASSET_CODE || 'NXL';
+export const STELLAR_NR_ISSUER = env.STELLAR_NR_ISSUER_PUBLIC || 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ';
+export const STELLAR_NR_CONTRACT_ID = env.STELLAR_NR_CONTRACT_ID || 'CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC';
+export const STELLAR_DISTRIBUTOR_VAULT = env.STELLAR_NR_DISTRIBUTOR_VAULT || 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC';
 
-// XRPL 40-character hex for 2-letter currency 'NR'
-export const XRPL_NR_CURRENCY_HEX = convertStringToHex('NR').padEnd(40, '0');
+// XRPL standard 3-character currency 'NXL' (ASCII native)
+export const XRPL_NR_CURRENCY_CODE = env.XRPL_NR_CURRENCY_CODE || 'NXL';
+export const XRPL_NR_CURRENCY_HEX = convertStringToHex('NXL').padEnd(40, '0');
 export const TOTAL_SUPPLY_CAP = 1_000_000;
 
 export class DualRailTokenService {
@@ -439,11 +440,15 @@ export class DualRailTokenService {
   static async getDualRailSummary(): Promise<DualRailTokenSummaryDTO> {
     // 1. Stellar Status
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
-    const stellarToken = await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NR' });
-    const xrplToken = await tokensCol.findOne({ chain: 'XRPL', symbol: 'NR' });
+    const stellarToken =
+      (await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' })) ||
+      (await tokensCol.findOne({ chain: 'STELLAR' }));
+    const xrplToken =
+      (await tokensCol.findOne({ chain: 'XRPL', symbol: 'NXL' })) ||
+      (await tokensCol.findOne({ chain: 'XRPL' }));
 
     // 2. XRPL Live AMM Status
-    let xrplAmmAccount = xrplToken?.amm_account || 'rMhRwpJgeSmvZ2fLFDV7CqmwB1f62J5reA';
+    let xrplAmmAccount = xrplToken?.amm_account || env.XRPL_NR_AMM_ACCOUNT || 'rDPpHaLKbyDwcuR5HupxE2KyEj3G6i9RaE';
     let reserveXrp = 10;
     let reserveNr = 10;
     let tradingFeeBps = 50;
@@ -456,7 +461,7 @@ export class DualRailTokenService {
           .request({
             command: 'amm_info',
             asset: { currency: 'XRP' },
-            asset2: { currency: XRPL_NR_CURRENCY_HEX, issuer: xrplToken.issuer_address },
+            asset2: { currency: 'NXL', issuer: xrplToken.issuer_address },
           })
           .catch(() => null);
 
@@ -490,19 +495,19 @@ export class DualRailTokenService {
         contractId: stellarToken?.contract_id || STELLAR_NR_CONTRACT_ID,
         distributionVault: stellarToken?.distribution_address || STELLAR_DISTRIBUTOR_VAULT,
         supplyCap: TOTAL_SUPPLY_CAP,
-        explorerUrl: `https://stellar.expert/explorer/testnet/asset/NR-${stellarToken?.issuer_address || STELLAR_NR_ISSUER}`,
+        explorerUrl: `https://stellar.expert/explorer/testnet/asset/NXL-${stellarToken?.issuer_address || STELLAR_NR_ISSUER}`,
         status: 'ACTIVE_PROTOCOL_22',
       },
       xrpl: {
-        currencyCode: 'NR',
+        currencyCode: XRPL_NR_CURRENCY_CODE,
         currencyHex: XRPL_NR_CURRENCY_HEX,
-        issuerAddress: xrplToken?.issuer_address || 'rpddUjuHyvqraSyHcipdEchc7oCteNnsaS',
+        issuerAddress: xrplToken?.issuer_address || env.XRPL_NR_ISSUER_ADDRESS,
         distributionVault: xrplToken?.distribution_address || env.PLATFORM_XRPL_VAULT || 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp',
         ammAccount: xrplAmmAccount,
         reserveXrp,
         reserveNr,
         tradingFeeBps,
-        ammTxHash: xrplToken?.amm_tx_hash || 'A4C79AF83576A9A993566EE2C1D37665772A0D366478C30E763D245911DBD2B8',
+        ammTxHash: xrplToken?.amm_tx_hash || '18BD4CB3319DE7068F2F456C598EAD8746E9E36AC05E3C01458A23654A6881BE',
         explorerUrl: `https://testnet.xrpl.org/accounts/${xrplAmmAccount}`,
         status: 'ACTIVE_NATIVE_AMM',
       },
@@ -511,7 +516,7 @@ export class DualRailTokenService {
         xrplCirculating: reserveNr,
         totalSupplyCap: TOTAL_SUPPLY_CAP,
         isBalanced: true,
-        invariantString: '1 $NR (Stellar) ≡ 1 $NR (XRPL) · Fixed 1,000,000 Cap',
+        invariantString: '1 $NXL (Stellar) ≡ 1 $NXL (XRPL) · Fixed 1,000,000 Cap',
       },
       recentLogs: recentLogs.map((l) => ({
         id: l.id,
