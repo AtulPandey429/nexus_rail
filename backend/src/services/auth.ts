@@ -67,32 +67,41 @@ export class AuthService {
       const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
       const now = new Date().toISOString();
 
+      // Ensure primary admin admin@nexusrail.com exists with password 'admin123' and role 'admin'
       await usersCol.updateOne(
         { email: 'admin@nexusrail.com' },
         {
+          $set: {
+            role: 'admin',
+            passwordHash: hashPassword('admin123'),
+            updatedAt: now,
+          },
           $setOnInsert: {
             id: 'user_admin_nexus_com',
             email: 'admin@nexusrail.com',
-            passwordHash: hashPassword('admin123'),
-            role: 'admin',
             createdAt: now,
-            updatedAt: now,
           },
         },
         { upsert: true }
       );
 
-      const adminDoc = await usersCol.findOne({ email: 'admin@nexusrail.dev' });
-      if (!adminDoc) {
-        await usersCol.insertOne({
-          id: 'user_admin_nexus_01',
-          email: 'admin@nexusrail.dev',
-          passwordHash: hashPassword('Admin1234!'),
-          role: 'admin',
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+      // Ensure dev admin admin@nexusrail.dev exists with password 'Admin1234!' and role 'admin'
+      await usersCol.updateOne(
+        { email: 'admin@nexusrail.dev' },
+        {
+          $set: {
+            role: 'admin',
+            passwordHash: hashPassword('Admin1234!'),
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            id: 'user_admin_nexus_01',
+            email: 'admin@nexusrail.dev',
+            createdAt: now,
+          },
+        },
+        { upsert: true }
+      );
       const demoDoc = await usersCol.findOne({ email: 'demo@nexusrail.dev' });
       if (!demoDoc) {
         await usersCol.insertOne({

@@ -330,8 +330,10 @@ export default function AdminConsolePage() {
       });
       const data = await res.json().catch(() => null);
 
-      if (res.ok && data?.success && data?.data?.token) {
-        const u = data.data.user;
+      const token = data?.token || data?.data?.token;
+      const u = data?.user || data?.data?.user;
+
+      if (res.ok && data?.success && token && u) {
         if (u.role !== 'admin') {
           setAdminAuthError('Access Denied: This account does not have operator/admin privileges.');
           setIsLoggingIn(false);
@@ -344,11 +346,15 @@ export default function AdminConsolePage() {
           role: u.role,
           name: u.name,
         };
-        saveSession(adminUser, data.data.token);
+        saveSession(adminUser, token);
         setUser(adminUser);
         setAdminPassInput('');
       } else {
-        setAdminAuthError(data?.error?.message || data?.message || 'Invalid operator credentials.');
+        const errMsg =
+          typeof data?.error === 'string'
+            ? data.error
+            : data?.error?.message || data?.message || 'Invalid operator credentials.';
+        setAdminAuthError(errMsg);
       }
     } catch (err: any) {
       setAdminAuthError('Network error authenticating operator: ' + err.message);
