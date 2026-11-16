@@ -8,7 +8,7 @@ import { useEffect, useState, useCallback } from 'react';
 export interface ExchangeRatesData {
   xlmUsd: number;
   xrpUsd: number;
-  source: 'nexus-api' | 'binance' | 'coingecko' | 'cache' | 'fallback';
+  source: 'nexus-api' | 'binance' | 'coingecko' | 'cache';
   fromCache: boolean;
   fetchedAt: string;
   expiresAt: number; // Unix timestamp in ms (30 mins from fetch)
@@ -17,17 +17,6 @@ export interface ExchangeRatesData {
 
 const RATES_STORAGE_KEY = 'nexus_fx_rates_cache_v1';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes cache window
-
-// Default reasonable baseline only in case of complete internet disconnection
-const DEFAULT_RATES: ExchangeRatesData = {
-  xlmUsd: 0.1778,
-  xrpUsd: 1.2972,
-  source: 'fallback',
-  fromCache: false,
-  fetchedAt: new Date().toISOString(),
-  expiresAt: Date.now() + CACHE_TTL_MS,
-  ttlMinutesRemaining: 30,
-};
 
 let inFlightPromise: Promise<ExchangeRatesData> | null = null;
 
@@ -214,7 +203,7 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
       // Network completely disconnected
     }
 
-    // 6. Return existing cache even if expired as graceful degradation
+    // 6. Return existing real cache if available
     if (typeof window !== 'undefined') {
       try {
         const staleRaw = localStorage.getItem(RATES_STORAGE_KEY);
@@ -227,7 +216,7 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
       }
     }
 
-    return DEFAULT_RATES;
+    throw new Error('Live crypto exchange rates are currently unreachable. Please check connection and retry.');
   })().finally(() => {
     inFlightPromise = null;
   });
@@ -239,19 +228,20 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
  * React Hook for live rates with automatic 30-min sync and cache management
  */
 export function useLiveExchangeRates() {
-  const [rates, setRates] = useState<ExchangeRatesData>(() => {
-    const cached = getCachedRates();
-    return cached || DEFAULT_RATES;
+  const [rates, setRates] = useState<ExchangeRatesData | null>(() => {
+    return getCachedRates();
   });
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(!rates);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (force = false) => {
     setLoading(true);
     try {
       const fresh = await fetchLiveRates(force);
       setRates(fresh);
-    } catch {
-      // keep current
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to fetch live rates');
     } finally {
       setLoading(false);
     }
@@ -291,11 +281,12 @@ export function useLiveExchangeRates() {
   return {
     rates,
     loading,
+    error,
     refreshRates: () => refresh(true),
-    xlmUsd: rates.xlmUsd,
-    xrpUsd: rates.xrpUsd,
-    source: rates.source,
-    fromCache: rates.fromCache,
-    ttlMinutes: rates.ttlMinutesRemaining,
+    xlmUsd: rates?.xlmUsd ?? 0,
+    xrpUsd: rates?.xrpUsd ?? 0,
+    source: rates?.source ?? 'nexus-api',
+    fromCache: rates?.fromCache ?? false,
+    ttlMinutes: rates?.ttlMinutesRemaining ?? 0,
   };
 }

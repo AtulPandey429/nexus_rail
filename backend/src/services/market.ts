@@ -50,31 +50,6 @@ let fxPendingPromise: Promise<FxQuote> | null = null;
 
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds live cache window
 
-// Institutional fallback anchor snapshot in case all external APIs fail simultaneously
-const DEFAULT_METAL_ANCHOR: MetalQuote = {
-  goldUsdPerGram: 124.17,
-  goldInrPerGram: 11670.74,
-  gold24hChange: 0.45,
-  silverUsdPerGram: 1.52,
-  silverInrPerGram: 142.86,
-  silver24hChange: 0.12,
-  usdInrRate: 93.99,
-  source: 'binance',
-  fromCache: true,
-  fetchedAt: new Date().toISOString(),
-};
-
-const DEFAULT_FX_ANCHOR: FxQuote = {
-  usd: 1,
-  xrpUsd: 0.955,
-  xlmUsd: 0.138,
-  xrp24hChange: 0.52,
-  xlm24hChange: 0.35,
-  source: 'binance',
-  fromCache: true,
-  fetchedAt: new Date().toISOString(),
-};
-
 async function fetchJson<T = any>(
   url: string,
   headers: Record<string, string> = { accept: 'application/json' },
@@ -258,12 +233,12 @@ export async function getMetalQuote(forceRefresh = false): Promise<MetalQuote> {
         return quote;
       }
 
-      // If existing cache exists, return it
+      // If existing cache from real live feeds exists, return it
       if (metalCache) return { ...metalCache.data, fromCache: true };
-      return { ...DEFAULT_METAL_ANCHOR, fetchedAt: new Date().toISOString() };
-    } catch {
+      throw new Error('Live metal market oracle feeds temporarily unavailable. Please retry in a few seconds.');
+    } catch (err) {
       if (metalCache) return { ...metalCache.data, fromCache: true };
-      return { ...DEFAULT_METAL_ANCHOR, fetchedAt: new Date().toISOString() };
+      throw err instanceof Error ? err : new Error('Live metal market oracle feeds temporarily unavailable.');
     } finally {
       metalPendingPromise = null;
     }
@@ -362,12 +337,12 @@ export async function getFxQuote(forceRefresh = false): Promise<FxQuote> {
         return quote;
       }
 
-      // If existing cache exists, return it
+      // If existing cache from real live feeds exists, return it
       if (fxCache) return { ...fxCache.data, fromCache: true };
-      return { ...DEFAULT_FX_ANCHOR, fetchedAt: new Date().toISOString() };
-    } catch {
+      throw new Error('Live FX market oracle feeds temporarily unavailable. Please retry in a few seconds.');
+    } catch (err) {
       if (fxCache) return { ...fxCache.data, fromCache: true };
-      return { ...DEFAULT_FX_ANCHOR, fetchedAt: new Date().toISOString() };
+      throw err instanceof Error ? err : new Error('Live FX market oracle feeds temporarily unavailable.');
     } finally {
       fxPendingPromise = null;
     }
