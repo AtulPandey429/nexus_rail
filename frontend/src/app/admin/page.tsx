@@ -215,14 +215,15 @@ export default function AdminConsolePage() {
 
   // Module 1: $NXL Protocol AMM Pool State
   const [nrPoolStatus, setNrPoolStatus] = useState<{
-    priceUsd: number;
-    change24hPercent: number;
-    reserveUsd: number;
-    poolNrSupply: number;
-    circulatingNr: number;
-    marketCapUsd: number;
-    cumulativeFeeInjectedUsd: number;
-    invariantK: string;
+    priceUsd?: number;
+    spotPriceUsd?: number;
+    change24hPercent?: number;
+    reserveUsd?: number;
+    poolNrSupply?: number;
+    circulatingNr?: number;
+    marketCapUsd?: number;
+    cumulativeFeeInjectedUsd?: number;
+    invariantK?: string;
   } | null>(null);
   const [reserveDeltaUsd, setReserveDeltaUsd] = useState('500');
   const [reserveNote, setReserveNote] = useState('Operator liquidity top-up');
@@ -924,10 +925,10 @@ export default function AdminConsolePage() {
                     Net Owner Profit
                   </div>
                   <div className="text-2xl sm:text-3xl font-mono font-bold text-amber-300">
-                    ${treasurySummary ? treasurySummary.netOwnerProfitUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}
+                    ${(treasurySummary?.netOwnerProfitUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-emerald-400 font-sans flex items-center gap-1">
-                    <span>+${treasurySummary ? ((treasurySummary.ownerProfit24hCents || 0) / 100).toFixed(2) : '0.00'} (24h)</span>
+                    <span>+${((treasurySummary?.ownerProfit24hCents ?? 0) / 100).toFixed(2)} (24h)</span>
                   </div>
                 </div>
 
@@ -936,10 +937,10 @@ export default function AdminConsolePage() {
                     Gross Treasury Volume
                   </div>
                   <div className="text-2xl sm:text-3xl font-mono font-bold text-white">
-                    ${treasurySummary ? ((treasurySummary.totalGrossVolumeCents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}
+                    ${((treasurySummary?.totalGrossVolumeCents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-400 font-sans">
-                    Total Revenue: ${treasurySummary ? ((treasurySummary.totalRevenueCents || 0) / 100).toFixed(2) : '0.00'}
+                    Total Revenue: ${((treasurySummary?.totalRevenueCents ?? 0) / 100).toFixed(2)}
                   </div>
                 </div>
 
@@ -948,7 +949,7 @@ export default function AdminConsolePage() {
                     $NXL Buyback Reserve
                   </div>
                   <div className="text-2xl sm:text-3xl font-mono font-bold text-cyan-400">
-                    ${treasurySummary ? treasurySummary.nrPoolInjectedUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}
+                    ${(treasurySummary?.nrPoolInjectedUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-400 font-sans">
                     50% automatic continuous pool injection
@@ -1162,7 +1163,7 @@ export default function AdminConsolePage() {
                 <div className="p-5 rounded-xl bg-[#111622] border border-slate-800 space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Accumulated Owner Profit</div>
                   <div className="text-2xl font-mono font-bold text-amber-300">
-                    ${treasurySummary ? treasurySummary.netOwnerProfitUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}
+                    ${(treasurySummary?.netOwnerProfitUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-400">Available for cold storage withdrawal</div>
                 </div>
@@ -1170,7 +1171,7 @@ export default function AdminConsolePage() {
                 <div className="p-5 rounded-xl bg-[#111622] border border-slate-800 space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">$NXL Buyback Injected</div>
                   <div className="text-2xl font-mono font-bold text-cyan-400">
-                    ${treasurySummary ? treasurySummary.nrPoolInjectedUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}
+                    ${(treasurySummary?.nrPoolInjectedUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-400">Strengthens liquidity pool backing</div>
                 </div>
@@ -1455,17 +1456,17 @@ export default function AdminConsolePage() {
                 <div className="p-5 rounded-xl bg-[#111622] border border-slate-800 space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">$NXL Spot Price</div>
                   <div className="text-2xl font-mono font-bold text-amber-300">
-                    ${nrPoolStatus ? nrPoolStatus.priceUsd.toFixed(4) : '1.0250'} USD
+                    ${(nrPoolStatus?.spotPriceUsd ?? nrPoolStatus?.priceUsd ?? 1.025).toFixed(4)} USD
                   </div>
                   <div className="text-xs text-emerald-400">
-                    +{nrPoolStatus ? nrPoolStatus.change24hPercent.toFixed(2) : '2.40'}% (24h)
+                    +{(nrPoolStatus?.change24hPercent ?? 2.4).toFixed(2)}% (24h)
                   </div>
                 </div>
 
                 <div className="p-5 rounded-xl bg-[#111622] border border-slate-800 space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Reserve Backing (USD)</div>
                   <div className="text-2xl font-mono font-bold text-cyan-400">
-                    ${nrPoolStatus ? nrPoolStatus.reserveUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '15,000.00'}
+                    ${(nrPoolStatus?.reserveUsd ?? 15000).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-400">Locked backing collateral</div>
                 </div>
@@ -1473,15 +1474,15 @@ export default function AdminConsolePage() {
                 <div className="p-5 rounded-xl bg-[#111622] border border-slate-800 space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pool $NXL Supply</div>
                   <div className="text-2xl font-mono font-bold text-white">
-                    {nrPoolStatus ? nrPoolStatus.poolNrSupply.toLocaleString() : '14,634'} NXL
+                    {(nrPoolStatus?.poolNrSupply ?? 100000).toLocaleString()} NXL
                   </div>
-                  <div className="text-xs text-slate-400">Circulating: {nrPoolStatus ? nrPoolStatus.circulatingNr.toLocaleString() : '5,000'} NXL</div>
+                  <div className="text-xs text-slate-400">Circulating: {(nrPoolStatus?.circulatingNr ?? 0).toLocaleString()} NXL</div>
                 </div>
 
                 <div className="p-5 rounded-xl bg-[#111622] border border-slate-800 space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Fee Injections</div>
                   <div className="text-2xl font-mono font-bold text-emerald-400">
-                    ${nrPoolStatus ? nrPoolStatus.cumulativeFeeInjectedUsd.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '420.50'}
+                    ${(nrPoolStatus?.cumulativeFeeInjectedUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-emerald-400/80">From 50% automated profit split</div>
                 </div>
@@ -1712,7 +1713,7 @@ export default function AdminConsolePage() {
                 {[
                   { pair: 'XLM / USD', rate: rates?.xlmUsd ? `$${rates.xlmUsd.toFixed(4)}` : '$0.1365', change: '+1.8%' },
                   { pair: 'XRP / USD', rate: rates?.xrpUsd ? `$${rates.xrpUsd.toFixed(4)}` : '$1.9240', change: '+3.2%' },
-                  { pair: 'NXL / USD', rate: nrPoolStatus?.priceUsd ? `$${nrPoolStatus.priceUsd.toFixed(4)}` : '$1.0250', change: '+2.4%' },
+                  { pair: 'NXL / USD', rate: `$${(nrPoolStatus?.spotPriceUsd ?? nrPoolStatus?.priceUsd ?? 1.025).toFixed(4)}`, change: '+2.4%' },
                   { pair: 'GOLD / USD (g)', rate: '$84.50', change: '+0.5%' },
                 ].map((item) => (
                   <div key={item.pair} className="p-5 rounded-xl bg-[#111622] border border-slate-800 space-y-1">
