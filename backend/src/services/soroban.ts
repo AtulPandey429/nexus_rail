@@ -15,22 +15,22 @@ export interface StellarRpcHealthResult {
 }
 
 export const DEFAULT_NEXUS_VAULT_CONTRACT: MongoSmartContractDoc = {
-  contract_id: 'CCB2V3K2W7B4L36Z2D5J6K7L8M9N0P1Q2R3S4T5U6V7W8X9Y0Z1A2B3C',
+  contract_id: 'CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N',
   name: 'NexusVault',
   network: 'testnet',
   rpc_url: 'https://soroban-testnet.stellar.org',
   protocol_version: 22,
   current_wasm_hash: '4f9a32c7e8d1b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7',
-  admin_address: 'GBZ42O4WJ45353I4V32B4N5M6K7L8J9H0G1F2E3D4C5B6A7Z8Y9X0W1V',
-  treasury_address: 'GDNVL42O4WJ45353I4V32B4N5M6K7L8J9H0G1F2E3D4C5B6A7Z8Y9X0W',
-  nr_reserve_address: 'GCLRP42O4WJ45353I4V32B4N5M6K7L8J9H0G1F2E3D4C5B6A7Z8Y9X0W',
+  admin_address: 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC',
+  treasury_address: 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC',
+  nr_reserve_address: 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ',
   fee_bps: 100, // 1.00%
   owner_split_pct: 50, // 50%
   upgrades: [
     {
       wasm_hash: '4f9a32c7e8d1b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7',
       upgraded_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),
-      tx_hash: 'tx_genesis_deploy_cap0058_p22',
+      tx_hash: '4945f74bef92a0ab1f3842a8b72f79c252f187b1d7ea0b47a8f14a38929c837b',
       upgraded_by: 'SYSTEM_GENESIS',
       protocol_version: 22,
       notes: 'Initial Protocol 22 CAP-0058 atomic constructor deployment',
@@ -39,7 +39,7 @@ export const DEFAULT_NEXUS_VAULT_CONTRACT: MongoSmartContractDoc = {
   status: 'ACTIVE',
   deployed_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),
   last_verified_at: new Date().toISOString(),
-  explorer_url: 'https://stellar.expert/explorer/testnet/contract/CCB2V3K2W7B4L36Z2D5J6K7L8M9N0P1Q2R3S4T5U6V7W8X9Y0Z1A2B3C',
+  explorer_url: 'https://stellar.expert/explorer/testnet/contract/CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N',
 };
 
 export class SorobanService {

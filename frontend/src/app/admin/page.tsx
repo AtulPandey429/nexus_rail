@@ -1157,10 +1157,10 @@ export default function AdminConsolePage() {
           <div className="p-4 rounded-xl bg-black/40 border border-white/10 space-y-1">
             <p className="text-[10px] text-white/40 uppercase">CONTRACT ID (PERMANENT)</p>
             <p className="text-white font-bold truncate">
-              {smartContract?.contractId || 'CCB2V3K2W7B4L36Z2D5J6K7L8M9N0P1Q2R3S4T5U6V7W8X9Y0Z1A2B3C'}
+              {smartContract?.contractId || 'CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N'}
             </p>
             <a
-              href={smartContract?.explorerUrl || 'https://stellar.expert/explorer/testnet'}
+              href={smartContract?.explorerUrl || 'https://stellar.expert/explorer/testnet/contract/CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N'}
               target="_blank"
               rel="noreferrer"
               className="text-[#00E5FF] hover:underline flex items-center gap-1 pt-1 text-[11px]"
