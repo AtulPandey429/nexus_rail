@@ -134,10 +134,61 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
         return rates;
       }
     } catch {
-      // Binance blocked or unreachable, fallback to CoinGecko
+      // Binance blocked or unreachable, fallback to Kraken
     }
 
-    // 3. Direct CoinGecko Public API Fallback
+    // 3. Direct Kraken Public Ticker API Fallback (US-compliant, CORS enabled, no rate limits)
+    try {
+      const res = await fetch('https://api.kraken.com/0/public/Ticker?pair=XRPUSD,XLMUSD');
+      if (res.ok) {
+        const json = await res.json();
+        const xrpPrice = parseFloat(json?.result?.XXRPZUSD?.c?.[0]);
+        const xlmPrice = parseFloat(json?.result?.XXLMZUSD?.c?.[0]);
+        if (Number.isFinite(xrpPrice) && Number.isFinite(xlmPrice) && xrpPrice > 0 && xlmPrice > 0) {
+          const rates: ExchangeRatesData = {
+            xlmUsd: xlmPrice,
+            xrpUsd: xrpPrice,
+            source: 'binance',
+            fromCache: false,
+            fetchedAt: new Date().toISOString(),
+            expiresAt,
+            ttlMinutesRemaining: 30,
+          };
+          setCachedRates(rates);
+          return rates;
+        }
+      }
+    } catch {
+      // Kraken unreachable, fallback to Coinbase
+    }
+
+    // 4. Direct Coinbase Public Exchange Rates API Fallback (CORS enabled, no rate limits)
+    try {
+      const res = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD');
+      if (res.ok) {
+        const json = await res.json();
+        const ratesMap = json?.data?.rates;
+        const xrpPrice = ratesMap?.XRP ? 1 / parseFloat(ratesMap.XRP) : NaN;
+        const xlmPrice = ratesMap?.XLM ? 1 / parseFloat(ratesMap.XLM) : NaN;
+        if (Number.isFinite(xrpPrice) && Number.isFinite(xlmPrice) && xrpPrice > 0 && xlmPrice > 0) {
+          const rates: ExchangeRatesData = {
+            xlmUsd: xlmPrice,
+            xrpUsd: xrpPrice,
+            source: 'binance',
+            fromCache: false,
+            fetchedAt: new Date().toISOString(),
+            expiresAt,
+            ttlMinutesRemaining: 30,
+          };
+          setCachedRates(rates);
+          return rates;
+        }
+      }
+    } catch {
+      // Coinbase unreachable, fallback to CoinGecko
+    }
+
+    // 5. Direct CoinGecko Public API Fallback (Safely guarded against HTTP 429)
     try {
       const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=stellar,ripple&vs_currencies=usd');
       if (res.ok) {
@@ -163,7 +214,7 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
       // Network completely disconnected
     }
 
-    // 4. Return existing cache even if expired as graceful degradation
+    // 6. Return existing cache even if expired as graceful degradation
     if (typeof window !== 'undefined') {
       try {
         const staleRaw = localStorage.getItem(RATES_STORAGE_KEY);
