@@ -8,6 +8,7 @@ import { PortfolioService } from '../services/portfolioService.js';
 import { TreasuryService } from '../services/treasuryService.js';
 import { SorobanService } from '../services/soroban.js';
 import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
+import { DualRailTokenService } from '../services/dualRailTokenService.js';
 import { z } from 'zod';
 
 export const adminRouter = Router();
@@ -321,5 +322,48 @@ adminRouter.get('/tokens/nr', async (_req: AuthenticatedRequest, res: Response) 
     res.json({ success: true, data: token });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to fetch on-chain token details' });
+  }
+});
+
+// ============================================================================
+// Dual-Rail Token & Native XRPL AMM (XLS-30d) Endpoints
+// ============================================================================
+
+adminRouter.get('/dual-rail/status', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const summary = await DualRailTokenService.getDualRailSummary();
+    res.json({ success: true, data: summary });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load dual-rail summary' });
+  }
+});
+
+adminRouter.post('/dual-rail/xrpl-amm/create', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { initialXrp = 10, initialNr = 10 } = req.body || {};
+    const result = await DualRailTokenService.deployOrSyncXrplAmm(req.user!.id, Number(initialXrp), Number(initialNr));
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message || 'XRPL AMMCreate failed' });
+  }
+});
+
+adminRouter.post('/dual-rail/xrpl-amm/deposit', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { xrpAmount = 5, nrAmount = 5 } = req.body || {};
+    const result = await DualRailTokenService.depositXrplAmmLiquidity(req.user!.id, Number(xrpAmount), Number(nrAmount));
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message || 'XRPL AMMDeposit failed' });
+  }
+});
+
+adminRouter.get('/dual-rail/logs', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const logsCol = await MongoService.getCollection('platform_chain_logs');
+    const logs = await logsCol.find({}).sort({ created_at: -1 }).limit(50).toArray();
+    res.json({ success: true, data: { items: logs } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch chain logs' });
   }
 });

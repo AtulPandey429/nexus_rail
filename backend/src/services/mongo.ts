@@ -304,15 +304,68 @@ export interface MongoPlatformTokenDoc {
   _id?: any;
   symbol: 'NR';
   name: string;
-  chain: 'STELLAR';
-  asset_code: 'NR';
+  chain: 'STELLAR' | 'XRPL';
+  asset_code: string;
+  currency_hex?: string; // 40-char hex for XRPL (4E52000000000000000000000000000000000000)
   issuer_address: string;
+  issuer_secret?: string;
   distribution_address: string;
   initial_mint_amount: number;
   total_supply_cap: number;
   mint_tx_hash: string;
+  contract_id?: string;
+  amm_account?: string;
+  amm_tx_hash?: string;
+  is_live_on_chain?: boolean;
   created_at: string;
   explorer_url: string;
+}
+
+export type ChainActionType =
+  | 'MINT'
+  | 'TRUSTLINE'
+  | 'AMM_CREATE'
+  | 'AMM_DEPOSIT'
+  | 'AMM_WITHDRAW'
+  | 'CROSS_CHAIN_BRIDGE';
+
+export interface MongoChainActionLogDoc {
+  _id?: any;
+  id: string; // "log_UUID"
+  chain: 'STELLAR' | 'XRPL';
+  action: ChainActionType;
+  reference_id?: string;
+  operator_id: string; // admin user or 'SYSTEM'
+  tx_hash: string;
+  ledger_seq?: number;
+  amount_primary?: number | string;
+  amount_secondary?: number | string;
+  fee_charged?: number | string;
+  details?: Record<string, any>;
+  explorer_url: string;
+  status: 'SUCCESS' | 'FAILED';
+  error_message?: string;
+  created_at: string;
+}
+
+export interface MongoAmmPoolDoc {
+  _id?: any;
+  id: string;
+  chain: 'STELLAR' | 'XRPL';
+  symbol: string;
+  paired_asset: string; // 'USD' on Stellar, 'XRP' on XRPL
+  amm_account?: string; // XRPL AMM account
+  lp_token_id?: string;
+  issuer_address: string;
+  vault_address: string;
+  reserve_primary: number; // e.g. USD cents on Stellar, XRP drops on XRPL
+  reserve_secondary: number; // NR tokens
+  trading_fee_bps: number; // e.g. 50 (0.50%)
+  status: 'ACTIVE' | 'PENDING' | 'PAUSED';
+  created_tx_hash?: string;
+  explorer_url?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface MongoTokenWithdrawalDoc {
@@ -320,7 +373,9 @@ export interface MongoTokenWithdrawalDoc {
   id: string; // "wd_UUID"
   user_id: string;
   amount_nr: number;
-  destination_stellar_address: string;
+  destination_address: string;
+  chain: 'STELLAR' | 'XRPL';
+  destination_stellar_address?: string; // backward compat
   tx_hash: string;
   ledger_seq?: number;
   status: 'CONFIRMED' | 'FAILED';
@@ -453,6 +508,12 @@ export class MongoService {
       await db.collection('platform_tokens').createIndex({ symbol: 1, chain: 1 }, { unique: true });
       await db.collection('token_withdrawals').createIndex({ id: 1 }, { unique: true });
       await db.collection('token_withdrawals').createIndex({ user_id: 1, created_at: -1 });
+
+      // 16. Dual-Rail On-Chain Action Logs & AMM Pools
+      await db.collection('platform_chain_logs').createIndex({ chain: 1, created_at: -1 });
+      await db.collection('platform_chain_logs').createIndex({ action: 1 });
+      await db.collection('platform_chain_logs').createIndex({ tx_hash: 1 }, { unique: true, sparse: true });
+      await db.collection('platform_amm_pools').createIndex({ chain: 1, symbol: 1 }, { unique: true });
 
       console.log('✅ [MongoDB Atlas] Primary Collections & TTL Indexes Initialized');
     } catch (err: any) {

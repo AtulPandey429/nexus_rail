@@ -64,6 +64,8 @@ export class StellarTokenIssuerService {
       id: withdrawalId,
       user_id: userId,
       amount_nr: amountNr,
+      chain: 'STELLAR',
+      destination_address: destinationAddress,
       destination_stellar_address: destinationAddress,
       tx_hash: txHash,
       ledger_seq: 482915,

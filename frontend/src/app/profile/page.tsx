@@ -85,28 +85,41 @@ export default function ProfilePage() {
   const [cashoutSuccessMsg, setCashoutSuccessMsg] = useState('');
   const [cashoutErrorMsg, setCashoutErrorMsg] = useState('');
 
-  // On-Chain Stellar $NR Withdrawal State (Module 4)
+  // Dual-Rail On-Chain $NR Withdrawal State (Stellar Protocol 22 + XRPL XLS-30d)
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [withdrawNrHolding, setWithdrawNrHolding] = useState<HydratedHolding | null>(null);
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
-  const [withdrawStellarAddress, setWithdrawStellarAddress] = useState<string>('');
+  const [withdrawChain, setWithdrawChain] = useState<'stellar' | 'xrpl'>('stellar');
+  const [withdrawAddress, setWithdrawAddress] = useState<string>('');
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
   const [withdrawErrorMsg, setWithdrawErrorMsg] = useState('');
   const [withdrawSuccessData, setWithdrawSuccessData] = useState<{
     txHash: string;
-    ledgerSeq: number;
+    ledgerSeq?: number;
     amountNr: number;
+    chain: 'STELLAR' | 'XRPL';
     explorerUrl: string;
-    destinationStellarAddress: string;
+    destinationAddress: string;
   } | null>(null);
 
   const handleOpenWithdrawNr = (holding: HydratedHolding) => {
     setWithdrawNrHolding(holding);
     setWithdrawAmount(String(holding.quantity));
-    setWithdrawStellarAddress(profile?.stellarAddress || '');
+    setWithdrawChain('stellar');
+    setWithdrawAddress(profile?.stellarAddress || '');
     setWithdrawErrorMsg('');
     setWithdrawSuccessData(null);
     setWithdrawModalOpen(true);
+  };
+
+  const handleSwitchWithdrawChain = (chain: 'stellar' | 'xrpl') => {
+    setWithdrawChain(chain);
+    setWithdrawErrorMsg('');
+    if (chain === 'stellar') {
+      setWithdrawAddress(profile?.stellarAddress || '');
+    } else {
+      setWithdrawAddress(profile?.xrplAddress || '');
+    }
   };
 
   const handleWithdrawNrSubmit = async (e: React.FormEvent) => {
@@ -119,9 +132,18 @@ export default function ProfilePage() {
       setWithdrawErrorMsg('Please specify a positive amount of $NR to withdraw.');
       return;
     }
-    if (!withdrawStellarAddress.trim() || !withdrawStellarAddress.startsWith('G') || withdrawStellarAddress.trim().length !== 56) {
-      setWithdrawErrorMsg('Please provide a valid 56-character Stellar public address starting with "G".');
-      return;
+
+    const trimmedAddr = withdrawAddress.trim();
+    if (withdrawChain === 'stellar') {
+      if (!trimmedAddr || !trimmedAddr.startsWith('G') || trimmedAddr.length !== 56) {
+        setWithdrawErrorMsg('Please provide a valid 56-character Stellar public address starting with "G".');
+        return;
+      }
+    } else {
+      if (!trimmedAddr || !trimmedAddr.startsWith('r') || trimmedAddr.length < 25 || trimmedAddr.length > 36) {
+        setWithdrawErrorMsg('Please provide a valid XRPL classic address starting with "r" (e.g. rQ7t2G...).');
+        return;
+      }
     }
 
     setWithdrawSubmitting(true);
@@ -137,7 +159,9 @@ export default function ProfilePage() {
         },
         body: JSON.stringify({
           amount: numAmount,
-          destinationStellarAddress: withdrawStellarAddress.trim(),
+          chain: withdrawChain === 'xrpl' ? 'XRPL' : 'STELLAR',
+          destinationAddress: trimmedAddr,
+          destinationStellarAddress: trimmedAddr,
         }),
       });
 
@@ -146,7 +170,14 @@ export default function ProfilePage() {
         throw new Error(data.error || 'On-chain withdrawal failed');
       }
 
-      setWithdrawSuccessData(data.data);
+      setWithdrawSuccessData({
+        txHash: data.data.txHash,
+        ledgerSeq: data.data.ledgerSeq,
+        amountNr: data.data.amountNr,
+        chain: data.data.chain || (withdrawChain === 'xrpl' ? 'XRPL' : 'STELLAR'),
+        explorerUrl: data.data.explorerUrl,
+        destinationAddress: data.data.destinationAddress || trimmedAddr,
+      });
       await fetchPortfolio();
       await fetchProfile();
     } catch (err: any) {
@@ -545,16 +576,44 @@ export default function ProfilePage() {
             </button>
 
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs font-mono text-[#00E5FF]">
+              <div className="flex items-center gap-2 text-xs font-mono text-[#D4AF37]">
                 <Cpu className="w-3.5 h-3.5" />
-                <span>Stellar Protocol 22 On-Chain Settlement</span>
+                <span>Dual-Rail Settlement (Stellar Protocol 22 + XRPL XLS-30d)</span>
               </div>
               <h3 className="text-xl font-bold text-[var(--foreground)]">
-                Withdraw $NR to Stellar Testnet
+                Withdraw $NR On-Chain
               </h3>
               <p className="text-xs text-[var(--muted)]">
-                Broadcast and mint your internal <strong className="text-[var(--gold)]">$NR</strong> tokens onto the official Stellar Testnet via the Issuer Account (<code className="text-[#00E5FF]">GDO6N...</code>).
+                Mint or transfer internal <strong className="text-[var(--gold)]">$NR</strong> tokens to your self-custodial wallet on either Stellar Testnet or XRP Ledger with guaranteed 1:1 cross-rail parity.
               </p>
+            </div>
+
+            {/* Network Selector Tabs */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-[var(--card-subtle)] rounded-2xl border border-[var(--border)] font-mono text-xs">
+              <button
+                type="button"
+                onClick={() => handleSwitchWithdrawChain('stellar')}
+                className={`py-2 px-3 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  withdrawChain === 'stellar'
+                    ? 'bg-[#00E5FF]/15 text-[#00E5FF] font-bold border border-[#00E5FF]/40 shadow-sm'
+                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
+                <span>Stellar (XLM / SEP-0001)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchWithdrawChain('xrpl')}
+                className={`py-2 px-3 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  withdrawChain === 'xrpl'
+                    ? 'bg-[#0081F2]/15 text-[#0081F2] font-bold border border-[#0081F2]/40 shadow-sm'
+                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-[#0081F2]" />
+                <span>XRPL (XLS-30d AMM)</span>
+              </button>
             </div>
 
             {withdrawSuccessData ? (
@@ -562,14 +621,14 @@ export default function ProfilePage() {
                 <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 space-y-2">
                   <div className="flex items-center gap-2 font-bold text-sm">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>On-Chain Stellar Transfer Confirmed!</span>
+                    <span>On-Chain {withdrawSuccessData.chain} Transfer Confirmed!</span>
                   </div>
                   <p className="text-[var(--foreground)]">
-                    Successfully minted and transferred <strong className="text-emerald-300">{withdrawSuccessData.amountNr} $NR</strong> tokens to your external Stellar address.
+                    Successfully transferred <strong className="text-emerald-300">{withdrawSuccessData.amountNr} $NR</strong> tokens to your external {withdrawSuccessData.chain === 'XRPL' ? 'XRP Ledger' : 'Stellar'} address.
                   </p>
                   <div className="pt-2 border-t border-emerald-500/20 space-y-1 text-[11px] text-[var(--muted)]">
-                    <p>Ledger Sequence: #{withdrawSuccessData.ledgerSeq}</p>
-                    <p className="truncate">Destination: {withdrawSuccessData.destinationStellarAddress}</p>
+                    {withdrawSuccessData.ledgerSeq && <p>Ledger Sequence: #{withdrawSuccessData.ledgerSeq}</p>}
+                    <p className="truncate">Destination: {withdrawSuccessData.destinationAddress}</p>
                     <p className="truncate">Tx Hash: {withdrawSuccessData.txHash}</p>
                   </div>
                 </div>
@@ -579,9 +638,9 @@ export default function ProfilePage() {
                     href={withdrawSuccessData.explorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 py-3 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-center text-[#00E5FF] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="flex-1 py-3 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-center text-[#D4AF37] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <span>View on Stellar.Expert</span>
+                    <span>View on {withdrawSuccessData.chain === 'XRPL' ? 'XRPL Testnet' : 'Stellar.Expert'}</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   <button
@@ -600,12 +659,23 @@ export default function ProfilePage() {
               <form onSubmit={handleWithdrawNrSubmit} className="space-y-4 font-mono text-xs">
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[var(--muted)]">
-                    <label>Destination Stellar Address (G...)</label>
-                    {profile?.stellarAddress && (
+                    <label>
+                      {withdrawChain === 'stellar'
+                        ? 'Destination Stellar Address (starts with G...)'
+                        : 'Destination XRPL Address (starts with r...)'}
+                    </label>
+                    {((withdrawChain === 'stellar' && profile?.stellarAddress) ||
+                      (withdrawChain === 'xrpl' && profile?.xrplAddress)) && (
                       <button
                         type="button"
-                        onClick={() => setWithdrawStellarAddress(profile.stellarAddress || '')}
-                        className="text-[#00E5FF] hover:underline text-[11px] cursor-pointer"
+                        onClick={() =>
+                          setWithdrawAddress(
+                            withdrawChain === 'stellar'
+                              ? profile?.stellarAddress || ''
+                              : profile?.xrplAddress || ''
+                          )
+                        }
+                        className="text-[#D4AF37] hover:underline text-[11px] cursor-pointer"
                       >
                         Use Verified Wallet
                       </button>
@@ -614,11 +684,20 @@ export default function ProfilePage() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC"
-                    value={withdrawStellarAddress}
-                    onChange={(e) => setWithdrawStellarAddress(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] font-mono text-xs focus:outline-none focus:border-[#00E5FF]"
+                    placeholder={
+                      withdrawChain === 'stellar'
+                        ? 'e.g. GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC'
+                        : 'e.g. rN6Xp... (XRPL Altnet Classic Address)'
+                    }
+                    value={withdrawAddress}
+                    onChange={(e) => setWithdrawAddress(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] font-mono text-xs focus:outline-none focus:border-[#D4AF37]"
                   />
+                  <p className="text-[10px] text-[var(--muted)]">
+                    {withdrawChain === 'stellar'
+                      ? 'Protocol 22 Asset Contract: CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N'
+                      : 'XRPL XLS-30d Native AMM Token: Hex 4E52000000000000000000000000000000000000'}
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -637,7 +716,7 @@ export default function ProfilePage() {
                       max={withdrawNrHolding ? withdrawNrHolding.quantity : undefined}
                       value={withdrawAmount}
                       onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="flex-1 px-4 py-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] font-mono text-xs focus:outline-none focus:border-[#00E5FF]"
+                      className="flex-1 px-4 py-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] font-mono text-xs focus:outline-none focus:border-[#D4AF37]"
                     />
                     <button
                       type="button"
@@ -666,17 +745,17 @@ export default function ProfilePage() {
                   <button
                     type="submit"
                     disabled={withdrawSubmitting || !withdrawAmount || Number(withdrawAmount) <= 0}
-                    className="flex-1 py-3 rounded-xl bg-[#00E5FF] hover:bg-[#00E5FF]/80 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="flex-1 py-3 rounded-xl bg-[#D4AF37] hover:bg-[#F2D675] text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 transition-colors shadow-lg shadow-[#D4AF37]/20"
                   >
                     {withdrawSubmitting ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Broadcasting to Stellar...</span>
+                        <span>Broadcasting to {withdrawChain === 'xrpl' ? 'XRPL' : 'Stellar'}...</span>
                       </>
                     ) : (
                       <>
                         <ArrowRight className="w-3.5 h-3.5" />
-                        <span>Confirm Stellar Withdrawal</span>
+                        <span>Confirm {withdrawChain === 'xrpl' ? 'XRPL' : 'Stellar'} Withdrawal</span>
                       </>
                     )}
                   </button>

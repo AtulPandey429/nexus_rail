@@ -232,27 +232,84 @@ export interface SmartContractDTO {
 export interface OnChainTokenDTO {
   symbol: 'NR';
   name: string;
-  chain: 'STELLAR';
-  assetCode: 'NR';
+  chain: 'STELLAR' | 'XRPL';
+  assetCode: string;
+  currencyHex?: string;
   issuerAddress: string;
   distributionAddress: string;
   initialMintAmount: number;
   totalSupplyCap: number;
   mintTxHash: string;
+  contractId?: string;
+  ammAccount?: string;
+  ammTxHash?: string;
   createdAt: string;
   explorerUrl: string;
 }
 
+export interface ChainActionLogDTO {
+  id: string;
+  chain: 'STELLAR' | 'XRPL';
+  action: 'MINT' | 'TRUSTLINE' | 'AMM_CREATE' | 'AMM_DEPOSIT' | 'AMM_WITHDRAW' | 'CROSS_CHAIN_BRIDGE';
+  reference_id?: string;
+  operator_id: string;
+  tx_hash: string;
+  ledger_seq?: number;
+  amount_primary?: number | string;
+  amount_secondary?: number | string;
+  fee_charged?: number | string;
+  details?: Record<string, any>;
+  explorer_url: string;
+  status: 'SUCCESS' | 'FAILED';
+  created_at: string;
+}
+
+export interface DualRailTokenSummaryDTO {
+  stellar: {
+    assetCode: string;
+    issuerAddress: string;
+    contractId: string;
+    distributionVault: string;
+    supplyCap: number;
+    explorerUrl: string;
+    status: string;
+  };
+  xrpl: {
+    currencyCode: string;
+    currencyHex: string;
+    issuerAddress: string;
+    distributionVault: string;
+    ammAccount: string;
+    reserveXrp: number;
+    reserveNr: number;
+    tradingFeeBps: number;
+    ammTxHash: string;
+    explorerUrl: string;
+    status: string;
+  };
+  parity: {
+    stellarCirculating: number;
+    xrplCirculating: number;
+    totalSupplyCap: number;
+    isBalanced: boolean;
+    invariantString: string;
+  };
+  recentLogs: ChainActionLogDTO[];
+}
+
 export interface OnChainWithdrawalRequest {
   amount: number;
-  destinationStellarAddress: string;
+  chain?: 'STELLAR' | 'XRPL';
+  destinationAddress: string;
+  destinationStellarAddress?: string; // backward compat
 }
 
 export interface OnChainWithdrawalResponse {
   success: boolean;
   withdrawalId: string;
   amountNr: number;
-  destinationStellarAddress: string;
+  chain: 'STELLAR' | 'XRPL';
+  destinationAddress: string;
   txHash: string;
   ledgerSeq?: number;
   remainingNrBalance: number;

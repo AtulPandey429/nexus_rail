@@ -4,6 +4,7 @@ import { chainRegistry } from '../services/crypto/index.js';
 import { verifyToken } from '../services/jwt.js';
 import { walletService } from '../services/wallet.js';
 import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
+import { DualRailTokenService } from '../services/dualRailTokenService.js';
 
 export const cryptoRouter = Router();
 
@@ -90,11 +91,17 @@ cryptoRouter.post('/nr/withdraw', async (req: Request, res: Response) => {
     return res.status(401).json({ success: false, error: 'Invalid or expired authentication token' });
   }
 
-  const { amount, destinationStellarAddress } = req.body || {};
+  const { amount, destinationAddress, destinationStellarAddress, chain } = req.body || {};
+  const targetAddress = (destinationAddress || destinationStellarAddress || '').trim();
   const numAmount = Number(amount);
   if (!numAmount || isNaN(numAmount) || numAmount <= 0) {
     return res.status(400).json({ success: false, error: 'Valid positive amount of $NR is required' });
   }
+  if (!targetAddress) {
+    return res.status(400).json({ success: false, error: 'Destination wallet address is required' });
+  }
+
+  const isXrpl = chain === 'XRPL' || targetAddress.startsWith('r');
 
   try {
     const balances = await walletService.getBalance(userId);
@@ -108,26 +115,44 @@ cryptoRouter.post('/nr/withdraw', async (req: Request, res: Response) => {
       });
     }
 
-    const withdrawal = await StellarTokenIssuerService.withdrawNrToExternalAddress(
-      userId,
-      numAmount,
-      destinationStellarAddress
-    );
+    let txHash: string;
+    let ledgerSeq: number | undefined;
+    let explorerUrl: string;
+    let withdrawalId = `wd_${crypto.randomUUID().slice(0, 16)}`;
+
+    if (isXrpl) {
+      const xrplRes = await DualRailTokenService.withdrawNrToXrplAddress(userId, numAmount, targetAddress);
+      txHash = xrplRes.txHash;
+      ledgerSeq = xrplRes.ledgerSeq;
+      explorerUrl = xrplRes.explorerUrl;
+    } else {
+      const withdrawal = await StellarTokenIssuerService.withdrawNrToExternalAddress(
+        userId,
+        numAmount,
+        targetAddress
+      );
+      txHash = withdrawal.tx_hash;
+      ledgerSeq = withdrawal.ledger_seq;
+      explorerUrl = `https://stellar.expert/explorer/testnet/tx/${withdrawal.tx_hash}`;
+      withdrawalId = withdrawal.id;
+    }
 
     // Atomic debit of user's internal wallet
-    await walletService.applyEntry(userId, requestedMicro, 'DEBIT', 'NR', withdrawal.id);
+    await walletService.applyEntry(userId, requestedMicro, 'DEBIT', 'NR', withdrawalId);
     const updatedBalances = await walletService.getBalance(userId);
 
     res.json({
       success: true,
       data: {
-        withdrawalId: withdrawal.id,
+        withdrawalId,
         amountNr: numAmount,
-        destinationStellarAddress,
-        txHash: withdrawal.tx_hash,
-        ledgerSeq: withdrawal.ledger_seq,
+        chain: isXrpl ? 'XRPL' : 'STELLAR',
+        destinationAddress: targetAddress,
+        destinationStellarAddress: targetAddress, // backward compat
+        txHash,
+        ledgerSeq,
         remainingNrBalance: Number(((updatedBalances.NR || 0) / 1_000_000).toFixed(6)),
-        explorerUrl: `https://stellar.expert/explorer/testnet/tx/${withdrawal.tx_hash}`,
+        explorerUrl,
       },
     });
   } catch (err: any) {
