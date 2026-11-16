@@ -168,3 +168,87 @@ export interface PlatformAUCResponse {
   total_spread_earned_cents: number;
 }
 
+// ============================================================================
+// Module 4: Platform Treasury, Smart Contract & On-Chain Types
+// ============================================================================
+
+export interface TreasurySummaryResponse {
+  totalGrossVolumeCents: number;
+  totalRevenueCents: number;
+  netOwnerProfitCents: number;
+  netOwnerProfitUsd: number;
+  nrPoolInjectedCents: number;
+  nrPoolInjectedUsd: number;
+  revenue24hCents: number;
+  ownerProfit24hCents: number;
+  breakdown: {
+    orderFeesCents: number;
+    swapSpreadsCents: number;
+    cashoutSpreadsCents: number;
+    aiFeesCents: number;
+    gasSurplusCents: number;
+  };
+  zeroSumDifferenceCents: number;
+  isBalanced: boolean;
+  updatedAt: string;
+}
+
+export interface PlatformConfigDTO {
+  order_fee_bps: number;
+  swap_spread_bps: number;
+  cashout_spread_bps: number;
+  ai_fee_bps: number;
+  gas_flat_cents: number;
+  nr_buyback_share_pct: number;
+  cashback_pct: number;
+  is_paused: boolean;
+  updated_at: string;
+  updated_by?: string;
+}
+
+export interface SmartContractDTO {
+  contractId: string;
+  name: string;
+  network: 'testnet' | 'mainnet';
+  protocolVersion: number;
+  currentWasmHash: string;
+  adminAddress: string;
+  treasuryAddress: string;
+  nrReserveAddress: string;
+  feeBps: number;
+  ownerSplitPct: number;
+  status: 'ACTIVE' | 'PAUSED' | 'DEPRECATED';
+  deployedAt: string;
+  explorerUrl: string;
+}
+
+export interface OnChainTokenDTO {
+  symbol: 'NR';
+  name: string;
+  chain: 'STELLAR';
+  assetCode: 'NR';
+  issuerAddress: string;
+  distributionAddress: string;
+  initialMintAmount: number;
+  totalSupplyCap: number;
+  mintTxHash: string;
+  createdAt: string;
+  explorerUrl: string;
+}
+
+export interface OnChainWithdrawalRequest {
+  amount: number;
+  destinationStellarAddress: string;
+}
+
+export interface OnChainWithdrawalResponse {
+  success: boolean;
+  withdrawalId: string;
+  amountNr: number;
+  destinationStellarAddress: string;
+  txHash: string;
+  ledgerSeq?: number;
+  remainingNrBalance: number;
+  explorerUrl: string;
+}
+

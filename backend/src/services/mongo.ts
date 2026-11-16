@@ -234,6 +234,100 @@ export interface AgentAuditTrace {
   createdAt: string;
 }
 
+// ============================================================================
+// Module 4: Platform Treasury, Config, Smart Contracts & Token Issuance Schemas
+// ============================================================================
+
+export type TreasurySourceType = 'ORDER' | 'SWAP' | 'SELL_SPREAD' | 'AI_EXECUTION' | 'GAS_ARBITRAGE';
+
+export interface MongoTreasuryEntryDoc {
+  _id?: any;
+  id: string; // "rev_UUID"
+  source_type: TreasurySourceType;
+  reference_id: string; // orderId, swapId, cashoutId, etc.
+  gross_cents: number;
+  fee_cents: number;
+  spread_cents: number;
+  gas_arbitrage_cents: number;
+  total_revenue_cents: number;
+  net_owner_profit_cents: number;
+  nr_pool_injected_cents: number;
+  rail: 'STELLAR' | 'XRPL' | 'STRIPE' | 'NR' | 'INTERNAL';
+  created_at: string;
+}
+
+export interface MongoPlatformConfigDoc {
+  _id?: any;
+  key: 'treasury_settings';
+  order_fee_bps: number; // e.g. 100 bps = 1.0%
+  swap_spread_bps: number; // e.g. 50 bps = 0.50%
+  cashout_spread_bps: number; // e.g. 50 bps = 0.50%
+  ai_fee_bps: number; // e.g. 25 bps = 0.25%
+  gas_flat_cents: number; // e.g. 10 cents = $0.10
+  nr_buyback_share_pct: number; // e.g. 50%
+  cashback_pct: number; // e.g. 2%
+  is_paused: boolean;
+  updated_at: string;
+  updated_by?: string;
+}
+
+export interface ContractUpgradeEntry {
+  wasm_hash: string;
+  upgraded_at: string;
+  tx_hash: string;
+  upgraded_by: string;
+  protocol_version: number;
+  notes?: string;
+}
+
+export interface MongoSmartContractDoc {
+  _id?: any;
+  contract_id: string; // "C..." Stellar Soroban Contract ID
+  name: string; // "NexusVault"
+  network: 'testnet' | 'mainnet';
+  rpc_url: string; // "https://soroban-testnet.stellar.org"
+  protocol_version: number; // 22
+  current_wasm_hash: string;
+  admin_address: string; // "G..."
+  treasury_address: string; // "G..."
+  nr_reserve_address: string; // "G..."
+  fee_bps: number;
+  owner_split_pct: number;
+  upgrades: ContractUpgradeEntry[];
+  status: 'ACTIVE' | 'PAUSED' | 'DEPRECATED';
+  deployed_at: string;
+  last_verified_at: string;
+  explorer_url: string;
+}
+
+export interface MongoPlatformTokenDoc {
+  _id?: any;
+  symbol: 'NR';
+  name: string;
+  chain: 'STELLAR';
+  asset_code: 'NR';
+  issuer_address: string;
+  distribution_address: string;
+  initial_mint_amount: number;
+  total_supply_cap: number;
+  mint_tx_hash: string;
+  created_at: string;
+  explorer_url: string;
+}
+
+export interface MongoTokenWithdrawalDoc {
+  _id?: any;
+  id: string; // "wd_UUID"
+  user_id: string;
+  amount_nr: number;
+  destination_stellar_address: string;
+  tx_hash: string;
+  ledger_seq?: number;
+  status: 'CONFIRMED' | 'FAILED';
+  error_message?: string;
+  created_at: string;
+}
+
 export class MongoService {
   private static client: MongoClient | null = null;
   private static dbInstance: Db | null = null;
@@ -342,6 +436,23 @@ export class MongoService {
       await db.collection('user_holdings').createIndex({ user_id: 1 });
       await db.collection('portfolio_events').createIndex({ user_id: 1, created_at: -1 });
       await db.collection('portfolio_events').createIndex({ type: 1, created_at: -1 });
+
+      // 12. Module 4: Platform Treasury & Revenue Ledger (Idempotent)
+      await db.collection('platform_treasury').createIndex({ reference_id: 1, source_type: 1 }, { unique: true });
+      await db.collection('platform_treasury').createIndex({ created_at: -1 });
+      await db.collection('platform_treasury').createIndex({ source_type: 1 });
+
+      // 13. Module 4: Dynamic Platform Configuration
+      await db.collection('platform_config').createIndex({ key: 1 }, { unique: true });
+
+      // 14. Module 4: Smart Contracts & Upgrades
+      await db.collection('platform_contracts').createIndex({ contract_id: 1 }, { unique: true });
+      await db.collection('platform_contracts').createIndex({ network: 1, name: 1 });
+
+      // 15. Module 4: On-Chain Platform Tokens & Withdrawals
+      await db.collection('platform_tokens').createIndex({ symbol: 1, chain: 1 }, { unique: true });
+      await db.collection('token_withdrawals').createIndex({ id: 1 }, { unique: true });
+      await db.collection('token_withdrawals').createIndex({ user_id: 1, created_at: -1 });
 
       console.log('✅ [MongoDB Atlas] Primary Collections & TTL Indexes Initialized');
     } catch (err: any) {
