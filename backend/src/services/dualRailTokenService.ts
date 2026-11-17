@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { Client, Wallet, xrpToDrops, dropsToXrp, convertStringToHex } from 'xrpl';
-import { Horizon, Keypair, TransactionBuilder, Operation, Asset, Memo, Networks } from '@stellar/stellar-sdk';
+import { Horizon, Keypair, TransactionBuilder, Operation, Asset, Memo, Networks, StrKey } from '@stellar/stellar-sdk';
 import { env } from '../config/env.js';
 import {
   MongoService,
@@ -540,6 +540,9 @@ export class DualRailTokenService {
     issuer: string;
     assetCode: string;
     account: string;
+    isValidAddress?: boolean;
+    accountExists?: boolean;
+    error?: string;
   }> {
     const server = new Horizon.Server(
       env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
@@ -547,9 +550,23 @@ export class DualRailTokenService {
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
     const stellarToken = (await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' })) || (await tokensCol.findOne({ chain: 'STELLAR' }));
     const issuer = stellarToken?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC || STELLAR_NR_ISSUER;
+    const cleanAddr = (accountAddress || '').trim();
+
+    if (!cleanAddr || !StrKey.isValidEd25519PublicKey(cleanAddr)) {
+      return {
+        hasTrustline: false,
+        balance: 0,
+        limit: '0',
+        issuer,
+        assetCode,
+        account: cleanAddr,
+        isValidAddress: false,
+        error: 'Invalid Stellar address format or checksum. Stellar public keys must start with "G" and have 56 characters.',
+      };
+    }
 
     try {
-      const account = await server.loadAccount(accountAddress);
+      const account = await server.loadAccount(cleanAddr);
       const match: any = account.balances.find((b: any) => {
         const matchesIssuer = b.asset_issuer === issuer;
         const matchesCode =
@@ -565,7 +582,9 @@ export class DualRailTokenService {
           limit: '0',
           issuer,
           assetCode,
-          account: accountAddress,
+          account: cleanAddr,
+          isValidAddress: true,
+          accountExists: true,
         };
       }
 
@@ -575,18 +594,201 @@ export class DualRailTokenService {
         limit: match.limit || 'unlimited',
         issuer,
         assetCode: match.asset_code,
-        account: accountAddress,
+        account: cleanAddr,
+        isValidAddress: true,
+        accountExists: true,
       };
-    } catch {
+    } catch (err: any) {
+      const is404 = err?.response?.status === 404 || err?.status === 404;
       return {
         hasTrustline: false,
         balance: 0,
         limit: '0',
         issuer,
         assetCode,
-        account: accountAddress,
+        account: cleanAddr,
+        isValidAddress: true,
+        accountExists: !is404,
+        error: is404 ? 'Stellar account not funded on Testnet yet' : (err.message || 'Failed to fetch account'),
       };
     }
+  }
+
+  /**
+   * Prepares unsigned Stellar Transaction XDR to establish a Trustline (change_trust)
+   * for $NXL tokens. Designed for signing via Freighter, Albedo, or client-side signer.
+   */
+  static async prepareStellarTrustlineXdr(
+    sourceAddress: string,
+    assetCode: string = STELLAR_NR_ASSET_CODE
+  ): Promise<{
+    success: boolean;
+    xdr: string;
+    networkPassphrase: string;
+    issuer: string;
+    assetCode: string;
+  }> {
+    const cleanAddr = (sourceAddress || '').trim();
+    if (!StrKey.isValidEd25519PublicKey(cleanAddr)) {
+      throw new Error(`Invalid Stellar address format or checksum: "${cleanAddr}". Stellar public keys must start with "G" and have 56 characters.`);
+    }
+
+    const server = new Horizon.Server(
+      env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
+    );
+    const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
+    const stellarToken = (await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' })) || (await tokensCol.findOne({ chain: 'STELLAR' }));
+    const issuer = stellarToken?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC || STELLAR_NR_ISSUER;
+
+    let sourceAccount;
+    try {
+      sourceAccount = await server.loadAccount(cleanAddr);
+    } catch (err: any) {
+      if (err?.response?.status === 404 || err?.status === 404) {
+        throw new Error(
+          `Stellar Account Not Found: "${cleanAddr}" has not been funded on the Stellar Testnet yet. Please fund it with testnet XLM via Friendbot before establishing a trustline.`
+        );
+      }
+      throw new Error(`Failed to load Stellar account "${cleanAddr}": ${err.message || 'Unknown network error'}`);
+    }
+
+    const baseFee = await server.fetchBaseFee().catch(() => 100);
+    const tx = new TransactionBuilder(sourceAccount, {
+      fee: String(Math.max(baseFee, 100)),
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.changeTrust({
+          asset: new Asset(assetCode, issuer),
+        })
+      )
+      .setTimeout(300)
+      .build();
+
+    return {
+      success: true,
+      xdr: tx.toXDR(),
+      networkPassphrase: Networks.TESTNET,
+      issuer,
+      assetCode,
+    };
+  }
+
+  /**
+   * Submits a signed Stellar transaction XDR directly to the Horizon Testnet network.
+   */
+  static async submitStellarSignedXdr(signedXdr: string): Promise<{
+    success: boolean;
+    txHash: string;
+    ledger: number;
+    explorerUrl: string;
+  }> {
+    const cleanXdr = (signedXdr || '').trim();
+    if (!cleanXdr) {
+      throw new Error('Signed transaction XDR is required');
+    }
+
+    const server = new Horizon.Server(
+      env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
+    );
+
+    const tx = TransactionBuilder.fromXDR(cleanXdr, Networks.TESTNET);
+    const res = await server.submitTransaction(tx);
+    const txHash = res.hash;
+    const ledger = res.ledger || 0;
+    const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+
+    await this.logChainAction({
+      chain: 'STELLAR',
+      action: 'CROSS_CHAIN_BRIDGE',
+      operatorId: 'SYSTEM',
+      referenceId: `trust_${txHash.slice(0, 12)}`,
+      txHash,
+      ledgerSeq: ledger,
+      details: { action: 'change_trust_signed_xdr' },
+    });
+
+    return {
+      success: true,
+      txHash,
+      ledger,
+      explorerUrl,
+    };
+  }
+
+  /**
+   * Directly establishes an on-chain Trustline on Stellar Testnet using a secret key
+   * for developers or automated testing without requiring a browser extension.
+   */
+  static async setStellarTrustlineWithSecret(
+    secretKey: string,
+    assetCode: string = STELLAR_NR_ASSET_CODE
+  ): Promise<{
+    success: boolean;
+    txHash: string;
+    ledger: number;
+    explorerUrl: string;
+  }> {
+    const cleanSecret = (secretKey || '').trim();
+    if (!StrKey.isValidEd25519SecretSeed(cleanSecret)) {
+      throw new Error('Invalid Stellar Secret Key (Seed). Stellar secret seeds must start with "S" and have 56 characters.');
+    }
+
+    const keypair = Keypair.fromSecret(cleanSecret);
+    const server = new Horizon.Server(
+      env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
+    );
+    const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
+    const stellarToken = (await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' })) || (await tokensCol.findOne({ chain: 'STELLAR' }));
+    const issuer = stellarToken?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC || STELLAR_NR_ISSUER;
+
+    let sourceAccount;
+    try {
+      sourceAccount = await server.loadAccount(keypair.publicKey());
+    } catch (err: any) {
+      if (err?.response?.status === 404 || err?.status === 404) {
+        throw new Error(
+          `Stellar Account Not Found: "${keypair.publicKey()}" has not been funded on the Stellar Testnet yet. Please fund it with testnet XLM via Friendbot first.`
+        );
+      }
+      throw err;
+    }
+
+    const baseFee = await server.fetchBaseFee().catch(() => 100);
+    const tx = new TransactionBuilder(sourceAccount, {
+      fee: String(Math.max(baseFee, 100)),
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.changeTrust({
+          asset: new Asset(assetCode, issuer),
+        })
+      )
+      .setTimeout(120)
+      .build();
+
+    tx.sign(keypair);
+    const res = await server.submitTransaction(tx);
+    const txHash = res.hash;
+    const ledger = res.ledger || 0;
+    const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+
+    await this.logChainAction({
+      chain: 'STELLAR',
+      action: 'CROSS_CHAIN_BRIDGE',
+      operatorId: keypair.publicKey(),
+      referenceId: `trust_sec_${txHash.slice(0, 12)}`,
+      txHash,
+      ledgerSeq: ledger,
+      details: { action: 'change_trust_secret', account: keypair.publicKey() },
+    });
+
+    return {
+      success: true,
+      txHash,
+      ledger,
+      explorerUrl,
+    };
   }
 
   /**

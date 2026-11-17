@@ -306,6 +306,63 @@ swapRouter.get('/stellar/trustline-status', async (req: Request, res: Response) 
 });
 
 /**
+ * POST /api/v1/swap/stellar/prepare-trustline-xdr
+ * Prepares unsigned XDR to establish $NXL Trustline via Freighter or Albedo
+ */
+swapRouter.post('/stellar/prepare-trustline-xdr', async (req: Request, res: Response) => {
+  try {
+    const { sourceAddress, assetCode } = req.body || {};
+    if (!sourceAddress) {
+      return res.status(400).json({ success: false, error: 'sourceAddress is required' });
+    }
+    const result = await DualRailTokenService.prepareStellarTrustlineXdr(
+      String(sourceAddress).trim(),
+      assetCode ? String(assetCode).trim() : undefined
+    );
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message || 'Failed to prepare Stellar trustline transaction' });
+  }
+});
+
+/**
+ * POST /api/v1/swap/stellar/submit-xdr
+ * Submits signed XDR to Stellar Horizon Testnet
+ */
+swapRouter.post('/stellar/submit-xdr', async (req: Request, res: Response) => {
+  try {
+    const { signedXdr } = req.body || {};
+    if (!signedXdr) {
+      return res.status(400).json({ success: false, error: 'signedXdr is required' });
+    }
+    const result = await DualRailTokenService.submitStellarSignedXdr(String(signedXdr).trim());
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message || 'Failed to submit transaction to Stellar Horizon' });
+  }
+});
+
+/**
+ * POST /api/v1/swap/stellar/set-trustline-secret
+ * Directly establishes $NXL Trustline on Stellar Testnet using account secret key (dev/testnet)
+ */
+swapRouter.post('/stellar/set-trustline-secret', async (req: Request, res: Response) => {
+  try {
+    const { secretKey, assetCode } = req.body || {};
+    if (!secretKey) {
+      return res.status(400).json({ success: false, error: 'secretKey is required' });
+    }
+    const result = await DualRailTokenService.setStellarTrustlineWithSecret(
+      String(secretKey).trim(),
+      assetCode ? String(assetCode).trim() : undefined
+    );
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message || 'Failed to set Stellar trustline with secret key' });
+  }
+});
+
+/**
  * GET /api/v1/swap/xrpl/trustline-status
  * Checks live XRPL on-chain trustline status for NXL issued currency
  */

@@ -41,6 +41,9 @@ import {
   checkStellarTrustline,
   setGemWalletTrustline,
   setCrossmarkTrustline,
+  setFreighterTrustline,
+  openAlbedoTrustline,
+  setStellarTrustlineSecret,
   claimPendingXrplSwap,
   XrplTrustlineStatus,
   StellarTrustlineStatus,
@@ -140,25 +143,50 @@ export default function SwapPage() {
   const [settingTrustline, setSettingTrustline] = useState(false);
   const [trustlineActionMsg, setTrustlineActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Stellar Trustline State
+  // Stellar Trustline State & Actions
   const [stellarTrustlineStatus, setStellarTrustlineStatus] = useState<StellarTrustlineStatus | null>(null);
   const [checkingStellarTrustline, setCheckingStellarTrustline] = useState(false);
+  const [settingStellarTrustline, setSettingStellarTrustline] = useState(false);
+  const [stellarActionMsg, setStellarActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [stellarSecretInput, setStellarSecretInput] = useState('');
+  const [showStellarSecretBox, setShowStellarSecretBox] = useState(false);
 
-  // Pending swap recovery state (e.g. for user r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt)
-  const [pendingClaimStatus, setPendingClaimStatus] = useState<'idle' | 'checking' | 'ready' | 'claiming' | 'claimed' | 'error'>('idle');
+  // Dedicated constant for user's confirmed XRPL deposit recovery (5 XRP)
+  const XRPL_PENDING_ACCOUNT = 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+  const [pendingAccountTrustline, setPendingAccountTrustline] = useState<XrplTrustlineStatus | null>(null);
+  const [checkingPendingTrustline, setCheckingPendingTrustline] = useState(false);
+  const [pendingClaimStatus, setPendingClaimStatus] = useState<'idle' | 'checking' | 'ready' | 'claiming' | 'claimed' | 'error'>('ready');
   const [pendingClaimData, setPendingClaimData] = useState<{
     txHash: string;
     amountXrp: number;
     amountNxl: number;
     payoutHash?: string;
     explorerUrl?: string;
-  } | null>(null);
+  } | null>({
+    txHash: '66489352D012ED48BF48982A466416BEC38B907C031D10E3ED4206AD881295EB',
+    amountXrp: 5,
+    amountNxl: 4.688037,
+  });
   const [claimError, setClaimError] = useState('');
 
-  // Detect extensions on mount
+  // Check pending account's trustline status on mount & refresh
+  const handleRefreshPendingTrustline = async () => {
+    setCheckingPendingTrustline(true);
+    try {
+      const st = await checkXrplTrustline(XRPL_PENDING_ACCOUNT, 'NXL');
+      setPendingAccountTrustline(st);
+    } catch {
+      // Graceful fallback
+    } finally {
+      setCheckingPendingTrustline(false);
+    }
+  };
+
+  // Detect extensions on mount & check XRPL pending account trustline
   useEffect(() => {
     checkFreighterInstalled().then(setHasFreighter);
     checkGemWalletInstalled().then(setHasGemWallet);
+    handleRefreshPendingTrustline();
   }, []);
 
   // Synchronize session and auto-fill destination wallet based on Swap Mode
@@ -220,16 +248,6 @@ export default function SwapPage() {
         .finally(() => {
           if (!isCancelled) setCheckingTrustline(false);
         });
-
-      // Auto-detect user's 5 XRP deposit for r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt
-      if (destinationAddress === 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt') {
-        setPendingClaimData({
-          txHash: '66489352D012ED48BF48982A466416BEC38B907C031D10E3ED4206AD881295EB',
-          amountXrp: 5,
-          amountNxl: 4.688037,
-        });
-        setPendingClaimStatus('ready');
-      }
     } else {
       setTrustlineStatus(null);
     }
@@ -257,7 +275,7 @@ export default function SwapPage() {
 
   // Manual trigger to re-query XRPL ledger for trustline
   const handleRefreshTrustline = async () => {
-    const target = destinationAddress || 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+    const target = destinationAddress || XRPL_PENDING_ACCOUNT;
     setCheckingTrustline(true);
     setTrustlineActionMsg(null);
     try {
@@ -319,7 +337,7 @@ export default function SwapPage() {
       let pollCount = 0;
       const intervalId = setInterval(async () => {
         pollCount++;
-        const target = destinationAddress || 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+        const target = destinationAddress || XRPL_PENDING_ACCOUNT;
         try {
           const updated = await checkXrplTrustline(target, 'NXL');
           if (updated.hasTrustline) {
@@ -346,15 +364,16 @@ export default function SwapPage() {
     }
   };
 
+  // Claim pending XRPL swap payout to user's verified XRPL account
   const handleClaimPending = async () => {
-    if (!pendingClaimData || !destinationAddress) return;
+    if (!pendingClaimData) return;
     setPendingClaimStatus('claiming');
     setClaimError('');
 
     try {
       const res = await claimPendingXrplSwap({
         depositTxHash: pendingClaimData.txHash,
-        destinationAddress,
+        destinationAddress: XRPL_PENDING_ACCOUNT,
       });
 
       setPendingClaimData((prev) => ({
@@ -367,6 +386,101 @@ export default function SwapPage() {
     } catch (err: any) {
       setClaimError(err.message || 'Failed to claim pending swap payout');
       setPendingClaimStatus('error');
+    }
+  };
+
+  // Stellar Trustline Handlers
+  const handleSetFreighterTrustline = async () => {
+    if (!destinationAddress || !destinationAddress.startsWith('G')) {
+      setStellarActionMsg({
+        type: 'error',
+        text: 'Please enter a valid Stellar destination address (starts with G) first.',
+      });
+      return;
+    }
+    setSettingStellarTrustline(true);
+    setStellarActionMsg(null);
+
+    try {
+      const res = await setFreighterTrustline({
+        accountAddress: destinationAddress,
+        assetCode: 'NXL',
+      });
+
+      setStellarActionMsg({
+        type: 'success',
+        text: `🎉 Stellar Trustline established! Tx: ${res.txHash.slice(0, 10)}... Validating on ledger...`,
+      });
+
+      // Poll ledger to update status
+      let pollCount = 0;
+      const intervalId = setInterval(async () => {
+        pollCount++;
+        try {
+          const updated = await checkStellarTrustline(destinationAddress, 'NXL');
+          if (updated.hasTrustline) {
+            setStellarTrustlineStatus(updated);
+            setStellarActionMsg({
+              type: 'success',
+              text: `🎉 Trustline confirmed on Stellar Testnet! Ready to receive $NXL tokens.`,
+            });
+            clearInterval(intervalId);
+          }
+        } catch {}
+        if (pollCount >= 6) clearInterval(intervalId);
+      }, 2500);
+    } catch (err: any) {
+      setStellarActionMsg({
+        type: 'error',
+        text: err.message || 'Failed to establish Stellar trustline with Freighter',
+      });
+    } finally {
+      setSettingStellarTrustline(false);
+    }
+  };
+
+  const handleOpenAlbedo = () => {
+    openAlbedoTrustline({ assetCode: 'NXL', issuer: STELLAR_NR_ISSUER_PUBLIC });
+    setStellarActionMsg({
+      type: 'success',
+      text: 'Opened Albedo trustline window. Once confirmed in Albedo, click "Re-check Status" below.',
+    });
+  };
+
+  const handleSetStellarTrustlineSecret = async () => {
+    if (!stellarSecretInput.trim()) {
+      setStellarActionMsg({
+        type: 'error',
+        text: 'Please enter your Stellar testnet secret key (starts with S)',
+      });
+      return;
+    }
+    setSettingStellarTrustline(true);
+    setStellarActionMsg(null);
+
+    try {
+      const res = await setStellarTrustlineSecret({
+        secretKey: stellarSecretInput.trim(),
+        assetCode: 'NXL',
+      });
+
+      setStellarActionMsg({
+        type: 'success',
+        text: `🎉 Stellar Trustline confirmed on-chain! Tx: ${res.txHash.slice(0, 10)}...`,
+      });
+      setShowStellarSecretBox(false);
+      setStellarSecretInput('');
+
+      // Refresh status
+      const updated = await checkStellarTrustline(destinationAddress, 'NXL');
+      setStellarTrustlineStatus(updated);
+    } catch (err: any) {
+      setStellarActionMsg({
+        type: 'error',
+        text: err.message || 'Failed to set trustline with secret key',
+      });
+    } finally {
+      setSettingStellarTrustline(false);
     }
   };
 
@@ -913,7 +1027,7 @@ export default function SwapPage() {
                     </span>
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    Found {pendingClaimData.amountXrp} XRP deposited from account <span className="text-[var(--gold)] font-bold">{destinationAddress || 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt'}</span> (Tx: {pendingClaimData.txHash.slice(0, 10)}...). Output due: <strong className="text-emerald-400">{pendingClaimData.amountNxl} $NXL</strong>.
+                    Found {pendingClaimData.amountXrp} XRP deposited from account <span className="text-[var(--gold)] font-bold">{XRPL_PENDING_ACCOUNT}</span> (Tx: {pendingClaimData.txHash.slice(0, 10)}...). Output due: <strong className="text-emerald-400">{pendingClaimData.amountNxl} $NXL</strong>.
                   </p>
                 </div>
               </div>
@@ -921,21 +1035,21 @@ export default function SwapPage() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  disabled={checkingTrustline}
-                  onClick={handleRefreshTrustline}
+                  disabled={checkingPendingTrustline}
+                  onClick={handleRefreshPendingTrustline}
                   className="px-3 py-2.5 rounded-xl nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] hover:text-[var(--gold)] text-xs font-mono flex items-center gap-1.5 cursor-pointer"
                   title="Re-query XRPL ledger for trustline"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${checkingTrustline ? 'animate-spin text-[var(--gold)]' : ''}`} />
-                  <span>{checkingTrustline ? 'Verifying...' : 'Check Status'}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${checkingPendingTrustline ? 'animate-spin text-[var(--gold)]' : ''}`} />
+                  <span>{checkingPendingTrustline ? 'Verifying...' : 'Check Status'}</span>
                 </button>
 
-                {checkingTrustline ? (
+                {checkingPendingTrustline ? (
                   <div className="px-4 py-2.5 rounded-xl nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--muted)] flex items-center gap-2">
                     <div className="w-3.5 h-3.5 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
                     <span>Checking XRPL...</span>
                   </div>
-                ) : !trustlineStatus?.hasTrustline ? (
+                ) : !pendingAccountTrustline?.hasTrustline ? (
                   <button
                     type="button"
                     disabled={settingTrustline}
@@ -1395,8 +1509,18 @@ export default function SwapPage() {
                           </span>
                           <span className="text-[9.5px] text-[var(--muted)]">Issuer: {stellarTrustlineStatus.issuer.slice(0, 6)}...</span>
                         </div>
+                      ) : stellarTrustlineStatus?.isValidAddress === false ? (
+                        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono space-y-1.5">
+                          <div className="flex items-center gap-1.5 font-bold text-rose-400">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>Invalid Stellar Address Checksum</span>
+                          </div>
+                          <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
+                            The Stellar address entered has an invalid checksum or character format. Stellar public keys must start with <strong className="text-white font-mono">&quot;G&quot;</strong> and have exactly 56 characters. Please verify your address.
+                          </p>
+                        </div>
                       ) : (
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2">
+                        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="flex items-center gap-1.5 font-bold text-amber-400">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -1405,22 +1529,82 @@ export default function SwapPage() {
                             <span className="text-[10px] text-[var(--muted)]">Issuer: {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}...</span>
                           </div>
                           <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
-                            Stellar protocol requires account ({destinationAddress.slice(0, 8)}...) to add a Trustline to Issuer {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}... for asset &quot;NXL&quot; before receiving tokens.
+                            Stellar protocol requires account ({destinationAddress.slice(0, 8)}...{destinationAddress.slice(-4)}) to add a Trustline to Issuer {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}... for asset &quot;NXL&quot; before receiving tokens.
                           </p>
-                          <div className="flex items-center gap-2 pt-0.5">
+
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
                             <button
                               type="button"
+                              disabled={settingStellarTrustline}
+                              onClick={handleSetFreighterTrustline}
+                              className="px-3 py-1.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                            >
+                              <Wallet className="w-3.5 h-3.5" />
+                              <span>{settingStellarTrustline ? 'Signing in Freighter...' : 'Enable $NXL Trustline (Freighter)'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleOpenAlbedo}
+                              className="px-3 py-1.5 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-300 hover:bg-sky-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                              title="Zero-install web signer for Stellar"
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                              <span>Add via Albedo (1-Click Web)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={checkingStellarTrustline}
                               onClick={async () => {
                                 setCheckingStellarTrustline(true);
                                 const updated = await checkStellarTrustline(destinationAddress);
                                 setStellarTrustlineStatus(updated);
                                 setCheckingStellarTrustline(false);
                               }}
-                              className="px-2.5 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-xs hover:text-[var(--gold)] transition-colors cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-xs hover:text-[var(--gold)] transition-colors cursor-pointer flex items-center gap-1.5"
                             >
-                              Re-check Status
+                              <RefreshCw className={`w-3.5 h-3.5 ${checkingStellarTrustline ? 'animate-spin' : ''}`} />
+                              <span>Re-check Status</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setShowStellarSecretBox((prev) => !prev)}
+                              className="text-[10px] text-[var(--muted)] hover:text-[var(--gold)] underline cursor-pointer ml-auto"
+                            >
+                              {showStellarSecretBox ? 'Hide Dev Input' : 'Use Testnet Secret'}
                             </button>
                           </div>
+
+                          {showStellarSecretBox && (
+                            <div className="p-2.5 rounded-lg nexus-glass-card border border-[var(--border)] space-y-2 mt-1">
+                              <p className="text-[10px] text-[var(--muted)]">Enter your Stellar Testnet Secret Key (S...) to sign change_trust directly on-chain:</p>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="password"
+                                  value={stellarSecretInput}
+                                  onChange={(e) => setStellarSecretInput(e.target.value)}
+                                  placeholder="S... (56-character Stellar secret seed)"
+                                  className="flex-1 px-2.5 py-1 rounded bg-[var(--surface-solid)] border border-[var(--border)] text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--gold)]"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={settingStellarTrustline || !stellarSecretInput.trim()}
+                                  onClick={handleSetStellarTrustlineSecret}
+                                  className="px-3 py-1 rounded bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs cursor-pointer"
+                                >
+                                  {settingStellarTrustline ? 'Setting...' : 'Submit'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {stellarActionMsg && (
+                            <p className={`text-[10px] ${stellarActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {stellarActionMsg.text}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1888,26 +2072,52 @@ export default function SwapPage() {
                 )}
 
                 {toToken === 'NXL' && destinationAddress.startsWith('G') && !stellarTrustlineStatus?.hasTrustline && (
-                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2">
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2.5">
                     <div className="flex items-center gap-2 font-bold text-amber-400">
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>Stellar Trustline Required Before Deposit</span>
                     </div>
                     <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-                      Stellar account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> has not established a Trustline to Issuer <strong className="text-[var(--gold)]">{STELLAR_NR_ISSUER_PUBLIC}</strong> for asset code &quot;NXL&quot;. Add the trustline in Freighter or LOBSTR before depositing.
+                      Stellar account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> has not established a Trustline to Issuer <strong className="text-[var(--gold)]">{STELLAR_NR_ISSUER_PUBLIC}</strong> for asset code &quot;NXL&quot;. Enable trustline via Freighter or Albedo below before depositing.
                     </p>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setCheckingStellarTrustline(true);
-                        const updated = await checkStellarTrustline(destinationAddress);
-                        setStellarTrustlineStatus(updated);
-                        setCheckingStellarTrustline(false);
-                      }}
-                      className="w-full py-2.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
-                    >
-                      Re-check Stellar Trustline
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={settingStellarTrustline}
+                        onClick={handleSetFreighterTrustline}
+                        className="flex-1 py-2.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                      >
+                        <Wallet className="w-3.5 h-3.5" />
+                        <span>{settingStellarTrustline ? 'Signing in Freighter...' : 'Enable via Freighter'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenAlbedo}
+                        className="px-3.5 py-2.5 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-300 hover:bg-sky-500/30 font-bold text-xs cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>Add via Albedo</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={checkingStellarTrustline}
+                        onClick={async () => {
+                          setCheckingStellarTrustline(true);
+                          const updated = await checkStellarTrustline(destinationAddress);
+                          setStellarTrustlineStatus(updated);
+                          setCheckingStellarTrustline(false);
+                        }}
+                        className="px-3.5 py-2.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-xs text-[var(--foreground)] hover:text-[var(--gold)] transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${checkingStellarTrustline ? 'animate-spin' : ''}`} />
+                        <span>Re-check</span>
+                      </button>
+                    </div>
+                    {stellarActionMsg && (
+                      <p className={`text-[10px] ${stellarActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {stellarActionMsg.text}
+                      </p>
+                    )}
                   </div>
                 )}
 

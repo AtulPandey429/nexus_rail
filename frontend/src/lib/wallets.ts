@@ -615,6 +615,9 @@ export interface StellarTrustlineStatus {
   issuer: string;
   assetCode: string;
   account: string;
+  isValidAddress?: boolean;
+  accountExists?: boolean;
+  error?: string;
 }
 
 /**
@@ -624,19 +627,21 @@ export async function checkStellarTrustline(
   address: string,
   assetCode: string = 'NXL'
 ): Promise<StellarTrustlineStatus> {
-  if (!address || !address.startsWith('G')) {
+  const clean = (address || '').trim();
+  if (!clean || !clean.startsWith('G')) {
     return {
       hasTrustline: false,
       balance: 0,
       limit: '0',
       issuer: STELLAR_NR_ISSUER_PUBLIC,
       assetCode,
-      account: address,
+      account: clean,
+      isValidAddress: false,
     };
   }
   try {
     const res = await fetch(
-      `/api/v1/swap/stellar/trustline-status?address=${encodeURIComponent(address)}&assetCode=${encodeURIComponent(assetCode)}&_t=${Date.now()}`,
+      `/api/v1/swap/stellar/trustline-status?address=${encodeURIComponent(clean)}&assetCode=${encodeURIComponent(assetCode)}&_t=${Date.now()}`,
       { cache: 'no-store' }
     );
     if (res.ok) {
@@ -648,7 +653,10 @@ export async function checkStellarTrustline(
           limit: String(data.limit || '0'),
           issuer: data.issuer || STELLAR_NR_ISSUER_PUBLIC,
           assetCode: data.assetCode || assetCode,
-          account: address,
+          account: clean,
+          isValidAddress: data.isValidAddress !== false,
+          accountExists: data.accountExists !== false,
+          error: data.error,
         };
       }
     }
@@ -661,7 +669,112 @@ export async function checkStellarTrustline(
     limit: '0',
     issuer: STELLAR_NR_ISSUER_PUBLIC,
     assetCode,
-    account: address,
+    account: clean,
+  };
+}
+
+/**
+ * Establishes an on-chain Trustline on Stellar Testnet for $NXL via Freighter extension popup
+ */
+export async function setFreighterTrustline(params: {
+  accountAddress: string;
+  assetCode?: string;
+}): Promise<{ txHash: string; explorerUrl: string }> {
+  const isInstalled = await checkFreighterInstalled();
+  if (!isInstalled && !(window as any).freighter) {
+    throw new Error('Freighter extension not detected in browser. Please install Freighter or use Albedo web signer.');
+  }
+
+  const { accountAddress, assetCode = 'NXL' } = params;
+
+  // 1. Prepare unsigned transaction XDR from authoritative backend Horizon instance
+  const prepRes = await fetch('/api/v1/swap/stellar/prepare-trustline-xdr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceAddress: accountAddress, assetCode }),
+  });
+  const prep = await prepRes.json().catch(() => ({}));
+  if (!prepRes.ok || !prep.success || !prep.xdr) {
+    throw new Error(prep.error || 'Failed to prepare Stellar trustline transaction');
+  }
+
+  // 2. Request signature from user via Freighter browser extension popup
+  const signRes = await signFreighterTransaction(prep.xdr, {
+    networkPassphrase: prep.networkPassphrase || 'Test SDF Network ; September 2015',
+    address: accountAddress,
+  });
+
+  if (signRes?.error) {
+    const errMsg = typeof signRes.error === 'string' ? signRes.error : (signRes.error as any)?.message || 'Transaction signing was rejected in Freighter.';
+    throw new Error(errMsg);
+  }
+
+  const signedTxXdr = (signRes as any)?.signedTxXdr || (signRes as any)?.signedTransaction || (typeof signRes === 'string' ? signRes : '');
+  if (!signedTxXdr) {
+    throw new Error('Freighter did not return a signed transaction.');
+  }
+
+  // 3. Broadcast signed XDR to Stellar Horizon Testnet
+  const submitRes = await fetch('/api/v1/swap/stellar/submit-xdr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signedXdr: signedTxXdr }),
+  });
+  const submitData = await submitRes.json().catch(() => ({}));
+  if (!submitRes.ok || !submitData.success) {
+    throw new Error(submitData.error || 'Failed to broadcast signed transaction to Stellar Testnet');
+  }
+
+  return {
+    txHash: submitData.txHash,
+    explorerUrl: submitData.explorerUrl,
+  };
+}
+
+/**
+ * Opens Albedo web signer for zero-install 1-click trustline creation
+ */
+export function openAlbedoTrustline(params?: {
+  assetCode?: string;
+  issuer?: string;
+}): Window | null {
+  const code = params?.assetCode || STELLAR_NR_ASSET_CODE;
+  const issuer = params?.issuer || STELLAR_NR_ISSUER_PUBLIC;
+  const url = `https://albedo.link/confirm?action=trust&asset_code=${encodeURIComponent(code)}&asset_issuer=${encodeURIComponent(issuer)}&network=testnet`;
+
+  if (typeof window !== 'undefined') {
+    const width = 500;
+    const height = 680;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    return window.open(
+      url,
+      'albedo_trustline',
+      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no`
+    );
+  }
+  return null;
+}
+
+/**
+ * Establishes an on-chain Trustline on Stellar Testnet using a secret key (Dev/testnet one-click)
+ */
+export async function setStellarTrustlineSecret(params: {
+  secretKey: string;
+  assetCode?: string;
+}): Promise<{ txHash: string; explorerUrl: string }> {
+  const res = await fetch('/api/v1/swap/stellar/set-trustline-secret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to establish Stellar trustline with secret');
+  }
+  return {
+    txHash: data.txHash,
+    explorerUrl: data.explorerUrl,
   };
 }
 
