@@ -726,9 +726,9 @@ function CheckoutContent() {
               role="dialog"
               aria-modal="true"
               aria-label="Transaction Safety Center Pre-Flight Review"
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+              className="fixed inset-0 z-[100] grid place-items-center p-3 sm:p-4 overflow-y-auto bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
             >
-              <div className="w-full max-w-xl my-auto py-6">
+              <div className="w-full max-w-lg my-auto py-2">
                 <TransactionSafetyCenter
                   chain={selectedRail === 'XRPL' ? 'xrpl' : 'stellar'}
                   networkName={selectedRail === 'STELLAR' ? 'STELLAR TESTNET' : selectedRail === 'XRPL' ? 'XRPL TESTNET' : 'NEXUSRAIL NATIVE LEDGER'}
