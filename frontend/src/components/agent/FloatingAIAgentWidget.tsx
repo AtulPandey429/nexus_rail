@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { X, ArrowRight, GripHorizontal } from 'lucide-react';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { RobotMascot } from './RobotMascot';
@@ -18,6 +19,8 @@ const WELCOME_MESSAGES = [
 ];
 
 export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgentWidgetProps) {
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/login';
   const { theme } = useTheme();
   const isLight = theme === 'light';
 
@@ -213,7 +216,7 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
         right: `${position.x}px`,
         bottom: `${position.y}px`,
       }}
-      className="fixed z-50 select-none group touch-none"
+      className={`fixed ${isLoginPage ? 'z-40' : 'z-50'} select-none group touch-none`}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
