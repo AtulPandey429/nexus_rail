@@ -283,7 +283,7 @@ export async function payWithFreighter(params: {
   memo?: string;
   orderId?: string;
   authToken?: string;
-}): Promise<{ txHash: string; memoUsed: string }> {
+}): Promise<{ txHash: string; memoUsed: string; sourceAddress?: string; ledger?: number }> {
   const { address } = await connectFreighter();
   if (!address) {
     throw new Error('Freighter wallet authorization was cancelled.');
@@ -349,7 +349,7 @@ export async function payWithFreighter(params: {
                 } catch {
                   // Background reconciler will verify
                 }
-                return { txHash: submitData.txHash, memoUsed: memoToUse };
+                return { txHash: submitData.txHash, memoUsed: memoToUse, sourceAddress: address, ledger: submitData.ledger };
               }
             }
           }
@@ -367,7 +367,7 @@ export async function payWithFreighter(params: {
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 
-  return { txHash: hash, memoUsed: memoToUse };
+  return { txHash: hash, memoUsed: memoToUse, sourceAddress: address };
 }
 
 /**
@@ -377,7 +377,7 @@ export async function payWithGemWallet(params: {
   destination: string;
   amountXrp: string;
   destinationTag?: number;
-}): Promise<{ txHash: string }> {
+}): Promise<{ txHash: string; sourceAddress?: string }> {
   const isInstalled = await checkGemWalletInstalled();
   if (!isInstalled && !(window as any).gemWallet) {
     throw new Error('GemWallet extension not found. Please install GemWallet or use Xaman QR.');
@@ -406,7 +406,12 @@ export async function payWithGemWallet(params: {
       });
 
       if (res?.result?.hash) {
-        return { txHash: res.result.hash };
+        let gemAddress: string | undefined;
+        try {
+          const acc = await getGemAddress();
+          if (acc?.result?.address) gemAddress = acc.result.address;
+        } catch {}
+        return { txHash: res.result.hash, sourceAddress: gemAddress };
       }
       throw new Error('Payment was declined or cancelled in GemWallet.');
     })();

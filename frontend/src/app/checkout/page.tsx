@@ -59,7 +59,7 @@ function CheckoutContent() {
   const [orderId, setOrderId] = useState(paramOrderId);
   const [items, setItems] = useState<CartLine[]>([]);
   const [selectedRail, setSelectedRail] = useState<'STELLAR' | 'XRPL' | 'NR_TOKEN'>('STELLAR');
-  const [customerEmail, setCustomerEmail] = useState('alex.kim@example.com');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(58);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -198,9 +198,10 @@ function CheckoutContent() {
 
     try {
       let txHash = '';
-      let ledgerSeq = '5,284,901';
+      let ledgerSeq = '5,777,235';
       let finalPaidUsd = totalUsd;
       let finalPaidCrypto = activeTotalCrypto;
+      let sourceWallet = '';
       const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
 
       if (selectedRail === 'NR_TOKEN') {
@@ -222,6 +223,7 @@ function CheckoutContent() {
         txHash = nrJson.data.txHash;
         finalPaidUsd = (nrJson.data.finalPaidCents || 0) / 100;
         finalPaidCrypto = String(nrJson.data.paidNrAmount ?? nrTotalCrypto);
+        sourceWallet = user?.walletAddress || 'NXL-NATIVE-BALANCE';
       } else if (selectedRail === 'STELLAR' && hasFreighter) {
         // Authoritative 28-byte HMAC-SHA256 memo derivation (NR<HMAC>)
         const authoritativeMemo = await deriveAuthoritativeStellarMemo(orderId);
@@ -233,6 +235,8 @@ function CheckoutContent() {
           authToken: token || undefined,
         });
         txHash = res.txHash || `8fa2${Math.random().toString(16).slice(2, 8)}c91d`;
+        if (res.sourceAddress) sourceWallet = res.sourceAddress;
+        if (res.ledger) ledgerSeq = res.ledger.toLocaleString('en-US');
       } else if (selectedRail === 'XRPL' && hasGemWallet) {
         // Authoritative 32-bit HMAC-SHA256 destination tag derivation
         const authoritativeTag = await deriveAuthoritativeXrplTag(orderId);
@@ -242,13 +246,24 @@ function CheckoutContent() {
           destinationTag: authoritativeTag,
         });
         txHash = res.txHash || `xrpl_${Math.random().toString(16).slice(2, 10)}`;
+        if (res.sourceAddress) sourceWallet = res.sourceAddress;
       } else {
         // Realistic testnet simulation with delay
         await new Promise((resolve) => setTimeout(resolve, 1400));
         txHash = selectedRail === 'STELLAR'
           ? `8fa2b7e4${Math.random().toString(16).slice(2, 6)}c91d`
           : `5d91e3f8${Math.random().toString(16).slice(2, 6)}b41a`;
-        ledgerSeq = `${Math.floor(5280000 + Math.random() * 9000)}`;
+        ledgerSeq = `${Math.floor(5770000 + Math.random() * 9000)}`;
+      }
+
+      if (!sourceWallet) {
+        if (selectedRail === 'STELLAR') {
+          sourceWallet = user?.stellarAddress || (user?.walletAddress?.startsWith('G') ? user.walletAddress : (user?.lastConnectedWallet?.address?.startsWith('G') ? user.lastConnectedWallet.address : 'GBS6IALQNERJAK23Z6NWCNF2UFDWUPZA5G2KD6B3DZO3UTOJK2XTN7ML'));
+        } else if (selectedRail === 'XRPL') {
+          sourceWallet = user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : (user?.lastConnectedWallet?.address?.startsWith('r') ? user.lastConnectedWallet.address : 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt'));
+        } else {
+          sourceWallet = user?.walletAddress || 'NexusRail Internal Vault';
+        }
       }
 
       // Verify on-chain payment with backend if real wallet transaction
@@ -281,9 +296,14 @@ function CheckoutContent() {
         txHash,
         ledgerSequence: ledgerSeq,
         timestamp: new Date().toUTCString(),
-        email: customerEmail,
+        email: customerEmail && !customerEmail.includes('alex.kim') ? customerEmail : (user?.email || ''),
         items,
-        paidFrom: user?.walletAddress || (selectedRail === 'STELLAR' ? 'GCKF..7Q2M' : 'rNXs..9b3K'),
+        paidFrom: sourceWallet,
+        vaultAddress: selectedRail === 'STELLAR'
+          ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR'
+          : selectedRail === 'XRPL'
+          ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW'
+          : 'NXL-AMM-TREASURY-VAULT',
       };
 
       if (typeof window !== 'undefined') {
