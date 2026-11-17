@@ -140,3 +140,27 @@ All 33/33 integration checks passed in automated test execution:
 - ✅ Double-Entry Wallet Overdraft Prevention
 - ✅ Replay-Proof AI Agent Desk Proposal Locks
 - ✅ Next.js 15 Static Page Generation (26/26 routes compiling cleanly)
+- ✅ XRPL $NXL Trustline Verification & On-Chain Payout Guard
+
+---
+
+## 7. XRPL $NXL Trustline & Settlement Guard
+
+### Problem & XRPL Consensus Rule
+On the XRP Ledger, issued currencies (IOUs) such as `$NXL` (issued by `rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU`) cannot be credited or transferred to any recipient account unless that recipient has submitted a `TrustSet` transaction establishing an active trustline. A direct `Payment` of issued tokens without a trustline fails with `tecNO_LINE` or `tecPATH_DRY`.
+
+### Architecture & Implementation
+1. **Live On-Chain Trustline Discovery:**
+   - Endpoint: `GET /api/v1/swap/xrpl/trustline-status?address=<classicAddress>&currency=NXL`
+   - Real-time `account_lines` lookup against XRPL testnet node.
+2. **On-Chain Payout Dispatcher:**
+   - In `NrTokenService.executeNrSwap` and `DualRailTokenService.withdrawNrToXrplAddress`, destination trustlines are verified prior to broadcasting on-chain payments.
+   - If trustline is verified, distributor vault (`rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp`) broadcasts on-chain payment of `$NXL` with full audit trace.
+   - If trustline is missing, funds are held safely with status `AWAITING_TRUSTLINE` and user internal balance protection.
+3. **Frontend 1-Click Trustline Activation:**
+   - GemWallet: `sendGemSetTrustline({ limitAmount: { currency: 'NXL', issuer, value: '1000000' } })`
+   - Crossmark: `crossmark.signAndSubmitAndWait({ TransactionType: 'TrustSet', ... })`
+   - Trustline gate prevents un-backed deposits and alerts user with immediate action button.
+4. **Pending Swap Recovery & Claim:**
+   - Endpoint: `POST /api/v1/swap/xrpl/claim-pending`
+   - Verifies confirmed on-chain XRP deposits against XRPL ledger, verifies trustline presence, and dispatches `$NXL` tokens on-chain with duplicate claim protection.

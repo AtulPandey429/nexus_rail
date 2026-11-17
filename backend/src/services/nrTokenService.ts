@@ -11,6 +11,7 @@ import {
 import { walletService } from './wallet.js';
 import { getFxQuote } from './market.js';
 import { CrossChainSwapService } from './crossChainSwapService.js';
+import { DualRailTokenService } from './dualRailTokenService.js';
 import { OrderSequenceService } from './orderSequence.js';
 import { settlementEmitter } from './settlementEvents.js';
 import { IpfsService } from './ipfs.js';
@@ -94,12 +95,14 @@ export interface NrSwapOrder {
   platformDepositAddress: string;
   paymentIdentifierType: 'destination_tag' | 'memo_text' | 'internal_ledger';
   paymentIdentifier: string | number;
-  status: 'PENDING_DEPOSIT' | 'DEPOSIT_CONFIRMED' | 'PAYOUT_PROCESSING' | 'COMPLETED' | 'FAILED';
+  status: 'PENDING_DEPOSIT' | 'DEPOSIT_CONFIRMED' | 'PAYOUT_PROCESSING' | 'COMPLETED' | 'AWAITING_TRUSTLINE' | 'FAILED';
   depositTxHash?: string;
   payoutTxHash?: string;
   depositExplorerUrl?: string;
   payoutExplorerUrl?: string;
   journalEntry?: string;
+  trustlineRequired?: boolean;
+  trustlineMessage?: string;
   createdAt: string;
   expiresAt: string;
 }
@@ -716,7 +719,7 @@ export class NrTokenService {
         ? `https://stellar.expert/explorer/testnet/tx/${txHashIngress}`
         : undefined;
 
-    // 4. Egress On-Chain Payout if target is XLM or XRP (after DB debit commit to prevent unbacked payouts)
+    // 4. Egress On-Chain Payout if target is XLM, XRP, or NXL on XRPL
     if (order.toAsset === 'XLM' || order.toAsset === 'XRP') {
       const payout = await CrossChainSwapService.payoutAssetToUser({
         toAsset: order.toAsset,
@@ -726,11 +729,35 @@ export class NrTokenService {
       });
       order.payoutTxHash = payout.txHash;
       order.payoutExplorerUrl = payout.explorerUrl;
+      order.status = 'COMPLETED';
+    } else if (order.toAsset === 'NXL' && isValidClassicAddress(order.userDestinationAddress)) {
+      // User explicitly requested delivery to an external XRPL wallet address
+      const tl = await DualRailTokenService.checkXrplTrustline(order.userDestinationAddress);
+      if (tl.hasTrustline) {
+        try {
+          const payout = await DualRailTokenService.withdrawNrToXrplAddress(
+            userId,
+            order.receiveAmount,
+            order.userDestinationAddress
+          );
+          order.payoutTxHash = payout.txHash;
+          order.payoutExplorerUrl = payout.explorerUrl;
+          order.status = 'COMPLETED';
+        } catch (payoutErr: any) {
+          order.status = 'AWAITING_TRUSTLINE';
+          order.trustlineRequired = true;
+          order.trustlineMessage = payoutErr.message;
+        }
+      } else {
+        order.status = 'AWAITING_TRUSTLINE';
+        order.trustlineRequired = true;
+        order.trustlineMessage = `Recipient account "${order.userDestinationAddress}" has not established an active Trustline to Issuer "${tl.issuer}" for currency "NXL". Your internal balance is safely credited, and on-chain tokens can be claimed once the trustline is enabled.`;
+      }
     } else {
       order.payoutTxHash = `nr_ledger_out_${crypto.randomBytes(12).toString('hex')}`;
+      order.status = 'COMPLETED';
     }
 
-    order.status = 'COMPLETED';
     order.journalEntry = `JE-NR-${Date.now().toString().slice(-4)}`;
     NR_SWAP_ORDERS.set(order.swapId, order);
     RedisCacheService.invalidateCache('products:active').catch(() => {});

@@ -383,13 +383,87 @@ export class DualRailTokenService {
   }
 
   /**
-   * Broadcasts on-chain $NR payout to user's external XRPL address (Xumm / GemWallet)
+   * Checks whether a given XRPL account has an active Trustline established
+   * for the official $NXL token issued by the platform issuer.
+   */
+  static async checkXrplTrustline(
+    accountAddress: string,
+    currency: string = XRPL_NR_CURRENCY_CODE
+  ): Promise<{
+    hasTrustline: boolean;
+    balance: number;
+    limit: string;
+    issuer: string;
+    currency: string;
+    account: string;
+  }> {
+    const client = this.getXrplClient();
+    await client.connect();
+    try {
+      const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
+      const xrplToken = (await tokensCol.findOne({ chain: 'XRPL', symbol: 'NXL' })) || (await tokensCol.findOne({ chain: 'XRPL' }));
+      const issuer = xrplToken?.issuer_address || env.XRPL_NR_ISSUER_ADDRESS || 'rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU';
+      const currencyHex = (xrplToken?.currency_hex || env.XRPL_NR_CURRENCY_HEX || '').toUpperCase();
+
+      const linesRes = await client.request({
+        command: 'account_lines',
+        account: accountAddress,
+        ledger_index: 'validated',
+      });
+
+      const match = linesRes.result.lines.find((line: any) => {
+        const matchesIssuer = line.account === issuer;
+        const lineCurr = (line.currency || '').toUpperCase();
+        const matchesCurrency =
+          lineCurr === currency.toUpperCase() ||
+          (currencyHex && lineCurr === currencyHex) ||
+          lineCurr.startsWith('4E584C') ||
+          lineCurr.startsWith('4E52');
+        return matchesIssuer && matchesCurrency;
+      });
+
+      if (!match || Number(match.limit) <= 0) {
+        return {
+          hasTrustline: false,
+          balance: 0,
+          limit: '0',
+          issuer,
+          currency,
+          account: accountAddress,
+        };
+      }
+
+      return {
+        hasTrustline: true,
+        balance: parseFloat(match.balance || '0'),
+        limit: match.limit,
+        issuer,
+        currency: match.currency,
+        account: accountAddress,
+      };
+    } finally {
+      await client.disconnect();
+    }
+  }
+
+  /**
+   * Broadcasts on-chain $NXL payout to user's external XRPL address (Xaman / GemWallet / Crossmark).
+   * Verifies that recipient account has an active Trustline prior to broadcasting payment.
    */
   static async withdrawNrToXrplAddress(
     userId: string,
     amountNr: number,
     destinationAddress: string
   ): Promise<{ txHash: string; ledgerSeq: number; explorerUrl: string }> {
+    // 1. Verify Trustline before attempting XRPL Payment
+    const trustline = await this.checkXrplTrustline(destinationAddress, XRPL_NR_CURRENCY_CODE);
+    if (!trustline.hasTrustline) {
+      throw new Error(
+        `XRPL Trustline Missing: Recipient account "${destinationAddress}" has not established an active Trustline to Issuer "${trustline.issuer}" for currency "${XRPL_NR_CURRENCY_CODE}". ` +
+        `XRPL consensus protocol strictly requires the recipient account to submit a TrustSet transaction before receiving issued currency tokens.`
+      );
+    }
+
     const client = this.getXrplClient();
     await client.connect();
 
@@ -399,7 +473,7 @@ export class DualRailTokenService {
       if (!distributorSeed) throw new Error('XRPL_HOT_WALLET_SEED is required');
       const distWallet = Wallet.fromSeed(distributorSeed);
 
-      console.log(`🚀 Sending ${amountNr} $NXL on XRPL to ${destinationAddress}...`);
+      console.log(`🚀 Sending ${amountNr} $NXL on XRPL to ${destinationAddress} (Trustline Verified)...`);
       const paymentTx = await client.submitAndWait(
         {
           TransactionType: 'Payment',
@@ -408,11 +482,17 @@ export class DualRailTokenService {
           Amount: {
             currency: XRPL_NR_CURRENCY_CODE,
             issuer: issuerWallet.address,
-            value: String(amountNr),
+            value: Number(amountNr).toFixed(6),
           },
         },
         { wallet: distWallet }
       );
+
+      const meta: any = paymentTx.result.meta;
+      const txResult = typeof meta === 'object' && meta ? meta.TransactionResult : undefined;
+      if (txResult && txResult !== 'tesSUCCESS') {
+        throw new Error(`XRPL Payment failed with result: ${txResult}`);
+      }
 
       const txHash = paymentTx.result.hash;
       const ledgerSeq = paymentTx.result.ledger_index || 0;
@@ -425,8 +505,8 @@ export class DualRailTokenService {
         referenceId: `wd_${crypto.randomUUID().slice(0, 12)}`,
         txHash,
         ledgerSeq,
-        amountPrimary: `${amountNr} NR`,
-        details: { destinationAddress, currencyHex: XRPL_NR_CURRENCY_HEX },
+        amountPrimary: `${amountNr} NXL`,
+        details: { destinationAddress, currency: XRPL_NR_CURRENCY_CODE, issuer: issuerWallet.address },
       });
 
       return { txHash, ledgerSeq, explorerUrl };

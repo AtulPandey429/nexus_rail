@@ -18,9 +18,10 @@ import {
   getAddress as getGemAddress,
   sendPayment as sendGemPayment,
   signMessage as sendGemSignMessage,
+  setTrustline as sendGemSetTrustline,
 } from '@gemwallet/api';
 
-export { sendGemSignMessage };
+export { sendGemSignMessage, sendGemSetTrustline };
 
 declare global {
   interface Window {
@@ -586,4 +587,159 @@ export async function authenticateWalletWithChallenge(params: {
   }
 
   throw new Error('Wallet session could not be established');
+}
+
+// ============================================================================
+// XRPL Trustline Operations for $NXL Dual-Rail Architecture
+// ============================================================================
+
+export const XRPL_NR_ISSUER_ADDRESS = 'rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU';
+export const XRPL_NR_CURRENCY = 'NXL';
+
+export interface XrplTrustlineStatus {
+  hasTrustline: boolean;
+  balance: number;
+  limit: string;
+  issuer: string;
+  currency: string;
+  account: string;
+}
+
+/**
+ * Checks XRPL on-chain trustline status for an account via backend RPC gateway
+ */
+export async function checkXrplTrustline(
+  address: string,
+  currency: string = 'NXL'
+): Promise<XrplTrustlineStatus> {
+  if (!address || !address.startsWith('r')) {
+    return {
+      hasTrustline: false,
+      balance: 0,
+      limit: '0',
+      issuer: XRPL_NR_ISSUER_ADDRESS,
+      currency,
+      account: address,
+    };
+  }
+  try {
+    const res = await fetch(
+      `/api/v1/swap/xrpl/trustline-status?address=${encodeURIComponent(address)}&currency=${encodeURIComponent(currency)}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        return {
+          hasTrustline: Boolean(data.hasTrustline),
+          balance: Number(data.balance || 0),
+          limit: String(data.limit || '0'),
+          issuer: data.issuer || XRPL_NR_ISSUER_ADDRESS,
+          currency: data.currency || currency,
+          account: address,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to query XRPL trustline status:', e);
+  }
+  return {
+    hasTrustline: false,
+    balance: 0,
+    limit: '0',
+    issuer: XRPL_NR_ISSUER_ADDRESS,
+    currency,
+    account: address,
+  };
+}
+
+/**
+ * Creates TrustSet on XRPL using GemWallet extension popup
+ */
+export async function setGemWalletTrustline(params?: {
+  issuer?: string;
+  currency?: string;
+  value?: string;
+}): Promise<{ txHash: string }> {
+  const issuer = params?.issuer || XRPL_NR_ISSUER_ADDRESS;
+  const currency = params?.currency || 'NXL';
+  const value = params?.value || '1000000';
+
+  const isInstalled = await checkGemWalletInstalled();
+  if (!isInstalled && !(window as any).gemWallet) {
+    throw new Error('GemWallet extension not found. Please install GemWallet.');
+  }
+
+  const res = await sendGemSetTrustline({
+    limitAmount: {
+      currency,
+      issuer,
+      value,
+    },
+  });
+
+  if (res?.result?.hash) {
+    return { txHash: res.result.hash };
+  }
+  throw new Error('Trustline creation was cancelled or declined in GemWallet.');
+}
+
+/**
+ * Creates TrustSet on XRPL using Crossmark extension popup
+ */
+export async function setCrossmarkTrustline(params?: {
+  issuer?: string;
+  currency?: string;
+  value?: string;
+}): Promise<{ txHash: string }> {
+  const cm = window.crossmark || window.Crossmark;
+  if (!cm) {
+    throw new Error('Crossmark wallet extension is not installed.');
+  }
+  const issuer = params?.issuer || XRPL_NR_ISSUER_ADDRESS;
+  const currency = params?.currency || 'NXL';
+  const value = params?.value || '1000000';
+
+  const tx = {
+    TransactionType: 'TrustSet',
+    LimitAmount: {
+      currency,
+      issuer,
+      value,
+    },
+  };
+
+  const res = await cm.signAndSubmitAndWait(tx);
+  const hash = res?.response?.data?.resp?.result?.hash;
+  if (hash) {
+    return { txHash: hash };
+  }
+  throw new Error('Trustline creation was cancelled or declined in Crossmark.');
+}
+
+/**
+ * Claims a pending swap deposit once trustline is confirmed
+ */
+export async function claimPendingXrplSwap(params: {
+  depositTxHash: string;
+  destinationAddress: string;
+  swapId?: string;
+}): Promise<{
+  success: boolean;
+  payoutTxHash?: string;
+  explorerUrl?: string;
+  amountNxl?: number;
+  xrpDeposited?: number;
+  alreadyProcessed?: boolean;
+}> {
+  const res = await fetch('/api/v1/swap/xrpl/claim-pending', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to claim pending NXL tokens');
+  }
+  return data;
 }
