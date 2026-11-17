@@ -654,7 +654,7 @@ export class NrTokenService {
               pool_nr_micro: finalQuote.finalPoolNrMicro,
               trigger: order!.toAsset === 'NR' ? 'SWAP_BUY' : 'SWAP_SELL',
               reference_id: order!.swapId,
-              created_at: now,
+              created_at: new Date().toISOString(),
             },
             { session }
           );
@@ -665,6 +665,28 @@ export class NrTokenService {
           await walletService.creditBalance(userId, finalQuote.nrDeltaMicro, 'NR', order!.swapId, session);
         } else if (order!.toAsset === 'USD') {
           await walletService.creditBalance(userId, finalQuote.outputUsdCents, 'USD', order!.swapId, session);
+        }
+
+        // Module 4: Record Swap Spread in Platform Treasury
+        if (finalQuote.feeCents > 0) {
+          const treasuryCol = await MongoService.getCollection<any>('platform_treasury');
+          await treasuryCol.insertOne(
+            {
+              id: `rev_${crypto.randomUUID()}`,
+              source_type: 'SWAP',
+              reference_id: order!.swapId,
+              gross_cents: finalQuote.inputUsdCents,
+              fee_cents: 0,
+              spread_cents: finalQuote.feeCents,
+              gas_arbitrage_cents: 0,
+              total_revenue_cents: finalQuote.feeCents,
+              net_owner_profit_cents: finalQuote.feeOwnerCents,
+              nr_pool_injected_cents: finalQuote.feePoolCents,
+              rail: 'INTERNAL',
+              created_at: new Date().toISOString(),
+            },
+            { session }
+          );
         }
       });
     } finally {

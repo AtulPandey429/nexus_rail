@@ -10,6 +10,7 @@ import {
 import { ProductService } from './products.js';
 import { getExtendedMarketSnapshot, type ExtendedMarketSnapshot } from './market.js';
 import { NrTokenService } from './nrTokenService.js';
+import { TreasuryService } from './treasuryService.js';
 import { walletService } from './wallet.js';
 import type {
   AssetSymbol,
@@ -243,6 +244,31 @@ export class PortfolioService {
       }
     }
 
+    // Module 4: Record Order Routing Fee & Gas Arbitrage in Platform Treasury
+    try {
+      const config = await TreasuryService.getConfig();
+      const isPaidWithNr = order.payment_rail === 'NR';
+      const orderFeeCents = isPaidWithNr ? 0 : Math.round((order.total_cents * config.order_fee_bps) / 10000);
+      const isCryptoRail = ['STELLAR', 'XRPL', 'XLM', 'XRP', 'STELLAR_USDC', 'USDC'].includes(order.payment_rail);
+      const gasArbitrageCents = isCryptoRail ? config.gas_flat_cents : 0;
+
+      if (orderFeeCents > 0 || gasArbitrageCents > 0) {
+        await TreasuryService.recordRevenueEvent(
+          {
+            sourceType: 'ORDER',
+            referenceId: order.order_number,
+            grossCents: order.total_cents,
+            feeCents: orderFeeCents,
+            gasArbitrageCents,
+            rail: (order.payment_rail as any) || 'INTERNAL',
+          },
+          session
+        );
+      }
+    } catch (treasuryErr: any) {
+      console.warn('⚠️ [PortfolioService] Treasury record warning:', treasuryErr.message);
+    }
+
     return true;
   }
 
@@ -450,12 +476,20 @@ export class PortfolioService {
       } catch (err: any) {
         console.warn('⚠️ [PortfolioService] NR debit warning:', err.message);
       }
-      // Virtuous feedback: inject 50% of cashout spread into $NR pool reserve
-      const halfSpread = Math.floor(spreadFeeCents / 2);
-      if (halfSpread > 0) {
-        try {
-          await NrTokenService.injectRevenueToPool(halfSpread, 'CASHOUT_SPREAD');
-        } catch {}
+    }
+
+    // Module 4: Record Cashout Spread Revenue in Platform Treasury (50% Owner Net Profit + 50% NR Pool Injection)
+    if (spreadFeeCents > 0) {
+      try {
+        await TreasuryService.recordRevenueEvent({
+          sourceType: 'SELL_SPREAD',
+          referenceId: eventId,
+          grossCents: grossProceedsCents,
+          spreadCents: spreadFeeCents,
+          rail: 'INTERNAL',
+        });
+      } catch (treasuryErr: any) {
+        console.warn('⚠️ [PortfolioService] Cashout spread treasury warning:', treasuryErr.message);
       }
     }
 
