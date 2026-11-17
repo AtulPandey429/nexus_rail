@@ -65,7 +65,7 @@ export function TransactionSafetyCenter({
   const isStellar = chain === 'stellar';
 
   return (
-    <div className="w-full max-w-xl mx-auto rounded-3xl bg-white dark:bg-[#080A0E] border border-slate-200 dark:border-white/15 p-4 sm:p-6 shadow-2xl text-slate-900 dark:text-[#F0F4F8] font-sans space-y-4 sm:space-y-6 transition-colors duration-200">
+    <div className="w-full max-w-xl mx-auto rounded-3xl bg-white dark:bg-[#080A0E] border border-slate-200 dark:border-white/15 p-4 sm:p-6 shadow-2xl text-slate-900 dark:text-[#F0F4F8] font-sans space-y-4 sm:space-y-6 transition-colors duration-200 max-h-[calc(100vh-3rem)] overflow-y-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10 gap-2">
         <div className="flex items-center gap-2.5">

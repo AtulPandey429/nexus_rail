@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -74,6 +75,22 @@ function CheckoutContent() {
   // Transaction processing state
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll when Pre-Flight Transaction Safety Center modal is active
+  useEffect(() => {
+    if (showSafetyCenter) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [showSafetyCenter]);
 
   // Live Exchange Rates Hook
   const { xlmUsd, xrpUsd, refreshRates } = useLiveExchangeRates();
@@ -702,31 +719,39 @@ function CheckoutContent() {
 
       </main>
 
-      {/* Phase 3: Transaction Safety Center Pre-Flight Modal */}
-      {showSafetyCenter && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-xl">
-            <TransactionSafetyCenter
-              chain={selectedRail === 'XRPL' ? 'xrpl' : 'stellar'}
-              networkName={selectedRail === 'STELLAR' ? 'STELLAR TESTNET' : selectedRail === 'XRPL' ? 'XRPL TESTNET' : 'NEXUSRAIL NATIVE LEDGER'}
-              networkIdentifier={selectedRail === 'STELLAR' ? 'Test SDF Network ; September 2015' : selectedRail === 'XRPL' ? 'wss://s.altnet.rippletest.net:51233' : 'Double-Entry AMM $NXL Settlement'}
-              actionType={selectedRail === 'NR_TOKEN' ? '$NXL Native Token Checkout (10% Off)' : 'Commercial Hardware Settlement'}
-              recipientAddress={selectedRail === 'STELLAR' ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR' : selectedRail === 'XRPL' ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW' : 'NXL-AMM-TREASURY-VAULT'}
-              isMerchantVault={true}
-              destinationTagOrMemo={selectedRail === 'XRPL' ? 104857 : `NXL-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`}
-              assetSymbol={activeToken}
-              isNativeAsset={true}
-              amount={activeTotalCrypto}
-              networkFee={selectedRail === 'NR_TOKEN' ? '$0.00 (Waived)' : `$0.02 (${activeFeeCrypto} ${activeToken})`}
-              isSigning={isProcessing}
-              onConfirmSign={async () => {
-                await handleConfirmAndPay();
-              }}
-              onCancel={() => setShowSafetyCenter(false)}
-            />
-          </div>
-        </div>
-      )}
+      {/* Phase 3: Transaction Safety Center Pre-Flight Modal Portaled to Root Body */}
+      {showSafetyCenter && mounted && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Transaction Safety Center Pre-Flight Review"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+            >
+              <div className="w-full max-w-xl my-auto py-6">
+                <TransactionSafetyCenter
+                  chain={selectedRail === 'XRPL' ? 'xrpl' : 'stellar'}
+                  networkName={selectedRail === 'STELLAR' ? 'STELLAR TESTNET' : selectedRail === 'XRPL' ? 'XRPL TESTNET' : 'NEXUSRAIL NATIVE LEDGER'}
+                  networkIdentifier={selectedRail === 'STELLAR' ? 'Test SDF Network ; September 2015' : selectedRail === 'XRPL' ? 'wss://s.altnet.rippletest.net:51233' : 'Double-Entry AMM $NXL Settlement'}
+                  actionType={selectedRail === 'NR_TOKEN' ? '$NXL Native Token Checkout (10% Off)' : 'Commercial Hardware Settlement'}
+                  recipientAddress={selectedRail === 'STELLAR' ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR' : selectedRail === 'XRPL' ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW' : 'NXL-AMM-TREASURY-VAULT'}
+                  isMerchantVault={true}
+                  destinationTagOrMemo={selectedRail === 'XRPL' ? 104857 : `NXL-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`}
+                  assetSymbol={activeToken}
+                  isNativeAsset={true}
+                  amount={activeTotalCrypto}
+                  networkFee={selectedRail === 'NR_TOKEN' ? '$0.00 (Waived)' : `$0.02 (${activeFeeCrypto} ${activeToken})`}
+                  isSigning={isProcessing}
+                  onConfirmSign={async () => {
+                    await handleConfirmAndPay();
+                  }}
+                  onCancel={() => setShowSafetyCenter(false)}
+                />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {/* Wallet Modal */}
       <WalletConnectModal

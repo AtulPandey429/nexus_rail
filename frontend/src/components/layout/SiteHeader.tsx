@@ -131,7 +131,7 @@ export function SiteHeader() {
   const hasConnectedWallet = Boolean(connectedAddress);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[var(--border)] bg-[var(--surface)] backdrop-blur-xl transition-all duration-200">
+    <header className="w-full border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl transition-all duration-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         {/* Left: Brand Logo & Status */}
         <div className="flex items-center gap-3">
@@ -290,7 +290,7 @@ export function SiteHeader() {
 
       {/* Mobile Glass Dropdown Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-[var(--border)] bg-[var(--surface-solid)]/95 backdrop-blur-2xl p-4 space-y-4 animate-in slide-in-from-top-4 duration-200">
+        <div className="md:hidden border-t border-[var(--border)] bg-[var(--surface-solid)]/95 backdrop-blur-2xl p-4 space-y-4 max-h-[calc(100vh-4rem)] overflow-y-auto animate-in slide-in-from-top-4 duration-200">
           <nav className="flex flex-col space-y-1 font-mono text-xs">
             {filteredNavLinks.map((link) => {
               const active = isLinkActive(link.href);

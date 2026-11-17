@@ -13,6 +13,8 @@ import {
   Box,
   SlidersHorizontal,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   X,
 } from 'lucide-react';
 import {
@@ -72,6 +74,15 @@ export default function StoreCatalogPage() {
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [user, setUser] = useState<SessionUser | null>(null);
+
+  // Pagination State (Max 10 Products Per Page)
+  const PAGE_SIZE = 10;
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedCategory, maxPrice, sortBy]);
 
   // Debounce search query to prevent unnecessary re-filtering and input jank
   useEffect(() => {
@@ -202,6 +213,17 @@ export default function StoreCatalogPage() {
         return score(b) - score(a);
       });
   }, [resolvedCatalog, selectedCategory, debouncedSearch, maxPrice, sortBy]);
+
+  // Pagination Computations
+  const totalProducts = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalProducts / PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalProducts);
+
+  const paginatedProducts = useMemo(() => {
+    return filteredProducts.slice(startIndex, endIndex);
+  }, [filteredProducts, startIndex, endIndex]);
 
   const cartTotalCents = cartLines.reduce((sum, item) => sum + item.priceCents * item.qty, 0);
   const cartTotalItems = cartLines.reduce((sum, item) => sum + item.qty, 0);
@@ -404,13 +426,15 @@ export default function StoreCatalogPage() {
             
             {/* Header info */}
             <div className="flex items-center justify-between text-[11px] font-mono text-[var(--muted)]">
-              <span>{filteredProducts.length < 10 ? `0${filteredProducts.length}` : filteredProducts.length} PRODUCTS</span>
+              <span>
+                SHOWING {totalProducts === 0 ? 0 : startIndex + 1}–{endIndex} OF {totalProducts} PRODUCTS &bull; PAGE {safeCurrentPage}/{totalPages}
+              </span>
               <span>NexusRail Live Catalog / 2026</span>
             </div>
 
             {/* Product & Basket Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-              {filteredProducts.map((product) => {
+              {paginatedProducts.map((product) => {
                 const qty = getItemCartQty(product.sku);
                 const inCart = qty > 0;
                 const isAdding = addingSku === product.sku;
@@ -557,6 +581,91 @@ export default function StoreCatalogPage() {
                 );
               })}
             </div>
+
+            {/* Empty state when 0 products match */}
+            {totalProducts === 0 && (
+              <div className="text-center py-16 px-4 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-3">
+                <Box className="w-10 h-10 mx-auto text-[var(--muted)] opacity-50" />
+                <h3 className="text-sm font-semibold font-mono text-[var(--foreground)]">No products match your filters</h3>
+                <p className="text-xs font-mono text-[var(--muted)] max-w-sm mx-auto">
+                  Try clearing your search query or broadening the category and price range.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory('all');
+                    setSearchQuery('');
+                    setMaxPrice(600);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-[var(--gold)] text-black font-mono text-xs font-bold hover:bg-[var(--gold-bright)] transition-colors mt-2"
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            )}
+
+            {/* Pagination Controls (Max 10 Products Per Page) */}
+            {totalPages > 1 && (
+              <div className="pt-6 border-t border-[var(--border)] flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-xs font-mono text-[var(--muted)]">
+                  Showing <span className="text-[var(--foreground)] font-semibold">{startIndex + 1}</span> to{' '}
+                  <span className="text-[var(--foreground)] font-semibold">{endIndex}</span> of{' '}
+                  <span className="text-[var(--foreground)] font-semibold">{totalProducts}</span> products
+                </div>
+
+                <div className="flex items-center gap-1.5 font-mono text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.max(1, p - 1));
+                      window.scrollTo({ top: 260, behavior: 'smooth' });
+                    }}
+                    disabled={safeCurrentPage === 1}
+                    className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--border-highlight)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Prev</span>
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                    const isActive = pageNum === safeCurrentPage;
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => {
+                          setCurrentPage(pageNum);
+                          window.scrollTo({ top: 260, behavior: 'smooth' });
+                        }}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono text-xs font-semibold transition-all ${
+                          isActive
+                            ? 'bg-[var(--gold)] text-black shadow-md shadow-[var(--gold)]/20 font-bold'
+                            : 'nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--border-highlight)]'
+                        }`}
+                        aria-current={isActive ? 'page' : undefined}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.min(totalPages, p + 1));
+                      window.scrollTo({ top: 260, behavior: 'smooth' });
+                    }}
+                    disabled={safeCurrentPage === totalPages}
+                    className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--border-highlight)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all"
+                    aria-label="Next page"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

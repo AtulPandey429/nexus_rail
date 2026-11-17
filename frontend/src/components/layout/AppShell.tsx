@@ -31,13 +31,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Subtle Micro-Grid Texture */}
       <div className="fixed inset-0 bg-[radial-gradient(var(--border)_1px,transparent_1px)] [background-size:28px_28px] opacity-20 pointer-events-none z-0" />
 
-      <div className="print:hidden sticky top-0 z-50">
+      <div className="print:hidden fixed top-0 inset-x-0 z-50">
         <SiteHeader />
       </div>
+      <div className="h-16 shrink-0 print:hidden" aria-hidden="true" />
 
       <div className={`flex-1 w-full relative z-10 ${agentOpen ? 'pointer-events-none select-none overflow-hidden max-h-[calc(100vh-4rem)]' : ''}`}>{children}</div>
 
-      <div className="print:hidden relative z-30">
+      <div className="print:hidden relative z-10">
         <SiteFooter />
       </div>
 
