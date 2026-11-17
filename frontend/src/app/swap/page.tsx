@@ -93,8 +93,8 @@ export default function SwapPage() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
-  // User destination address on the target ledger
-  const [destinationAddress, setDestinationAddress] = useState('');
+  // User destination address on the target ledger (defaults to user's verified XRPL testnet account)
+  const [destinationAddress, setDestinationAddress] = useState('r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt');
 
   // Wallet extension detection
   const [hasFreighter, setHasFreighter] = useState(false);
@@ -169,13 +169,17 @@ export default function SwapPage() {
       if (u) {
         if (swapMode === 'same_chain') {
           if (fromToken === 'XRP' || toToken === 'XRP') {
-            const xrplAddr = u.xrplAddress || (u.walletAddress?.startsWith('r') ? u.walletAddress : 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp');
-            setDestinationAddress(xrplAddr);
-            setTargetChain('XRPL');
+            const xrplAddr = u.xrplAddress || (u.walletAddress?.startsWith('r') ? u.walletAddress : '');
+            if (xrplAddr) {
+              setDestinationAddress(xrplAddr);
+              setTargetChain('XRPL');
+            }
           } else if (fromToken === 'XLM' || toToken === 'XLM') {
-            const stellarAddr = u.stellarAddress || (u.walletAddress?.startsWith('G') ? u.walletAddress : 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC');
-            setDestinationAddress(stellarAddr);
-            setTargetChain('STELLAR');
+            const stellarAddr = u.stellarAddress || (u.walletAddress?.startsWith('G') ? u.walletAddress : '');
+            if (stellarAddr) {
+              setDestinationAddress(stellarAddr);
+              setTargetChain('STELLAR');
+            }
           } else if (toToken === 'NXL') {
             const preferred = u.xrplAddress || (u.walletAddress?.startsWith('r') ? u.walletAddress : (u.stellarAddress || ''));
             if (preferred) setDestinationAddress(preferred);
@@ -202,12 +206,20 @@ export default function SwapPage() {
 
   // Check on-chain Trustline status on destination address (XRPL & Stellar)
   useEffect(() => {
+    let isCancelled = false;
+
     if (destinationAddress && destinationAddress.startsWith('r')) {
       setCheckingTrustline(true);
       checkXrplTrustline(destinationAddress, 'NXL')
-        .then((st) => setTrustlineStatus(st))
-        .catch(() => setTrustlineStatus(null))
-        .finally(() => setCheckingTrustline(false));
+        .then((st) => {
+          if (!isCancelled) setTrustlineStatus(st);
+        })
+        .catch(() => {
+          if (!isCancelled) setTrustlineStatus(null);
+        })
+        .finally(() => {
+          if (!isCancelled) setCheckingTrustline(false);
+        });
 
       // Auto-detect user's 5 XRP deposit for r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt
       if (destinationAddress === 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt') {
@@ -225,13 +237,52 @@ export default function SwapPage() {
     if (destinationAddress && destinationAddress.startsWith('G')) {
       setCheckingStellarTrustline(true);
       checkStellarTrustline(destinationAddress, 'NXL')
-        .then((st) => setStellarTrustlineStatus(st))
-        .catch(() => setStellarTrustlineStatus(null))
-        .finally(() => setCheckingStellarTrustline(false));
+        .then((st) => {
+          if (!isCancelled) setStellarTrustlineStatus(st);
+        })
+        .catch(() => {
+          if (!isCancelled) setStellarTrustlineStatus(null);
+        })
+        .finally(() => {
+          if (!isCancelled) setCheckingStellarTrustline(false);
+        });
     } else {
       setStellarTrustlineStatus(null);
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [destinationAddress, toToken, targetChain, swapMode]);
+
+  // Manual trigger to re-query XRPL ledger for trustline
+  const handleRefreshTrustline = async () => {
+    const target = destinationAddress || 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+    setCheckingTrustline(true);
+    setTrustlineActionMsg(null);
+    try {
+      const updated = await checkXrplTrustline(target, 'NXL');
+      setTrustlineStatus(updated);
+      if (updated.hasTrustline) {
+        setTrustlineActionMsg({
+          type: 'success',
+          text: `Verified on-chain: $NXL Trustline active! (Limit: ${Number(updated.limit).toLocaleString()} NXL, Balance: ${updated.balance} NXL)`,
+        });
+      } else {
+        setTrustlineActionMsg({
+          type: 'error',
+          text: `Account ${target} does not have a verified trustline on XRPL testnet yet.`,
+        });
+      }
+    } catch (err: any) {
+      setTrustlineActionMsg({
+        type: 'error',
+        text: err.message || 'Failed to check XRPL trustline',
+      });
+    } finally {
+      setCheckingTrustline(false);
+    }
+  };
 
   const handleSetTrustline = async () => {
     setSettingTrustline(true);
@@ -261,15 +312,30 @@ export default function SwapPage() {
 
       setTrustlineActionMsg({
         type: 'success',
-        text: `Trustline created on-chain! Tx: ${txHash.slice(0, 10)}... (Refreshing...)`,
+        text: `TrustSet broadcasted! Tx: ${txHash.slice(0, 10)}... Validating on XRPL consensus ledger...`,
       });
 
-      setTimeout(async () => {
-        if (destinationAddress) {
-          const updated = await checkXrplTrustline(destinationAddress);
-          setTrustlineStatus(updated);
+      // Poll every 2.5 seconds for ledger validation (up to 8 times = 20s)
+      let pollCount = 0;
+      const intervalId = setInterval(async () => {
+        pollCount++;
+        const target = destinationAddress || 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+        try {
+          const updated = await checkXrplTrustline(target, 'NXL');
+          if (updated.hasTrustline) {
+            setTrustlineStatus(updated);
+            setTrustlineActionMsg({
+              type: 'success',
+              text: `🎉 Trustline confirmed on XRPL! Limit: ${Number(updated.limit).toLocaleString()} NXL. Ready to claim payout!`,
+            });
+            clearInterval(intervalId);
+          }
+        } catch {}
+
+        if (pollCount >= 8) {
+          clearInterval(intervalId);
         }
-      }, 3000);
+      }, 2500);
     } catch (err: any) {
       setTrustlineActionMsg({
         type: 'error',
@@ -853,14 +919,30 @@ export default function SwapPage() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                {!trustlineStatus?.hasTrustline ? (
+                <button
+                  type="button"
+                  disabled={checkingTrustline}
+                  onClick={handleRefreshTrustline}
+                  className="px-3 py-2.5 rounded-xl nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] hover:text-[var(--gold)] text-xs font-mono flex items-center gap-1.5 cursor-pointer"
+                  title="Re-query XRPL ledger for trustline"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${checkingTrustline ? 'animate-spin text-[var(--gold)]' : ''}`} />
+                  <span>{checkingTrustline ? 'Verifying...' : 'Check Status'}</span>
+                </button>
+
+                {checkingTrustline ? (
+                  <div className="px-4 py-2.5 rounded-xl nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--muted)] flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
+                    <span>Checking XRPL...</span>
+                  </div>
+                ) : !trustlineStatus?.hasTrustline ? (
                   <button
                     type="button"
                     disabled={settingTrustline}
                     onClick={handleSetTrustline}
                     className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
                   >
-                    {settingTrustline ? 'Setting Trustline...' : 'Step 1: Set $NXL Trustline'}
+                    {settingTrustline ? 'Approving TrustSet...' : 'Step 1: Set $NXL Trustline'}
                   </button>
                 ) : pendingClaimStatus === 'claimed' ? (
                   <a
@@ -877,7 +959,7 @@ export default function SwapPage() {
                     type="button"
                     disabled={pendingClaimStatus === 'claiming'}
                     onClick={handleClaimPending}
-                    className="px-4 py-2.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-[var(--gold)]/20"
+                    className="px-4 py-2.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-[var(--gold)]/20 animate-pulse"
                   >
                     {pendingClaimStatus === 'claiming' ? 'Disbursing NXL...' : `Step 2: Claim ${pendingClaimData.amountNxl} NXL`}
                   </button>
@@ -1139,21 +1221,33 @@ export default function SwapPage() {
                         </button>
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-[var(--surface-solid)] border border-[var(--border)] flex items-center justify-between">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                          <span className="text-xs font-mono text-[var(--gold-bright)] font-semibold truncate max-w-[260px]">
-                            {destinationAddress || (user?.walletAddress || 'No wallet connected')}
-                          </span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[9.5px] font-mono text-[var(--gold-bright)] font-bold shrink-0">
-                          SAME LEDGER
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={destinationAddress}
+                          onChange={(e) => {
+                            const val = e.target.value.trim();
+                            setDestinationAddress(val);
+                            if (val.startsWith('r')) localStorage.setItem('nexus_xrpl_address', val);
+                          }}
+                          placeholder={fromToken === 'XRP' || toToken === 'XRP' ? 'Your XRPL r... address (e.g. r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt)' : 'Your Stellar G... address'}
+                          className="flex-1 px-3 py-2 rounded-xl bg-[var(--surface-solid)] border border-[var(--border)] text-xs font-mono text-[var(--gold-bright)] placeholder-[var(--muted)]/40 focus:border-[var(--border-focus)] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={checkingTrustline}
+                          onClick={handleRefreshTrustline}
+                          className="px-3 py-2 rounded-xl nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--gold)] hover:underline flex items-center gap-1.5 shrink-0 cursor-pointer"
+                          title="Verify trustline on XRPL ledger"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${checkingTrustline ? 'animate-spin' : ''}`} />
+                          <span>{checkingTrustline ? 'Verifying...' : 'Check'}</span>
+                        </button>
                       </div>
 
                       <p className="text-[10.5px] font-mono text-[var(--muted)]">
                         {toToken === 'NXL'
-                          ? `Both tokens settle on ${fromToken === 'XRP' || destinationAddress.startsWith('r') ? 'XRPL Testnet' : 'Stellar Testnet'}. $NXL tokens will disburse directly to your connected wallet.`
+                          ? `Both tokens settle on ${fromToken === 'XRP' || destinationAddress.startsWith('r') ? 'XRPL Testnet' : 'Stellar Testnet'}. $NXL tokens will disburse directly to this account.`
                           : `Direct same-ledger swap. Payout will disburse directly to your connected wallet address.`}
                       </p>
                     </>
@@ -1245,37 +1339,34 @@ export default function SwapPage() {
                           <span className="text-[9.5px] text-[var(--muted)]">Issuer: {trustlineStatus.issuer.slice(0, 6)}...</span>
                         </div>
                       ) : (
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2">
+                        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="flex items-center gap-1.5 font-bold text-amber-400">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                               <span>XRPL Trustline Required</span>
                             </span>
-                            <span className="text-[10px] text-[var(--muted)]">Issuer: {XRPL_NR_ISSUER_ADDRESS.slice(0, 8)}...</span>
+                            <span className="text-[10px] text-[var(--muted)]">Account: {destinationAddress.slice(0, 6)}...{destinationAddress.slice(-4)}</span>
                           </div>
                           <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
-                            XRPL consensus protocol strictly requires your wallet to create a trustline before receiving issued tokens.
+                            XRPL consensus protocol strictly requires account <strong className="text-[var(--gold)]">{destinationAddress}</strong> to create a trustline to issuer <strong className="text-[var(--foreground)]">{XRPL_NR_ISSUER_ADDRESS.slice(0, 8)}...</strong> before receiving $NXL tokens.
                           </p>
                           <div className="flex items-center gap-2 pt-0.5">
                             <button
                               type="button"
                               disabled={settingTrustline}
                               onClick={handleSetTrustline}
-                              className="px-3 py-1.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                              className="px-3.5 py-1.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
                             >
                               {settingTrustline ? 'Approving TrustSet...' : 'Enable $NXL Trustline'}
                             </button>
                             <button
                               type="button"
-                              onClick={async () => {
-                                setCheckingTrustline(true);
-                                const updated = await checkXrplTrustline(destinationAddress);
-                                setTrustlineStatus(updated);
-                                setCheckingTrustline(false);
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-xs hover:text-[var(--gold)] transition-colors cursor-pointer"
+                              disabled={checkingTrustline}
+                              onClick={handleRefreshTrustline}
+                              className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-xs hover:text-[var(--gold)] transition-colors cursor-pointer flex items-center gap-1.5"
                             >
-                              Re-check
+                              <RefreshCw className={`w-3.5 h-3.5 ${checkingTrustline ? 'animate-spin' : ''}`} />
+                              <span>Re-check Ledger</span>
                             </button>
                           </div>
                           {trustlineActionMsg && (
@@ -1769,14 +1860,25 @@ export default function SwapPage() {
                     <p className="text-[11px] text-[var(--muted)] leading-relaxed">
                       Account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> does not have an active Trustline to Issuer <strong className="text-[var(--gold)]">{XRPL_NR_ISSUER_ADDRESS}</strong>. Enable trustline first to ensure your $NXL tokens are safely delivered to your wallet.
                     </p>
-                    <button
-                      type="button"
-                      disabled={settingTrustline}
-                      onClick={handleSetTrustline}
-                      className="w-full py-2.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
-                    >
-                      {settingTrustline ? 'Approving in Wallet...' : 'Enable $NXL Trustline (GemWallet / Crossmark)'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={settingTrustline}
+                        onClick={handleSetTrustline}
+                        className="flex-1 py-2.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                      >
+                        {settingTrustline ? 'Approving in Wallet...' : 'Enable $NXL Trustline (GemWallet / Crossmark)'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={checkingTrustline}
+                        onClick={handleRefreshTrustline}
+                        className="px-3.5 py-2.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--foreground)] hover:text-[var(--gold)] transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${checkingTrustline ? 'animate-spin' : ''}`} />
+                        <span>Re-check</span>
+                      </button>
+                    </div>
                     {trustlineActionMsg && (
                       <p className={`text-[10px] ${trustlineActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {trustlineActionMsg.text}

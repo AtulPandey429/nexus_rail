@@ -636,7 +636,8 @@ export async function checkStellarTrustline(
   }
   try {
     const res = await fetch(
-      `/api/v1/swap/stellar/trustline-status?address=${encodeURIComponent(address)}&assetCode=${encodeURIComponent(assetCode)}`
+      `/api/v1/swap/stellar/trustline-status?address=${encodeURIComponent(address)}&assetCode=${encodeURIComponent(assetCode)}&_t=${Date.now()}`,
+      { cache: 'no-store' }
     );
     if (res.ok) {
       const data = await res.json();
@@ -683,7 +684,8 @@ export async function checkXrplTrustline(
   }
   try {
     const res = await fetch(
-      `/api/v1/swap/xrpl/trustline-status?address=${encodeURIComponent(address)}&currency=${encodeURIComponent(currency)}`
+      `/api/v1/swap/xrpl/trustline-status?address=${encodeURIComponent(address)}&currency=${encodeURIComponent(currency)}&_t=${Date.now()}`,
+      { cache: 'no-store' }
     );
     if (res.ok) {
       const data = await res.json();
