@@ -28,6 +28,7 @@ function LoginFormContent() {
   const [errorMsg, setErrorMsg] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [selectedNetwork, setSelectedNetwork] = useState<'xrpl' | 'stellar'>('xrpl');
 
   const handleSuccess = (user: any, token: string) => {
     localStorage.setItem('nexus_token', token);
@@ -185,15 +186,19 @@ function LoginFormContent() {
         }}
       />
 
-      {/* Wallet Modal */}
+      {/* Wallet Modal with Selected Network Priority */}
       <WalletConnectModal
         isOpen={isWalletModalOpen}
+        initialNetwork={selectedNetwork}
         onClose={() => setIsWalletModalOpen(false)}
         onConnected={(acc) => {
           handleSuccess(
             {
               id: `usr_${acc.walletName.toLowerCase()}_${acc.address.slice(0, 8)}`,
               walletAddress: acc.address,
+              xrplAddress: acc.chain === 'xrpl' ? acc.address : undefined,
+              stellarAddress: acc.chain === 'stellar' ? acc.address : undefined,
+              primaryChain: acc.chain,
               role: 'user',
               email: `${acc.walletName.toLowerCase()}_${acc.address.slice(-4)}@nexusrail.dev`,
             },
@@ -290,19 +295,63 @@ function LoginFormContent() {
               </div>
             )}
 
-            {/* PRIMARY ACTION: Connect a Web3 Wallet */}
+            {/* Primary Blockchain Network Selection */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-mono tracking-wider uppercase text-[var(--gold)] font-semibold flex items-center justify-between">
+                <span>Choose Your Preferred Blockchain</span>
+                <span className="text-[var(--muted)] normal-case font-normal text-[10px]">Dual-Rail Active</span>
+              </label>
+
+              <div className="grid grid-cols-2 p-1 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedNetwork('xrpl')}
+                  className={`py-2 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    selectedNetwork === 'xrpl'
+                      ? 'bg-[#0081F2]/20 border border-[#0081F2]/50 text-[#0081F2] shadow-sm'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#0081F2]" />
+                  <span>XRP Ledger</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedNetwork('stellar')}
+                  className={`py-2 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    selectedNetwork === 'stellar'
+                      ? 'bg-[#00E5FF]/20 border border-[#00E5FF]/50 text-[#00E5FF] shadow-sm'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
+                  <span>Stellar Network</span>
+                </button>
+              </div>
+            </div>
+
+            {/* PRIMARY ACTION: Connect a Web3 Wallet for Selected Chain */}
             <div className="space-y-2">
               <button
                 type="button"
                 onClick={() => setIsWalletModalOpen(true)}
-                className="w-full py-4 px-6 rounded-2xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-[#08090C] font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-[var(--gold)]/20 hover:shadow-xl hover:scale-[1.01] active:scale-95 cursor-pointer"
+                className={`w-full py-4 px-6 rounded-2xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-95 cursor-pointer ${
+                  selectedNetwork === 'xrpl'
+                    ? 'bg-[#0081F2] hover:bg-[#1a90ff] text-white shadow-[#0081F2]/20'
+                    : 'bg-[#00E5FF] hover:bg-[#33ebff] text-black shadow-[#00E5FF]/20'
+                }`}
               >
                 <Wallet className="w-4 h-4" />
-                <span>Connect a wallet</span>
+                <span>
+                  Connect {selectedNetwork === 'xrpl' ? 'XRP Ledger (XRPL)' : 'Stellar Network'} Wallet
+                </span>
               </button>
 
               <p className="text-[11px] font-mono text-center text-[var(--muted)]">
-                Stellar (Freighter · Albedo) &bull; XRPL (GemWallet · Xaman)
+                {selectedNetwork === 'xrpl'
+                  ? 'GemWallet · Crossmark · Xaman'
+                  : 'Varial / Freighter · Albedo Web · LOBSTR'}
               </p>
             </div>
 

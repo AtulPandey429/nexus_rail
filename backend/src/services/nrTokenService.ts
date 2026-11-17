@@ -738,7 +738,8 @@ export class NrTokenService {
           const payout = await DualRailTokenService.withdrawNrToXrplAddress(
             userId,
             order.receiveAmount,
-            order.userDestinationAddress
+            order.userDestinationAddress,
+            { skipTrustlineCheck: true, verifiedIssuer: tl.issuer }
           );
           order.payoutTxHash = payout.txHash;
           order.payoutExplorerUrl = payout.explorerUrl;
@@ -761,7 +762,8 @@ export class NrTokenService {
           const payout = await DualRailTokenService.withdrawNrToStellarAddress(
             userId,
             order.receiveAmount,
-            order.userDestinationAddress
+            order.userDestinationAddress,
+            { skipTrustlineCheck: true, verifiedIssuer: tl.issuer }
           );
           order.payoutTxHash = payout.txHash;
           order.payoutExplorerUrl = payout.explorerUrl;

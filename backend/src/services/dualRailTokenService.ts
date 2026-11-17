@@ -464,15 +464,20 @@ export class DualRailTokenService {
   static async withdrawNrToXrplAddress(
     userId: string,
     amountNr: number,
-    destinationAddress: string
+    destinationAddress: string,
+    options?: { skipTrustlineCheck?: boolean; verifiedIssuer?: string }
   ): Promise<{ txHash: string; ledgerSeq: number; explorerUrl: string }> {
-    // 1. Verify Trustline before attempting XRPL Payment
-    const trustline = await this.checkXrplTrustline(destinationAddress, XRPL_NR_CURRENCY_CODE);
-    if (!trustline.hasTrustline) {
-      throw new Error(
-        `XRPL Trustline Missing: Recipient account "${destinationAddress}" has not established an active Trustline to Issuer "${trustline.issuer}" for currency "${XRPL_NR_CURRENCY_CODE}". ` +
-        `XRPL consensus protocol strictly requires the recipient account to submit a TrustSet transaction before receiving issued currency tokens.`
-      );
+    let issuerAddr = options?.verifiedIssuer;
+    if (!options?.skipTrustlineCheck) {
+      // 1. Verify Trustline before attempting XRPL Payment
+      const trustline = await this.checkXrplTrustline(destinationAddress, XRPL_NR_CURRENCY_CODE);
+      if (!trustline.hasTrustline) {
+        throw new Error(
+          `XRPL Trustline Missing: Recipient account "${destinationAddress}" has not established an active Trustline to Issuer "${trustline.issuer}" for currency "${XRPL_NR_CURRENCY_CODE}". ` +
+          `XRPL consensus protocol strictly requires the recipient account to submit a TrustSet transaction before receiving issued currency tokens.`
+        );
+      }
+      issuerAddr = trustline.issuer;
     }
 
     const client = this.getXrplClient();
@@ -798,7 +803,8 @@ export class DualRailTokenService {
   static async withdrawNrToStellarAddress(
     userId: string,
     amountNr: number,
-    destinationAddress: string
+    destinationAddress: string,
+    options?: { skipTrustlineCheck?: boolean; verifiedIssuer?: string }
   ): Promise<{ txHash: string; ledgerSeq: number; explorerUrl: string }> {
     const server = new Horizon.Server(
       env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
@@ -806,16 +812,25 @@ export class DualRailTokenService {
     const distributorSecret = env.STELLAR_HOT_WALLET_SECRET || 'SDVE7PYD2TRLASLMZUNYXGPDEMNQUJ4KXGCSJTXRBRJOZ5K36P3DJWBP';
     const distKey = Keypair.fromSecret(distributorSecret);
 
-    // Verify trustline on Stellar destination account
-    const trustline = await this.checkStellarTrustline(destinationAddress, STELLAR_NR_ASSET_CODE);
-    if (!trustline.hasTrustline) {
-      throw new Error(
-        `Stellar Trustline Missing: Recipient account "${destinationAddress}" has not established an active Trustline to Issuer "${trustline.issuer}" for asset "${STELLAR_NR_ASSET_CODE}". Please add the trustline in Freighter/LOBSTR first.`
-      );
+    let issuer = options?.verifiedIssuer;
+    if (!options?.skipTrustlineCheck) {
+      // Verify trustline on Stellar destination account
+      const trustline = await this.checkStellarTrustline(destinationAddress, STELLAR_NR_ASSET_CODE);
+      if (!trustline.hasTrustline) {
+        throw new Error(
+          `Stellar Trustline Missing: Recipient account "${destinationAddress}" has not established an active Trustline to Issuer "${trustline.issuer}" for asset "${STELLAR_NR_ASSET_CODE}". Please add the trustline in Freighter/LOBSTR first.`
+        );
+      }
+      issuer = trustline.issuer;
+    }
+    if (!issuer) {
+      const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
+      const stellarToken = (await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' })) || (await tokensCol.findOne({ chain: 'STELLAR' }));
+      issuer = stellarToken?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC || STELLAR_NR_ISSUER;
     }
 
     const distAccount = await server.loadAccount(distKey.publicKey());
-    const asset = new Asset(STELLAR_NR_ASSET_CODE, trustline.issuer);
+    const asset = new Asset(STELLAR_NR_ASSET_CODE, issuer);
 
     const tx = new TransactionBuilder(distAccount, {
       fee: '100',
@@ -846,7 +861,7 @@ export class DualRailTokenService {
       txHash,
       ledgerSeq,
       amountPrimary: `${amountNr} NXL`,
-      details: { destinationAddress, assetCode: STELLAR_NR_ASSET_CODE, issuer: trustline.issuer },
+      details: { destinationAddress, assetCode: STELLAR_NR_ASSET_CODE, issuer },
     });
 
     return { txHash, ledgerSeq, explorerUrl };

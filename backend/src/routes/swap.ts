@@ -496,6 +496,59 @@ swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/swap/history
+ * Returns real on-chain cross-chain bridge logs and swap orders for the authenticated user
+ * or specified destination/source address. ZERO mock data.
+ */
+swapRouter.get('/history', async (req: Request, res: Response) => {
+  try {
+    const address = String(req.query.address || '').trim();
+    const userId = extractOptionalUserId(req);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+
+    const logsCol = await MongoService.getCollection<any>('platform_chain_logs');
+
+    // Build query filter
+    const query: any = { action: 'CROSS_CHAIN_BRIDGE' };
+    if (address) {
+      query.$or = [
+        { 'details.destinationAddress': address },
+        { operator_id: address },
+        { operator_id: `wallet_${address}` },
+        { 'details.account': address },
+      ];
+    } else if (userId) {
+      query.$or = [
+        { operator_id: userId },
+        { operator_id: `wallet_${userId}` },
+      ];
+    }
+
+    const logs = await logsCol.find(query).sort({ created_at: -1 }).limit(limit).toArray();
+
+    // Map logs to user-friendly swap history items
+    const formatted = logs.map((l: any) => ({
+      id: l.id,
+      swapId: l.reference_id,
+      chain: l.chain,
+      action: l.action,
+      amount: l.amount_primary || '',
+      destinationAddress: l.details?.destinationAddress || l.operator_id,
+      txHash: l.tx_hash,
+      ledgerSeq: l.ledger_seq,
+      explorerUrl: l.explorer_url,
+      status: l.status || 'SUCCESS',
+      createdAt: l.created_at,
+      details: l.details || {},
+    }));
+
+    return res.json({ success: true, count: formatted.length, data: formatted });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch swap history' });
+  }
+});
+
+/**
  * GET /api/v1/swap/:swapId
  * Fetches current swap status and on-chain transaction references
  */

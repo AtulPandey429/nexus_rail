@@ -24,8 +24,13 @@ import {
   DollarSign,
   Layers,
   ArrowUpRight,
+  ArrowDownLeft,
   X,
   Cpu,
+  Copy,
+  Check,
+  Activity,
+  ArrowDownUp,
 } from 'lucide-react';
 import { readSession, clearSession, notifySession, SessionUser } from '@/lib/shop';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
@@ -101,6 +106,16 @@ export default function ProfilePage() {
     explorerUrl: string;
     destinationAddress: string;
   } | null>(null);
+
+  // Active Connected Chain & Live On-Chain Ledger Feed (ZERO FAKE DATA)
+  const [activeChain, setActiveChain] = useState<'xrpl' | 'stellar'>('xrpl');
+  const [activeHistoryTab, setActiveHistoryTab] = useState<'ledger' | 'bridge'>('ledger');
+  const [ledgerTxs, setLedgerTxs] = useState<any[]>([]);
+  const [loadingLedgerTxs, setLoadingLedgerTxs] = useState<boolean>(false);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [copiedTxHash, setCopiedTxHash] = useState<string | null>(null);
+  const [bridgeHistory, setBridgeHistory] = useState<any[]>([]);
+  const [loadingBridgeHistory, setLoadingBridgeHistory] = useState<boolean>(false);
 
   const handleOpenWithdrawNr = (holding: HydratedHolding) => {
     setWithdrawNrHolding(holding);
@@ -255,6 +270,82 @@ export default function ProfilePage() {
     }
   };
 
+  // Fetch live on-chain ledger transactions directly from XRPL / Stellar node
+  const fetchLedgerTransactions = async (addressOverride?: string, chainOverride?: 'xrpl' | 'stellar') => {
+    const targetChain = chainOverride || activeChain;
+    let targetAddr = addressOverride;
+    if (!targetAddr) {
+      if (targetChain === 'xrpl') {
+        targetAddr = profile?.xrplAddress || (profile?.walletAddress?.startsWith('r') ? profile.walletAddress : '');
+      } else {
+        targetAddr = profile?.stellarAddress || (profile?.walletAddress?.startsWith('G') ? profile.walletAddress : '');
+      }
+    }
+
+    if (!targetAddr) {
+      setLedgerTxs([]);
+      return;
+    }
+
+    setLoadingLedgerTxs(true);
+    setLedgerError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/wallet/ledger-transactions?address=${encodeURIComponent(targetAddr)}&chain=${targetChain}&limit=20`
+      );
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLedgerTxs(Array.isArray(data.transactions) ? data.transactions : []);
+      } else {
+        setLedgerError(data.error || 'Failed to query live on-chain ledger');
+      }
+    } catch (err: any) {
+      setLedgerError(err.message || 'Error querying blockchain node');
+    } finally {
+      setLoadingLedgerTxs(false);
+    }
+  };
+
+  // Fetch real cross-chain bridge logs from MongoDB platform_chain_logs
+  const fetchBridgeHistory = async (addressOverride?: string) => {
+    setLoadingBridgeHistory(true);
+    try {
+      const session = readSession();
+      const headers: Record<string, string> = {};
+      if (session.token) headers.Authorization = `Bearer ${session.token}`;
+
+      const addr = addressOverride || profile?.stellarAddress || profile?.xrplAddress || profile?.walletAddress || '';
+      const q = addr ? `?address=${encodeURIComponent(addr)}&limit=25` : '?limit=25';
+      const res = await fetch(`/api/v1/swap/history${q}`, { headers });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.data)) {
+        setBridgeHistory(data.data);
+      }
+    } catch (err: any) {
+      console.warn('Failed to load cross-chain swap history:', err);
+    } finally {
+      setLoadingBridgeHistory(false);
+    }
+  };
+
+  const handleCopyHash = (hash: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(hash);
+      setCopiedTxHash(hash);
+      setTimeout(() => setCopiedTxHash(null), 2000);
+    }
+  };
+
+  const handleSwitchActiveChain = (chain: 'xrpl' | 'stellar') => {
+    setActiveChain(chain);
+    const addr = chain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress;
+    if (addr) {
+      fetchLedgerTransactions(addr, chain);
+    } else {
+      setLedgerTxs([]);
+    }
+  };
+
   // Load profile from API
   const fetchProfile = async () => {
     const session = readSession();
@@ -283,6 +374,23 @@ export default function ProfilePage() {
       if (data.success && data.profile) {
         setProfile(data.profile);
         setNameInput(data.profile.name || '');
+
+        // Determine default active chain based on available or last connected wallet
+        const preferredChain: 'xrpl' | 'stellar' =
+          data.profile.lastConnectedWallet?.network === 'stellar'
+            ? 'stellar'
+            : data.profile.xrplAddress
+            ? 'xrpl'
+            : data.profile.stellarAddress
+            ? 'stellar'
+            : 'xrpl';
+        setActiveChain(preferredChain);
+
+        const initialAddr = preferredChain === 'xrpl' ? data.profile.xrplAddress : data.profile.stellarAddress;
+        if (initialAddr) {
+          fetchLedgerTransactions(initialAddr, preferredChain);
+        }
+        fetchBridgeHistory(initialAddr || undefined);
       } else {
         throw new Error(data.error || 'Could not retrieve profile');
       }
@@ -1337,6 +1445,372 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* LIVE CONNECTED LEDGER ON-CHAIN TRANSACTIONS (100% REAL NODE DATA) */}
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
+                Live Connected Ledger Activity
+              </h2>
+            </div>
+            <p className="text-xs text-[var(--muted)] mt-0.5">
+              Live transactions queried directly from the {activeChain === 'xrpl' ? 'XRP Ledger (Altnet)' : 'Stellar Network (Horizon Testnet)'} node. ZERO fake data.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* View Filter: Ledger Feed vs Cross-Chain Bridge */}
+            <div className="p-1 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] flex gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveHistoryTab('ledger')}
+                className={`py-1.5 px-3 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeHistoryTab === 'ledger'
+                    ? 'bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] shadow-sm'
+                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>On-Chain Ledger</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveHistoryTab('bridge');
+                  fetchBridgeHistory();
+                }}
+                className={`py-1.5 px-3 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeHistoryTab === 'bridge'
+                    ? 'bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] shadow-sm'
+                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                <ArrowDownUp className="w-3.5 h-3.5" />
+                <span>Cross-Chain Bridge</span>
+              </button>
+            </div>
+
+            {/* Refresh Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (activeHistoryTab === 'ledger') fetchLedgerTransactions();
+                else fetchBridgeHistory();
+              }}
+              disabled={loadingLedgerTxs || loadingBridgeHistory}
+              className="p-2 rounded-xl bg-[var(--card)] hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono text-[var(--foreground)] flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Refresh Transactions"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[var(--gold)] ${loadingLedgerTxs || loadingBridgeHistory ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {activeHistoryTab === 'ledger' && (
+          <div className="space-y-4">
+            {/* Connected Network Toggle Switch */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)]">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono text-[var(--muted)]">Active Ledger:</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchActiveChain('xrpl')}
+                    className={`py-1.5 px-3 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      activeChain === 'xrpl'
+                        ? 'bg-[#0081F2]/20 border border-[#0081F2]/50 text-[#0081F2] shadow-sm'
+                        : 'text-[var(--muted)] hover:text-[var(--foreground)] border border-transparent'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-[#0081F2]" />
+                    <span>XRPL Testnet</span>
+                    {profile?.xrplAddress && <span className="text-[10px] opacity-75 font-normal">({profile.xrplAddress.slice(0, 4)}...{profile.xrplAddress.slice(-3)})</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchActiveChain('stellar')}
+                    className={`py-1.5 px-3 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      activeChain === 'stellar'
+                        ? 'bg-[#00E5FF]/20 border border-[#00E5FF]/50 text-[#00E5FF] shadow-sm'
+                        : 'text-[var(--muted)] hover:text-[var(--foreground)] border border-transparent'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
+                    <span>Stellar Testnet</span>
+                    {profile?.stellarAddress && <span className="text-[10px] opacity-75 font-normal">({profile.stellarAddress.slice(0, 4)}...{profile.stellarAddress.slice(-3)})</span>}
+                  </button>
+                </div>
+              </div>
+
+              {/* Current Active Address Badge */}
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <span className="text-[var(--muted)]">Queried Account:</span>
+                {(activeChain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress) ? (
+                  <span className="font-semibold text-[var(--gold)] truncate max-w-[220px]">
+                    {activeChain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress}
+                  </span>
+                ) : (
+                  <span className="text-amber-400 font-medium">None Connected</span>
+                )}
+              </div>
+            </div>
+
+            {/* Content States */}
+            {!(activeChain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress) ? (
+              <div className="nexus-glass-card p-8 rounded-3xl border border-dashed border-[var(--border)] text-center space-y-3">
+                <Wallet className="w-8 h-8 text-[var(--muted)] mx-auto opacity-50" />
+                <h3 className="text-sm font-bold text-[var(--foreground)]">
+                  No {activeChain === 'xrpl' ? 'XRP Ledger' : 'Stellar'} Wallet Connected
+                </h3>
+                <p className="text-xs text-[var(--muted)] max-w-md mx-auto">
+                  Connect your {activeChain === 'xrpl' ? 'GemWallet, Crossmark, or Xaman' : 'Freighter, Albedo, or LOBSTR'} wallet to view its live on-chain transaction history.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetNetwork(activeChain);
+                    setWalletModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--gold)] hover:bg-[#68e0b0] text-black font-mono font-bold text-xs transition-colors mt-2 cursor-pointer"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  <span>Connect {activeChain === 'xrpl' ? 'XRP Ledger' : 'Stellar'} Wallet</span>
+                </button>
+              </div>
+            ) : loadingLedgerTxs ? (
+              <div className="nexus-glass-card p-10 rounded-3xl border border-[var(--border)] text-center text-xs font-mono text-[var(--muted)] flex items-center justify-center gap-3 animate-pulse">
+                <RefreshCw className="w-4 h-4 animate-spin text-[var(--gold)]" />
+                <span>Querying live {activeChain === 'xrpl' ? 'XRP Ledger' : 'Stellar'} on-chain transactions...</span>
+              </div>
+            ) : ledgerError ? (
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono flex items-center justify-between">
+                <span>{ledgerError}</span>
+                <button
+                  type="button"
+                  onClick={() => fetchLedgerTransactions()}
+                  className="text-[var(--gold)] hover:underline ml-3 cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : ledgerTxs.length === 0 ? (
+              <div className="nexus-glass-card p-8 rounded-3xl border border-[var(--border)] text-center space-y-2">
+                <Layers className="w-7 h-7 text-[var(--muted)] mx-auto opacity-50" />
+                <p className="text-sm font-bold text-[var(--foreground)]">No On-Chain Transactions Recorded Yet</p>
+                <p className="text-xs text-[var(--muted)] font-mono max-w-md mx-auto">
+                  This address has no transactions on {activeChain === 'xrpl' ? 'XRPL Testnet' : 'Stellar Horizon Testnet'}. Execute a swap or fund your wallet to see real-time on-chain logs.
+                </p>
+              </div>
+            ) : (
+              <div className="nexus-glass-card rounded-3xl border border-[var(--border)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left font-mono text-xs">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                        <th className="py-3 px-4">Direction / Type</th>
+                        <th className="py-3 px-4">Amount / Asset</th>
+                        <th className="py-3 px-4">Counterparty</th>
+                        <th className="py-3 px-4">Timestamp</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Explorer</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {ledgerTxs.map((tx: any, idx: number) => {
+                        const isIncoming = tx.direction === 'in';
+                        const isOutgoing = tx.direction === 'out';
+                        return (
+                          <tr key={tx.txHash || idx} className="hover:bg-[var(--card-hover)] transition-colors">
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`p-1 rounded-md border flex items-center justify-center ${
+                                    isIncoming
+                                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                      : isOutgoing
+                                      ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
+                                      : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                  }`}
+                                >
+                                  {isIncoming ? (
+                                    <ArrowDownLeft className="w-3.5 h-3.5" />
+                                  ) : isOutgoing ? (
+                                    <ArrowUpRight className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ShieldCheck className="w-3.5 h-3.5" />
+                                  )}
+                                </span>
+                                <div>
+                                  <span className="font-bold text-[var(--foreground)]">{tx.type || 'Transaction'}</span>
+                                  <span className="block text-[10px] text-[var(--muted)] uppercase">{tx.direction || 'transfer'}</span>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className={`font-bold ${isIncoming ? 'text-emerald-400' : 'text-[var(--foreground)]'}`}>
+                                {isIncoming ? '+' : isOutgoing ? '-' : ''}{tx.amount || '0'}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              {tx.counterparty ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[var(--muted)]">
+                                    {tx.counterparty.slice(0, 6)}...{tx.counterparty.slice(-4)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyHash(tx.counterparty)}
+                                    title="Copy counterparty address"
+                                    className="text-[var(--muted)] hover:text-[var(--gold)] cursor-pointer"
+                                  >
+                                    {copiedTxHash === tx.counterparty ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[var(--muted)]">—</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
+                              {tx.date ? new Date(tx.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </td>
+
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>{tx.status || 'SUCCESS'}</span>
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 whitespace-nowrap text-right">
+                              {tx.explorerUrl ? (
+                                <a
+                                  href={tx.explorerUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                                >
+                                  <span>View</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                <span className="text-[var(--muted)]">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cross-Chain Bridge History Tab */}
+        {activeHistoryTab === 'bridge' && (
+          <div className="space-y-4">
+            {loadingBridgeHistory ? (
+              <div className="nexus-glass-card p-10 rounded-3xl border border-[var(--border)] text-center text-xs font-mono text-[var(--muted)] flex items-center justify-center gap-3 animate-pulse">
+                <RefreshCw className="w-4 h-4 animate-spin text-[var(--gold)]" />
+                <span>Loading cross-chain bridge logs...</span>
+              </div>
+            ) : bridgeHistory.length === 0 ? (
+              <div className="nexus-glass-card p-8 rounded-3xl border border-[var(--border)] text-center space-y-2">
+                <ArrowDownUp className="w-7 h-7 text-[var(--muted)] mx-auto opacity-50" />
+                <p className="text-sm font-bold text-[var(--foreground)]">No Cross-Chain Bridge Swaps Yet</p>
+                <p className="text-xs text-[var(--muted)] font-mono max-w-md mx-auto">
+                  Execute a cross-chain swap from XRP to $NXL or Stellar XLM to see your complete bridge settlement ledger history here.
+                </p>
+                <Link
+                  href="/swap"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--gold)] hover:bg-[#68e0b0] text-black font-mono font-bold text-xs transition-colors mt-2"
+                >
+                  <span>Go to Cross-Chain Swap</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            ) : (
+              <div className="nexus-glass-card rounded-3xl border border-[var(--border)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left font-mono text-xs">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                        <th className="py-3 px-4">Action / Chain</th>
+                        <th className="py-3 px-4">Amount Disbursed</th>
+                        <th className="py-3 px-4">Destination Address</th>
+                        <th className="py-3 px-4">Timestamp</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Explorer Proof</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {bridgeHistory.map((b: any, idx: number) => (
+                        <tr key={b.id || idx} className="hover:bg-[var(--card-hover)] transition-colors">
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
+                              <div>
+                                <span className="font-bold text-[var(--foreground)]">Cross-Chain Bridge</span>
+                                <span className="block text-[10px] text-[var(--muted)]">Disbursed on {b.chain}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4 whitespace-nowrap font-bold text-emerald-400">
+                            {b.amount || 'NXL'}
+                          </td>
+
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="text-[var(--muted)]">
+                              {b.destinationAddress ? `${b.destinationAddress.slice(0, 6)}...${b.destinationAddress.slice(-4)}` : '—'}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
+                            {b.createdAt ? new Date(b.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>{b.status || 'CONFIRMED'}</span>
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4 whitespace-nowrap text-right">
+                            {b.explorerUrl ? (
+                              <a
+                                href={b.explorerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                              >
+                                <span>Verify Tx</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ) : (
+                              <span className="text-[var(--muted)]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* RECENTLY CONNECTED WALLET METADATA */}

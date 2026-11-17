@@ -16,6 +16,7 @@ import {
   Coins,
   TrendingUp,
   TrendingDown,
+  RefreshCw,
 } from 'lucide-react';
 import { fetchOrders } from '@/lib/shop';
 import { NexusLogo } from '@/components/ui/NexusLogo';
@@ -40,104 +41,12 @@ interface OrderItem {
   networkFee: number;
 }
 
-const INITIAL_ORDERS: OrderItem[] = [
-  {
-    id: 'ord_1048',
-    orderNumber: '#NR8K2P9X',
-    items: 'Rail One + 2 more',
-    rail: 'STELLAR',
-    railLabel: 'Stellar / XLM',
-    token: 'XLM',
-    totalUsd: 200.02,
-    cryptoAmount: '2,000.20 XLM',
-    status: 'PAID',
-    dateUtc: '2026-04-18 14:32:04 UTC',
-    txHash: '3a4f8b9e1c2d0f3a4f8b9e1c2d0f3a4f8b9e1c2d0f3a4f8b9e1c2d0f3a4f8b9e',
-    ledgerSequence: '52,981,402',
-    journalId: 'NL-2026-0418-0014',
-    customerClearing: 200.02,
-    merchantPayable: 200.0199,
-    networkFee: 0.0001,
-  },
-  {
-    id: 'ord_1047',
-    orderNumber: '#NR9M4V2K',
-    items: 'Relay desk mat',
-    rail: 'XRPL',
-    railLabel: 'XRPL / XRP',
-    token: 'XRP',
-    totalUsd: 39.00,
-    cryptoAmount: '78.00 XRP',
-    status: 'PAID',
-    dateUtc: '2026-04-17 09:15:22 UTC',
-    txHash: '7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c',
-    ledgerSequence: '88,104,229',
-    journalId: 'NL-2026-0417-0092',
-    customerClearing: 39.00,
-    merchantPayable: 38.99988,
-    networkFee: 0.00012,
-  },
-  {
-    id: 'ord_1046',
-    orderNumber: '#NR3Q7W9B',
-    items: 'Rail Signal tee',
-    rail: 'STELLAR',
-    railLabel: 'Stellar / XLM',
-    token: 'XLM',
-    totalUsd: 51.01,
-    cryptoAmount: '510.10 XLM',
-    status: 'PAID',
-    dateUtc: '2026-04-15 18:44:10 UTC',
-    txHash: '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
-    ledgerSequence: '52,940,117',
-    journalId: 'NL-2026-0415-0043',
-    customerClearing: 51.01,
-    merchantPayable: 51.0099,
-    networkFee: 0.0001,
-  },
-  {
-    id: 'ord_1045',
-    orderNumber: '#NR5P2L8M',
-    items: 'Rail One (Graphite)',
-    rail: 'XRPL',
-    railLabel: 'XRPL / XRP',
-    token: 'XRP',
-    totalUsd: 129.00,
-    cryptoAmount: '258.00 XRP',
-    status: 'AWAITING PAYMENT',
-    dateUtc: '2026-04-14 11:02:55 UTC',
-    txHash: 'pending',
-    ledgerSequence: 'unposted',
-    journalId: 'NL-2026-0414-0011',
-    customerClearing: 129.00,
-    merchantPayable: 0,
-    networkFee: 0,
-  },
-  {
-    id: 'ord_1044',
-    orderNumber: '#NR1X8C4D',
-    items: 'Relay desk mat',
-    rail: 'STELLAR',
-    railLabel: 'Stellar / XLM',
-    token: 'XLM',
-    totalUsd: 39.00,
-    cryptoAmount: '390.00 XLM',
-    status: 'EXPIRED',
-    dateUtc: '2026-04-12 16:20:00 UTC',
-    txHash: 'none',
-    ledgerSequence: 'void',
-    journalId: 'NL-2026-0412-0089',
-    customerClearing: 0,
-    merchantPayable: 0,
-    networkFee: 0,
-  },
-];
-
 function ActivityContent() {
   const searchParams = useSearchParams();
-  const highlightId = searchParams.get('id') || '#NR8K2P9X';
+  const highlightId = searchParams.get('id') || '';
 
-  const [orders, setOrders] = useState<OrderItem[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PAID' | 'AWAITING' | 'EXPIRED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string>(highlightId);
@@ -145,35 +54,47 @@ function ActivityContent() {
   const [portfolioEvents, setPortfolioEvents] = useState<DbPortfolioEvent[]>([]);
 
   useEffect(() => {
-    fetchOrders().then((live) => {
-      if (live && live.length > 0) {
-        const mapped: OrderItem[] = live.map((o: any, idx: number) => {
-          const isPaid = (o.status || '').toUpperCase() === 'PAID';
-          const isStellar = (o.payment_rail || o.rail || '').toLowerCase().includes('stellar');
-          const token = isStellar ? 'XLM' : 'XRP';
-          const total = (o.total_cents || 20000) / 100;
-          return {
-            id: o.id || `ord_${idx}`,
-            orderNumber: o.order_number || `#NR${String(idx + 1).padStart(7, '0')}`,
-            items: o.items?.[0]?.title ? `${o.items[0].title}${o.items.length > 1 ? ` + ${o.items.length - 1} more` : ''}` : 'Rail Artifact Kit',
-            rail: isStellar ? 'STELLAR' : 'XRPL',
-            railLabel: isStellar ? 'Stellar / XLM' : 'XRPL / XRP',
-            token,
-            totalUsd: total,
-            cryptoAmount: isStellar ? `${(total * 10).toFixed(2)} XLM` : `${(total * 2).toFixed(2)} XRP`,
-            status: isPaid ? 'PAID' : 'AWAITING PAYMENT',
-            dateUtc: o.created_at ? new Date(o.created_at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : '2026-04-18 12:00:00 UTC',
-            txHash: o.tx_hash || 'pending',
-            ledgerSequence: isPaid ? '52,981,402' : 'unposted',
-            journalId: `NL-2026-${String(idx + 1).padStart(4, '0')}`,
-            customerClearing: total,
-            merchantPayable: total - 0.0001,
-            networkFee: 0.0001,
-          };
-        });
-        setOrders(mapped);
-      }
-    }).catch(() => {});
+    fetchOrders()
+      .then((live) => {
+        if (live && live.length > 0) {
+          const mapped: OrderItem[] = live.map((o: any, idx: number) => {
+            const isPaid = (o.status || '').toUpperCase() === 'PAID';
+            const isStellar = (o.payment_rail || o.rail || '').toLowerCase().includes('stellar');
+            const token = isStellar ? 'XLM' : 'XRP';
+            const total = (o.total_cents || 0) / 100;
+            return {
+              id: o.id || `ord_${idx}`,
+              orderNumber: o.order_number || `#NR${String(idx + 1).padStart(7, '0')}`,
+              items: o.items?.[0]?.title ? `${o.items[0].title}${o.items.length > 1 ? ` + ${o.items.length - 1} more` : ''}` : 'Rail Item',
+              rail: isStellar ? 'STELLAR' : 'XRPL',
+              railLabel: isStellar ? 'Stellar / XLM' : 'XRPL / XRP',
+              token,
+              totalUsd: total,
+              cryptoAmount: isStellar ? `${(total * 10).toFixed(2)} XLM` : `${(total * 2).toFixed(2)} XRP`,
+              status: isPaid ? 'PAID' : (o.status || 'AWAITING PAYMENT'),
+              dateUtc: o.created_at ? new Date(o.created_at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
+              txHash: o.tx_hash || 'pending',
+              ledgerSequence: o.ledger_seq ? String(o.ledger_seq) : isPaid ? 'confirmed' : 'unposted',
+              journalId: o.journal_id || `NL-${new Date().getFullYear()}-${String(idx + 1).padStart(4, '0')}`,
+              customerClearing: total,
+              merchantPayable: total > 0.0001 ? total - 0.0001 : total,
+              networkFee: 0.0001,
+            };
+          });
+          setOrders(mapped);
+          if (mapped.length > 0 && !selectedOrderId) {
+            setSelectedOrderId(mapped[0].orderNumber);
+          }
+        } else {
+          setOrders([]);
+        }
+      })
+      .catch(() => {
+        setOrders([]);
+      })
+      .finally(() => {
+        setLoadingOrders(false);
+      });
 
     // Fetch portfolio events
     const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
@@ -190,6 +111,20 @@ function ActivityContent() {
         .catch(() => {});
     }
   }, []);
+
+  const totalPaidUsd = useMemo(() => {
+    return orders
+      .filter((o) => o.status === 'PAID')
+      .reduce((sum, o) => sum + (o.totalUsd || 0), 0);
+  }, [orders]);
+
+  const paidCount = useMemo(() => {
+    return orders.filter((o) => o.status === 'PAID').length;
+  }, [orders]);
+
+  const awaitingCount = useMemo(() => {
+    return orders.filter((o) => o.status === 'AWAITING PAYMENT').length;
+  }, [orders]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
@@ -264,7 +199,7 @@ function ActivityContent() {
           </button>
         </div>
 
-        {/* 3 Metrics Tiles */}
+        {/* 3 Metrics Tiles (Dynamically Calculated from Real Orders) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Tile 1: Total Paid */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
@@ -272,10 +207,10 @@ function ActivityContent() {
               TOTAL PAID / USD
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--foreground)] tracking-tight">
-              $290.03
+              ${totalPaidUsd.toFixed(2)}
             </p>
             <p className="text-xs font-mono text-[var(--muted)] pt-1">
-              3 verified testnet payments
+              {paidCount} verified payment{paidCount === 1 ? '' : 's'}
             </p>
           </div>
 
@@ -285,10 +220,10 @@ function ActivityContent() {
               AWAITING PAYMENT
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--foreground)] tracking-tight">
-              01
+              {String(awaitingCount).padStart(2, '0')}
             </p>
             <p className="text-xs font-mono text-[var(--muted)] pt-1">
-              No funds received yet
+              {awaitingCount === 0 ? 'All orders settled' : `${awaitingCount} pending settlement`}
             </p>
           </div>
 
@@ -419,23 +354,34 @@ function ActivityContent() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
           {/* Tabs */}
           <div className="flex items-center gap-1 sm:gap-2 text-xs font-mono">
-            {(['ALL', 'PAID', 'AWAITING', 'EXPIRED'] as const).map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                onClick={() => setSelectedFilter(filter)}
-                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                  selectedFilter === filter
-                    ? 'bg-[var(--gold)]/20 text-[var(--gold)] font-bold border border-[var(--gold)]/40 shadow-sm'
-                    : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card)]'
-                }`}
-              >
-                {filter === 'ALL' && 'All orders 05'}
-                {filter === 'PAID' && 'Paid 03'}
-                {filter === 'AWAITING' && 'Awaiting 01'}
-                {filter === 'EXPIRED' && 'Expired 01'}
-              </button>
-            ))}
+            {(['ALL', 'PAID', 'AWAITING', 'EXPIRED'] as const).map((filter) => {
+              const count =
+                filter === 'ALL'
+                  ? orders.length
+                  : filter === 'PAID'
+                  ? orders.filter((o) => o.status === 'PAID').length
+                  : filter === 'AWAITING'
+                  ? orders.filter((o) => o.status === 'AWAITING PAYMENT').length
+                  : orders.filter((o) => o.status === 'EXPIRED').length;
+
+              return (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setSelectedFilter(filter)}
+                  className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    selectedFilter === filter
+                      ? 'bg-[var(--gold)]/20 text-[var(--gold)] font-bold border border-[var(--gold)]/40 shadow-sm'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card)]'
+                  }`}
+                >
+                  {filter === 'ALL' && `All orders (${count})`}
+                  {filter === 'PAID' && `Paid (${count})`}
+                  {filter === 'AWAITING' && `Awaiting (${count})`}
+                  {filter === 'EXPIRED' && `Expired (${count})`}
+                </button>
+              );
+            })}
           </div>
 
           {/* Search Box */}
@@ -466,7 +412,21 @@ function ActivityContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {filteredOrders.map((ord) => {
+                {filteredOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-xs font-mono text-[var(--muted)]">
+                      {loadingOrders ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <RefreshCw className="w-4 h-4 animate-spin text-[var(--gold)]" />
+                          <span>Loading on-chain orders...</span>
+                        </div>
+                      ) : (
+                        <span>No matching commerce orders found.</span>
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOrders.map((ord) => {
                   const isSelected = selectedOrder?.orderNumber === ord.orderNumber;
                   return (
                     <tr
@@ -511,7 +471,8 @@ function ActivityContent() {
                       </td>
                     </tr>
                   );
-                })}
+                })
+              )}
               </tbody>
             </table>
           </div>

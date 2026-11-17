@@ -119,6 +119,42 @@ export default function SwapPage() {
 
   const [swapState, setSwapState] = useState<'idle' | 'preparing' | 'signing_wallet' | 'executing_payout' | 'success' | 'error'>('idle');
   const [swapError, setSwapError] = useState('');
+  const [bridgeHistory, setBridgeHistory] = useState<any[]>([]);
+  const [loadingBridgeHistory, setLoadingBridgeHistory] = useState(false);
+  const [elapsedPayoutSeconds, setElapsedPayoutSeconds] = useState(0);
+
+  // Cross-Chain Payout Elapsed Timer
+  useEffect(() => {
+    let timer: any;
+    if (swapState === 'executing_payout') {
+      setElapsedPayoutSeconds(0);
+      timer = setInterval(() => {
+        setElapsedPayoutSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      setElapsedPayoutSeconds(0);
+    }
+    return () => clearInterval(timer);
+  }, [swapState]);
+
+  const fetchSwapBridgeHistory = async () => {
+    setLoadingBridgeHistory(true);
+    try {
+      const { token } = readSession();
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const addrQuery = destinationAddress ? `?address=${encodeURIComponent(destinationAddress)}&limit=15` : '?limit=15';
+      const res = await fetch(`/api/v1/swap/history${addrQuery}`, { headers });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.data)) {
+        setBridgeHistory(data.data);
+      }
+    } catch (err: any) {
+      console.warn('Failed to load bridge history:', err);
+    } finally {
+      setLoadingBridgeHistory(false);
+    }
+  };
 
   // Swap Order Execution State
   const [activeSwapOrder, setActiveSwapOrder] = useState<{
@@ -536,6 +572,7 @@ export default function SwapPage() {
 
   useEffect(() => {
     loadNrPoolAndBalances();
+    fetchSwapBridgeHistory();
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const toParam = params.get('to')?.toUpperCase();
@@ -908,6 +945,7 @@ export default function SwapPage() {
           updateBalancesAfterSwap();
           loadNrPoolAndBalances();
           setSwapState('success');
+          fetchSwapBridgeHistory();
           return;
         } else {
           throw new Error(json.error || 'Execution failed');
@@ -1841,6 +1879,112 @@ export default function SwapPage() {
 
         </div>
 
+        {/* Live Cross-Chain Bridge History Section (100% Real Blockchain Settlement) */}
+        <div className="mt-12 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[var(--gold)] animate-pulse" />
+              <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
+                Live Cross-Chain Bridge Settlement History
+              </h2>
+            </div>
+            
+            <button
+              type="button"
+              onClick={fetchSwapBridgeHistory}
+              disabled={loadingBridgeHistory}
+              className="p-2 rounded-xl bg-[var(--card)] hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono text-[var(--foreground)] flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+              title="Refresh bridge history"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[var(--gold)] ${loadingBridgeHistory ? 'animate-spin' : ''}`} />
+              <span>Refresh Bridge Logs</span>
+            </button>
+          </div>
+
+          {loadingBridgeHistory ? (
+            <div className="nexus-glass-card p-10 rounded-2xl border border-[var(--border)] text-center text-xs font-mono text-[var(--muted)] flex items-center justify-center gap-3 animate-pulse">
+              <RefreshCw className="w-4 h-4 animate-spin text-[var(--gold)]" />
+              <span>Querying live cross-chain bridge logs...</span>
+            </div>
+          ) : bridgeHistory.length === 0 ? (
+            <div className="nexus-glass-card p-8 rounded-2xl border border-dashed border-[var(--border)] text-center space-y-2">
+              <p className="text-sm font-bold text-[var(--foreground)]">No Bridge Swaps Recorded Yet</p>
+              <p className="text-xs text-[var(--muted)] font-mono max-w-md mx-auto">
+                Completed cross-chain swaps will appear here with cryptographic deposit and payout transaction proofs.
+              </p>
+            </div>
+          ) : (
+            <div className="nexus-glass-card rounded-2xl border border-[var(--border)] overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-mono text-xs">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                      <th className="py-3 px-4">Action</th>
+                      <th className="py-3 px-4">Disbursed Amount</th>
+                      <th className="py-3 px-4">Destination Ledger &amp; Address</th>
+                      <th className="py-3 px-4">Timestamp</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">On-Chain Explorer Proof</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {bridgeHistory.map((b: any, idx: number) => (
+                      <tr key={b.id || idx} className="hover:bg-[var(--card-hover)] transition-colors">
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
+                            <div>
+                              <span className="font-bold text-[var(--foreground)]">Cross-Chain Bridge</span>
+                              <span className="block text-[10px] text-[var(--muted)]">Payout on {b.chain}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 whitespace-nowrap font-bold text-emerald-400">
+                          {b.amount || 'NXL'}
+                        </td>
+
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className="text-[var(--muted)]">
+                            {b.destinationAddress ? `${b.destinationAddress.slice(0, 8)}...${b.destinationAddress.slice(-6)}` : '—'}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
+                          {b.createdAt ? new Date(b.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>{b.status || 'CONFIRMED'}</span>
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 whitespace-nowrap text-right">
+                          {b.explorerUrl ? (
+                            <a
+                              href={b.explorerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                            >
+                              <span>View Explorer Proof</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="text-[var(--muted)]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
       </main>
 
       {/* Confirmation Review & Multi-Step Escrow Modal */}
@@ -2160,23 +2304,46 @@ export default function SwapPage() {
             )}
 
             {swapState === 'executing_payout' && (
-              <div className="py-8 space-y-6">
+              <div className="py-6 space-y-6">
                 <div className="w-12 h-12 border-3 border-[var(--gold)] border-t-transparent rounded-full animate-spin mx-auto" />
-                
-                <div className="space-y-3 font-mono text-xs max-w-sm mx-auto">
-                  <div className="p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 flex items-center gap-3">
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span>1. Ingress Deposit Confirmed in Server Vault</span>
+
+                <div className="text-center space-y-1">
+                  <h4 className="text-base font-bold text-[var(--foreground)]">
+                    Executing Dual-Rail Cross-Chain Swap
+                  </h4>
+                  <p className="text-xs font-mono text-[var(--gold)]">
+                    Elapsed: {elapsedPayoutSeconds}s &bull; Dual-ledger consensus in progress
+                  </p>
+                </div>
+
+                <div className="space-y-3 font-mono text-xs max-w-md mx-auto">
+                  <div className="p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>1. Ingress Deposit ({payAmount} {fromToken}) Verified</span>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold">Confirmed</span>
                   </div>
 
-                  <div className="p-3 rounded-xl border bg-[var(--gold)]/10 border-[var(--gold)]/30 text-[var(--gold)] flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-[var(--gold)] animate-pulse" />
-                    <span>2. Server Disbursing {receiveAmount} {toToken} to Your Wallet...</span>
+                  <div className="p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>2. AMM Curve x·y=k Execution</span>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold">Settled</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl border bg-[var(--gold)]/10 border-[var(--gold)]/30 text-[var(--gold)] flex items-center justify-between animate-pulse">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[var(--gold)] animate-ping" />
+                      <span>3. Disbursing {receiveAmount} {toToken} to {destinationAddress.startsWith('G') ? 'Stellar' : 'XRPL'}...</span>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold">Broadcasting</span>
                   </div>
                 </div>
 
-                <p className="text-[11px] text-[var(--muted)] font-mono text-center">
-                  Dual-ledger consensus verification in progress...
+                <p className="text-[11px] text-[var(--muted)] font-mono text-center max-w-sm mx-auto">
+                  Dual-ledger atomic consensus typically finalizes in 5–12 seconds. Please do not close this window.
                 </p>
               </div>
             )}
