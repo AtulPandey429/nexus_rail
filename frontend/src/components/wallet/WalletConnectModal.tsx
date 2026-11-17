@@ -202,25 +202,28 @@ export function WalletConnectModal({
           const updatedUser: any = {
             ...session.user,
             walletAddress: address,
-            stellarAddress: chain === 'stellar' ? address : session.user.stellarAddress,
-            xrplAddress: chain === 'xrpl' ? address : session.user.xrplAddress,
+            stellarAddress: chain === 'stellar' ? address : (session.user.stellarAddress || linkData?.user?.stellarAddress || null),
+            xrplAddress: chain === 'xrpl' ? address : (session.user.xrplAddress || linkData?.user?.xrplAddress || null),
             lastConnectedWallet: {
               network: chain,
               provider: walletName,
               address,
               connectedAt: new Date().toISOString(),
             },
-            wallets: linkData?.user?.wallets || session.user.wallets,
+            wallets: linkData?.wallets || linkData?.user?.wallets || session.user.wallets,
           };
 
           localStorage.setItem('nexus_user', JSON.stringify(updatedUser));
+          if (linkData?.token) {
+            localStorage.setItem('nexus_token', linkData.token);
+          }
           notifySession();
         } catch (err) {
           console.warn('Backend wallet link error:', err);
         }
 
         await recordSuccessfulConnection(account);
-        setSuccessMsg(`Linked ${walletName} (${address.slice(0, 4)}...${address.slice(-4)}) successfully!`);
+        setSuccessMsg(`Linked ${walletName} (${address.slice(0, 4)}...${address.slice(-4)}) to your ${chain === 'stellar' ? 'Stellar' : 'XRPL'} slot!`);
         setTimeout(() => {
           onClose();
         }, 600);
@@ -234,7 +237,20 @@ export function WalletConnectModal({
         walletName,
       });
 
-      localStorage.setItem('nexus_user', JSON.stringify(auth.user));
+      const fullAuthUser: any = {
+        ...auth.user,
+        walletAddress: address,
+        stellarAddress: chain === 'stellar' ? address : (auth.user?.stellarAddress || null),
+        xrplAddress: chain === 'xrpl' ? address : (auth.user?.xrplAddress || null),
+        lastConnectedWallet: {
+          network: chain,
+          provider: walletName,
+          address,
+          connectedAt: new Date().toISOString(),
+        },
+      };
+
+      localStorage.setItem('nexus_user', JSON.stringify(fullAuthUser));
       localStorage.setItem('nexus_token', auth.token);
       notifySession();
 

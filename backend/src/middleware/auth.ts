@@ -1,13 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../services/jwt.js';
+import { verifyToken, TokenUser } from '../services/jwt.js';
 
 export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email?: string;
-    walletAddress?: string;
-    role: string;
-  };
+  user?: TokenUser;
 }
 
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {

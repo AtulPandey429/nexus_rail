@@ -14,10 +14,111 @@ userRouter.get('/profile', requireAuth, async (req: AuthenticatedRequest, res: R
   try {
     const userId = req.user!.id;
     const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
-    const user = await usersCol.findOne({ id: userId });
+    let user: MongoUserDoc | null = await usersCol.findOne({ id: userId });
 
+    // Fallback lookup if token user id was generated dynamically
+    if (!user && req.user?.email) {
+      user = await usersCol.findOne({ email: req.user.email });
+    }
+    if (!user && req.user?.walletAddress) {
+      user = await usersCol.findOne({
+        $or: [
+          { walletAddress: req.user.walletAddress },
+          { stellarAddress: req.user.walletAddress },
+          { xrplAddress: req.user.walletAddress },
+        ],
+      });
+    }
+
+    // Auto-upsert Mongo user record if user is authenticating for the first time
     if (!user) {
-      return res.status(404).json({ success: false, error: 'User profile not found' });
+      const now = new Date().toISOString();
+      const rawAddr = req.user?.walletAddress || '';
+      const isStellar = rawAddr.startsWith('G') && rawAddr.length === 56;
+      const isXrpl = rawAddr.startsWith('r') && rawAddr.length >= 25 && rawAddr.length <= 35;
+      const network: 'stellar' | 'xrpl' | null = isStellar ? 'stellar' : isXrpl ? 'xrpl' : null;
+
+      const newUser: MongoUserDoc = {
+        id: userId,
+        name: req.user?.name || (req.user?.email ? req.user.email.split('@')[0] : 'Traveler'),
+        email: req.user?.email,
+        role: (req.user?.role as 'user' | 'admin') || 'user',
+        walletAddress: rawAddr || undefined,
+        stellarAddress: req.user?.stellarAddress || (isStellar ? rawAddr : undefined),
+        xrplAddress: req.user?.xrplAddress || (isXrpl ? rawAddr : undefined),
+        wallets: network && rawAddr ? [
+          {
+            network,
+            address: rawAddr,
+            provider: network === 'stellar' ? 'Freighter' : 'GemWallet',
+            connectedAt: now,
+            verified: true,
+          },
+        ] : [],
+        lastConnectedWallet: network && rawAddr ? {
+          network,
+          provider: network === 'stellar' ? 'Freighter' : 'GemWallet',
+          address: rawAddr,
+          connectedAt: now,
+        } : undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await usersCol.insertOne(newUser);
+      user = newUser;
+    }
+
+    const activeUser = user!;
+
+    // Resolve exactly 2 allowed wallet rails: 1 Stellar + 1 XRPL
+    const resolvedStellar =
+      activeUser.stellarAddress ||
+      activeUser.wallets?.find((w: any) => w.network === 'stellar')?.address ||
+      (activeUser.lastConnectedWallet?.network === 'stellar' ? activeUser.lastConnectedWallet.address : null) ||
+      (activeUser.walletAddress?.startsWith('G') ? activeUser.walletAddress : null);
+
+    const resolvedXrpl =
+      activeUser.xrplAddress ||
+      activeUser.wallets?.find((w: any) => w.network === 'xrpl')?.address ||
+      (activeUser.lastConnectedWallet?.network === 'xrpl' ? activeUser.lastConnectedWallet.address : null) ||
+      (activeUser.walletAddress?.startsWith('r') ? activeUser.walletAddress : null);
+
+    // Build normalized dual-rail wallets array (maximum 1 per network)
+    const normalizedWallets: MongoUserDoc['wallets'] = [];
+    if (resolvedStellar) {
+      const existingStellar = activeUser.wallets?.find((w: any) => w.network === 'stellar');
+      normalizedWallets.push({
+        network: 'stellar',
+        address: resolvedStellar,
+        provider: existingStellar?.provider || (activeUser.lastConnectedWallet?.network === 'stellar' ? activeUser.lastConnectedWallet.provider : 'Freighter'),
+        connectedAt: existingStellar?.connectedAt || activeUser.lastConnectedWallet?.connectedAt || activeUser.createdAt,
+        verified: true,
+      });
+    }
+    if (resolvedXrpl) {
+      const existingXrpl = activeUser.wallets?.find((w: any) => w.network === 'xrpl');
+      normalizedWallets.push({
+        network: 'xrpl',
+        address: resolvedXrpl,
+        provider: existingXrpl?.provider || (activeUser.lastConnectedWallet?.network === 'xrpl' ? activeUser.lastConnectedWallet.provider : 'GemWallet'),
+        connectedAt: existingXrpl?.connectedAt || activeUser.lastConnectedWallet?.connectedAt || activeUser.createdAt,
+        verified: true,
+      });
+    }
+
+    // Sync back any resolved fields to DB if needed
+    if (activeUser.stellarAddress !== resolvedStellar || activeUser.xrplAddress !== resolvedXrpl) {
+      await usersCol.updateOne(
+        { id: activeUser.id },
+        {
+          $set: {
+            stellarAddress: resolvedStellar || undefined,
+            xrplAddress: resolvedXrpl || undefined,
+            wallets: normalizedWallets,
+            updatedAt: new Date().toISOString(),
+          },
+        }
+      );
     }
 
     // Fetch order summary stats for this user
@@ -29,17 +130,22 @@ userRouter.get('/profile', requireAuth, async (req: AuthenticatedRequest, res: R
     return res.json({
       success: true,
       profile: {
-        id: user.id,
-        name: user.name || (user.email ? user.email.split('@')[0] : 'Traveler'),
-        email: user.email || null,
-        role: user.role,
-        walletAddress: user.walletAddress || null,
-        stellarAddress: user.stellarAddress || null,
-        xrplAddress: user.xrplAddress || null,
-        lastConnectedWallet: user.lastConnectedWallet || null,
-        wallets: user.wallets || [],
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
+        id: activeUser.id,
+        name: activeUser.name || (activeUser.email ? activeUser.email.split('@')[0] : 'Traveler'),
+        email: activeUser.email || null,
+        role: activeUser.role,
+        walletAddress: activeUser.walletAddress || resolvedStellar || resolvedXrpl || null,
+        stellarAddress: resolvedStellar || null,
+        xrplAddress: resolvedXrpl || null,
+        lastConnectedWallet: activeUser.lastConnectedWallet || (normalizedWallets[0] ? {
+          network: normalizedWallets[0].network,
+          provider: normalizedWallets[0].provider,
+          address: normalizedWallets[0].address,
+          connectedAt: normalizedWallets[0].connectedAt,
+        } : null),
+        wallets: normalizedWallets,
+        createdAt: activeUser.createdAt,
+        updatedAt: activeUser.updatedAt,
         stats: {
           totalOrders,
           totalSpentCents,
@@ -137,14 +243,42 @@ userRouter.post('/wallets/connect', requireAuth, async (req: AuthenticatedReques
     }
 
     const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
-    const userDoc = await usersCol.findOne({ id: userId });
+    let userDoc: MongoUserDoc | null = await usersCol.findOne({ id: userId });
 
-    if (!userDoc) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+    if (!userDoc && req.user?.email) {
+      userDoc = await usersCol.findOne({ email: req.user.email });
+    }
+    if (!userDoc && req.user?.walletAddress) {
+      userDoc = await usersCol.findOne({
+        $or: [
+          { walletAddress: req.user.walletAddress },
+          { stellarAddress: req.user.walletAddress },
+          { xrplAddress: req.user.walletAddress },
+        ],
+      });
     }
 
-    // Enforce 1 wallet per network: remove existing wallet for this network
-    const updatedWallets = (userDoc.wallets || []).filter((w) => w.network !== network);
+    if (!userDoc) {
+      const newUserDoc: MongoUserDoc = {
+        id: userId,
+        name: req.user?.name || (isStellar ? 'Stellar Traveler' : 'XRPL Traveler'),
+        email: req.user?.email,
+        role: (req.user?.role as 'user' | 'admin') || 'user',
+        walletAddress: rawAddress,
+        stellarAddress: isStellar ? rawAddress : undefined,
+        xrplAddress: isXrpl ? rawAddress : undefined,
+        wallets: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      await usersCol.insertOne(newUserDoc);
+      userDoc = newUserDoc;
+    }
+
+    const activeDoc = userDoc!;
+
+    // Enforce exactly 1 wallet per network: remove existing wallet for this network
+    const updatedWallets = (activeDoc.wallets || []).filter((w: any) => w.network !== network);
     updatedWallets.push({
       network,
       address: rawAddress,
@@ -166,14 +300,18 @@ userRouter.post('/wallets/connect', requireAuth, async (req: AuthenticatedReques
 
     if (isStellar) {
       updateFields.stellarAddress = rawAddress;
-      updateFields.walletAddress = rawAddress;
+      if (!activeDoc.walletAddress || activeDoc.walletAddress === activeDoc.stellarAddress) {
+        updateFields.walletAddress = rawAddress;
+      }
     } else {
       updateFields.xrplAddress = rawAddress;
-      if (!userDoc.stellarAddress) updateFields.walletAddress = rawAddress;
+      if (!activeDoc.walletAddress || activeDoc.walletAddress === activeDoc.xrplAddress) {
+        updateFields.walletAddress = rawAddress;
+      }
     }
 
-    await usersCol.updateOne({ id: userId }, { $set: updateFields });
-    const freshUser = await usersCol.findOne({ id: userId });
+    await usersCol.updateOne({ id: activeDoc.id }, { $set: updateFields });
+    const freshUser = await usersCol.findOne({ id: activeDoc.id });
 
     const tokenUser = {
       id: freshUser!.id,
@@ -182,7 +320,7 @@ userRouter.post('/wallets/connect', requireAuth, async (req: AuthenticatedReques
       walletAddress: freshUser!.walletAddress,
       stellarAddress: freshUser!.stellarAddress,
       xrplAddress: freshUser!.xrplAddress,
-      role: freshUser!.role,
+      role: (freshUser!.role as 'user' | 'admin') || 'user',
     };
     const newToken = signToken(tokenUser);
 
@@ -213,13 +351,17 @@ userRouter.post('/wallets/disconnect', requireAuth, async (req: AuthenticatedReq
     }
 
     const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
-    const userDoc = await usersCol.findOne({ id: userId });
+    let userDoc: MongoUserDoc | null = await usersCol.findOne({ id: userId });
+    if (!userDoc && req.user?.email) {
+      userDoc = await usersCol.findOne({ email: req.user.email });
+    }
 
     if (!userDoc) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const updatedWallets = (userDoc.wallets || []).filter((w) => w.network !== network);
+    const activeDoc = userDoc!;
+    const updatedWallets = (activeDoc.wallets || []).filter((w: any) => w.network !== network);
     const updateFields: any = {
       wallets: updatedWallets,
       updatedAt: new Date().toISOString(),
@@ -227,18 +369,33 @@ userRouter.post('/wallets/disconnect', requireAuth, async (req: AuthenticatedReq
 
     if (network === 'stellar') {
       updateFields.stellarAddress = null;
-      if (userDoc.walletAddress === userDoc.stellarAddress) {
-        updateFields.walletAddress = userDoc.xrplAddress || null;
+      if (activeDoc.walletAddress === activeDoc.stellarAddress) {
+        updateFields.walletAddress = activeDoc.xrplAddress || null;
       }
     } else {
       updateFields.xrplAddress = null;
-      if (userDoc.walletAddress === userDoc.xrplAddress) {
-        updateFields.walletAddress = userDoc.stellarAddress || null;
+      if (activeDoc.walletAddress === activeDoc.xrplAddress) {
+        updateFields.walletAddress = activeDoc.stellarAddress || null;
       }
     }
 
-    await usersCol.updateOne({ id: userId }, { $set: updateFields });
-    const freshUser = await usersCol.findOne({ id: userId });
+    // Switch or clear lastConnectedWallet if it matches the disconnected network
+    if (activeDoc.lastConnectedWallet?.network === network) {
+      const remainingWallet = updatedWallets[0];
+      if (remainingWallet) {
+        updateFields.lastConnectedWallet = {
+          network: remainingWallet.network,
+          provider: remainingWallet.provider,
+          address: remainingWallet.address,
+          connectedAt: remainingWallet.connectedAt,
+        };
+      } else {
+        updateFields.lastConnectedWallet = null;
+      }
+    }
+
+    await usersCol.updateOne({ id: activeDoc.id }, { $set: updateFields });
+    const freshUser = await usersCol.findOne({ id: activeDoc.id });
 
     const tokenUser = {
       id: freshUser!.id,
@@ -247,7 +404,7 @@ userRouter.post('/wallets/disconnect', requireAuth, async (req: AuthenticatedReq
       walletAddress: freshUser!.walletAddress || undefined,
       stellarAddress: freshUser!.stellarAddress || undefined,
       xrplAddress: freshUser!.xrplAddress || undefined,
-      role: freshUser!.role,
+      role: (freshUser!.role as 'user' | 'admin') || 'user',
     };
     const newToken = signToken(tokenUser);
 
@@ -256,6 +413,7 @@ userRouter.post('/wallets/disconnect', requireAuth, async (req: AuthenticatedReq
       message: `${network === 'stellar' ? 'Stellar' : 'XRP Ledger'} wallet disconnected`,
       user: tokenUser,
       token: newToken,
+      lastConnectedWallet: freshUser!.lastConnectedWallet || null,
       wallets: freshUser!.wallets,
     });
   } catch (error: any) {

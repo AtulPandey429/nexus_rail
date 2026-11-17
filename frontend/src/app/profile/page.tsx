@@ -32,7 +32,7 @@ import {
   Activity,
   ArrowDownUp,
 } from 'lucide-react';
-import { readSession, clearSession, notifySession, SessionUser } from '@/lib/shop';
+import { readSession, clearSession, notifySession, onSessionChange, SessionUser } from '@/lib/shop';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
 import type { UserPortfolioResponse, HydratedHolding } from '@/types';
 
@@ -116,12 +116,59 @@ export default function ProfilePage() {
   const [copiedTxHash, setCopiedTxHash] = useState<string | null>(null);
   const [bridgeHistory, setBridgeHistory] = useState<any[]>([]);
   const [loadingBridgeHistory, setLoadingBridgeHistory] = useState<boolean>(false);
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+
+  // Synchronize sessionUser from auth session state and broadcast events
+  useEffect(() => {
+    const s = readSession();
+    setSessionUser(s.user);
+    const unsubscribe = onSessionChange(() => {
+      const refreshed = readSession();
+      setSessionUser(refreshed.user);
+      fetchProfile();
+      fetchPortfolio();
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Dual-rail address resolution: exactly 1 for Stellar, 1 for XRPL
+  const resolvedStellar =
+    profile?.stellarAddress ||
+    profile?.wallets?.find((w) => w.network === 'stellar')?.address ||
+    (profile?.lastConnectedWallet?.network === 'stellar' ? profile.lastConnectedWallet.address : '') ||
+    sessionUser?.stellarAddress ||
+    (sessionUser?.lastConnectedWallet?.network === 'stellar' ? sessionUser.lastConnectedWallet.address : '') ||
+    (profile?.walletAddress?.startsWith('G') ? profile.walletAddress : '') ||
+    (sessionUser?.walletAddress?.startsWith('G') ? sessionUser.walletAddress : '') ||
+    '';
+
+  const resolvedXrpl =
+    profile?.xrplAddress ||
+    profile?.wallets?.find((w) => w.network === 'xrpl')?.address ||
+    (profile?.lastConnectedWallet?.network === 'xrpl' ? profile.lastConnectedWallet.address : '') ||
+    sessionUser?.xrplAddress ||
+    (sessionUser?.lastConnectedWallet?.network === 'xrpl' ? sessionUser.lastConnectedWallet.address : '') ||
+    (profile?.walletAddress?.startsWith('r') ? profile.walletAddress : '') ||
+    (sessionUser?.walletAddress?.startsWith('r') ? sessionUser.walletAddress : '') ||
+    '';
+
+  const stellarProvider =
+    profile?.wallets?.find((w) => w.network === 'stellar')?.provider ||
+    (profile?.lastConnectedWallet?.network === 'stellar' ? profile.lastConnectedWallet.provider : '') ||
+    (sessionUser?.lastConnectedWallet?.network === 'stellar' ? sessionUser.lastConnectedWallet.provider : '') ||
+    'Freighter';
+
+  const xrplProvider =
+    profile?.wallets?.find((w) => w.network === 'xrpl')?.provider ||
+    (profile?.lastConnectedWallet?.network === 'xrpl' ? profile.lastConnectedWallet.provider : '') ||
+    (sessionUser?.lastConnectedWallet?.network === 'xrpl' ? sessionUser.lastConnectedWallet.provider : '') ||
+    'GemWallet';
 
   const handleOpenWithdrawNr = (holding: HydratedHolding) => {
     setWithdrawNrHolding(holding);
     setWithdrawAmount(String(holding.quantity));
     setWithdrawChain('stellar');
-    setWithdrawAddress(profile?.stellarAddress || '');
+    setWithdrawAddress(resolvedStellar || '');
     setWithdrawErrorMsg('');
     setWithdrawSuccessData(null);
     setWithdrawModalOpen(true);
@@ -131,9 +178,9 @@ export default function ProfilePage() {
     setWithdrawChain(chain);
     setWithdrawErrorMsg('');
     if (chain === 'stellar') {
-      setWithdrawAddress(profile?.stellarAddress || '');
+      setWithdrawAddress(resolvedStellar || '');
     } else {
-      setWithdrawAddress(profile?.xrplAddress || '');
+      setWithdrawAddress(resolvedXrpl || '');
     }
   };
 
@@ -275,11 +322,7 @@ export default function ProfilePage() {
     const targetChain = chainOverride || activeChain;
     let targetAddr = addressOverride;
     if (!targetAddr) {
-      if (targetChain === 'xrpl') {
-        targetAddr = profile?.xrplAddress || (profile?.walletAddress?.startsWith('r') ? profile.walletAddress : '');
-      } else {
-        targetAddr = profile?.stellarAddress || (profile?.walletAddress?.startsWith('G') ? profile.walletAddress : '');
-      }
+      targetAddr = targetChain === 'xrpl' ? resolvedXrpl : resolvedStellar;
     }
 
     if (!targetAddr) {
@@ -314,7 +357,7 @@ export default function ProfilePage() {
       const headers: Record<string, string> = {};
       if (session.token) headers.Authorization = `Bearer ${session.token}`;
 
-      const addr = addressOverride || profile?.stellarAddress || profile?.xrplAddress || profile?.walletAddress || '';
+      const addr = addressOverride || resolvedStellar || resolvedXrpl || '';
       const q = addr ? `?address=${encodeURIComponent(addr)}&limit=25` : '?limit=25';
       const res = await fetch(`/api/v1/swap/history${q}`, { headers });
       const data = await res.json();
@@ -338,7 +381,7 @@ export default function ProfilePage() {
 
   const handleSwitchActiveChain = (chain: 'xrpl' | 'stellar') => {
     setActiveChain(chain);
-    const addr = chain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress;
+    const addr = chain === 'xrpl' ? resolvedXrpl : resolvedStellar;
     if (addr) {
       fetchLedgerTransactions(addr, chain);
     } else {
@@ -375,18 +418,28 @@ export default function ProfilePage() {
         setProfile(data.profile);
         setNameInput(data.profile.name || '');
 
+        const curStellar =
+          data.profile.stellarAddress ||
+          data.profile.wallets?.find((w: any) => w.network === 'stellar')?.address ||
+          (data.profile.lastConnectedWallet?.network === 'stellar' ? data.profile.lastConnectedWallet.address : '') ||
+          session.user?.stellarAddress ||
+          '';
+
+        const curXrpl =
+          data.profile.xrplAddress ||
+          data.profile.wallets?.find((w: any) => w.network === 'xrpl')?.address ||
+          (data.profile.lastConnectedWallet?.network === 'xrpl' ? data.profile.lastConnectedWallet.address : '') ||
+          session.user?.xrplAddress ||
+          '';
+
         // Determine default active chain based on available or last connected wallet
         const preferredChain: 'xrpl' | 'stellar' =
-          data.profile.lastConnectedWallet?.network === 'stellar'
-            ? 'stellar'
-            : data.profile.xrplAddress
-            ? 'xrpl'
-            : data.profile.stellarAddress
+          data.profile.lastConnectedWallet?.network === 'stellar' || (!curXrpl && curStellar)
             ? 'stellar'
             : 'xrpl';
         setActiveChain(preferredChain);
 
-        const initialAddr = preferredChain === 'xrpl' ? data.profile.xrplAddress : data.profile.stellarAddress;
+        const initialAddr = preferredChain === 'xrpl' ? curXrpl : curStellar;
         if (initialAddr) {
           fetchLedgerTransactions(initialAddr, preferredChain);
         }
@@ -473,9 +526,21 @@ export default function ProfilePage() {
         if (data.token && data.user) {
           localStorage.setItem('nexus_token', data.token);
           localStorage.setItem('nexus_user', JSON.stringify(data.user));
+          try {
+            const last = localStorage.getItem('nexus_last_wallet');
+            if (last) {
+              const parsed = JSON.parse(last);
+              if (parsed?.network === network) {
+                localStorage.removeItem('nexus_last_wallet');
+              }
+            }
+          } catch {}
           notifySession();
         }
         await fetchProfile();
+        if (activeChain === network) {
+          setLedgerTxs([]);
+        }
       } else {
         throw new Error(data.error || 'Failed to disconnect wallet');
       }
@@ -488,6 +553,10 @@ export default function ProfilePage() {
     setSuccessMsg(`${account.chain === 'stellar' ? 'Stellar' : 'XRP Ledger'} wallet connected: ${account.address.slice(0, 6)}...${account.address.slice(-4)}`);
     setWalletModalOpen(false);
     await fetchProfile();
+    await fetchPortfolio();
+    if (account.chain === activeChain) {
+      fetchLedgerTransactions(account.address, account.chain);
+    }
   };
 
   const handleSignOut = () => {
@@ -1295,15 +1364,21 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* VERIFIED WALLETS SECTION (Requirement 5 & 6) */}
+      {/* VERIFIED WALLETS SECTION (Dual-Rail Model: Exactly 1 Stellar + 1 XRPL) */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
-              Verified Blockchain Wallets
-            </h2>
-            <p className="text-xs text-[var(--muted)] mt-0.5">
-              NexusRail enforces a maximum of <strong>one verified wallet address per blockchain network</strong>.
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-[var(--gold)]" />
+              <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
+                Verified Blockchain Wallets
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-[var(--gold)]/10 border border-[var(--gold)]/30 text-[10px] font-mono text-[var(--gold)] font-bold">
+                Dual-Rail Policy (Max 2)
+              </span>
+            </div>
+            <p className="text-xs text-[var(--muted)] mt-1">
+              NexusRail allows connecting up to <strong>two active wallets simultaneously</strong> — exactly one for Stellar (Freighter, Albedo, LOBSTR) and one for XRP Ledger (GemWallet, Crossmark, Xaman). Connecting or replacing one rail never affects the other.
             </p>
           </div>
         </div>
@@ -1315,37 +1390,59 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="w-3 h-3 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50" />
-                  <h3 className="font-bold text-sm text-[var(--foreground)]">Stellar Network (XLM)</h3>
+                  <div>
+                    <h3 className="font-bold text-sm text-[var(--foreground)]">Stellar Network (XLM)</h3>
+                    <span className="text-[10px] font-mono text-[var(--muted)]">Rail 1 · Horizon &amp; Soroban</span>
+                  </div>
                 </div>
-                {profile?.stellarAddress ? (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1">
+                {resolvedStellar ? (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1.5">
                     <ShieldCheck className="w-3 h-3" />
-                    <span>Verified Active</span>
+                    <span>{stellarProvider || 'Freighter'} Active</span>
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full bg-[var(--card-subtle)] text-[10px] font-mono text-[var(--muted)]">
-                    Not Connected
+                  <span className="px-2.5 py-1 rounded-full bg-[var(--card-subtle)] text-[10px] font-mono text-[var(--muted)]">
+                    Slot Available
                   </span>
                 )}
               </div>
 
-              {profile?.stellarAddress ? (
-                <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1.5">
-                  <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block">
-                    Public Address
-                  </span>
+              {resolvedStellar ? (
+                <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block">
+                      Stellar Public Key
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyHash(resolvedStellar)}
+                      className="text-[10px] font-mono text-[var(--gold)] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedTxHash === resolvedStellar ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedTxHash === resolvedStellar ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
                   <p className="text-xs font-mono text-[var(--foreground)] break-all font-semibold select-all">
-                    {profile.stellarAddress}
+                    {resolvedStellar}
                   </p>
-                  <p className="text-[10px] text-[var(--muted)] font-mono pt-1">
-                    Compatible with Soroban smart contracts and Horizon settlement.
-                  </p>
+                  <div className="flex items-center justify-between pt-1 text-[10px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
+                    <span>Compatible with Soroban &amp; SEP-0007</span>
+                    <a
+                      href={`https://stellar.expert/explorer/testnet/account/${resolvedStellar}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cyan-400 hover:underline flex items-center gap-1"
+                    >
+                      <span>Stellar Expert</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <div className="p-6 rounded-2xl bg-[var(--card-subtle)] border border-dashed border-[var(--border)] text-center space-y-2">
                   <Wallet className="w-6 h-6 text-[var(--muted)] mx-auto" />
                   <p className="text-xs text-[var(--muted)] font-mono">
-                    No Stellar address attached to this profile.
+                    No Stellar wallet connected. Connect Freighter, Albedo, or LOBSTR.
                   </p>
                 </div>
               )}
@@ -1361,10 +1458,10 @@ export default function ProfilePage() {
                 className="flex-1 py-2.5 px-4 rounded-xl bg-[var(--card)] hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono font-bold text-[var(--foreground)] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
                 <Wallet className="w-3.5 h-3.5 text-[var(--gold)]" />
-                <span>{profile?.stellarAddress ? 'Change Stellar Wallet' : 'Connect Stellar Wallet'}</span>
+                <span>{resolvedStellar ? 'Switch Stellar Wallet' : 'Connect Stellar Wallet'}</span>
               </button>
 
-              {profile?.stellarAddress && (
+              {resolvedStellar && (
                 <button
                   type="button"
                   onClick={() => handleDisconnectWallet('stellar')}
@@ -1383,37 +1480,59 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="w-3 h-3 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
-                  <h3 className="font-bold text-sm text-[var(--foreground)]">XRP Ledger (XRP)</h3>
+                  <div>
+                    <h3 className="font-bold text-sm text-[var(--foreground)]">XRP Ledger (XRP)</h3>
+                    <span className="text-[10px] font-mono text-[var(--muted)]">Rail 2 · Altnet &amp; XLS-30d</span>
+                  </div>
                 </div>
-                {profile?.xrplAddress ? (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1">
+                {resolvedXrpl ? (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1.5">
                     <ShieldCheck className="w-3 h-3" />
-                    <span>Verified Active</span>
+                    <span>{xrplProvider || 'GemWallet'} Active</span>
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full bg-[var(--card-subtle)] text-[10px] font-mono text-[var(--muted)]">
-                    Not Connected
+                  <span className="px-2.5 py-1 rounded-full bg-[var(--card-subtle)] text-[10px] font-mono text-[var(--muted)]">
+                    Slot Available
                   </span>
                 )}
               </div>
 
-              {profile?.xrplAddress ? (
-                <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1.5">
-                  <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block">
-                    Account Address
-                  </span>
+              {resolvedXrpl ? (
+                <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block">
+                      XRPL Account Address
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyHash(resolvedXrpl)}
+                      className="text-[10px] font-mono text-[var(--gold)] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedTxHash === resolvedXrpl ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedTxHash === resolvedXrpl ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
                   <p className="text-xs font-mono text-[var(--foreground)] break-all font-semibold select-all">
-                    {profile.xrplAddress}
+                    {resolvedXrpl}
                   </p>
-                  <p className="text-[10px] text-[var(--muted)] font-mono pt-1">
-                    Compatible with XRP Altnet consensus and payment channels.
-                  </p>
+                  <div className="flex items-center justify-between pt-1 text-[10px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
+                    <span>Compatible with XLS-30d AMM &amp; Escrow</span>
+                    <a
+                      href={`https://testnet.xrpl.org/accounts/${resolvedXrpl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:underline flex items-center gap-1"
+                    >
+                      <span>XRPL Explorer</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <div className="p-6 rounded-2xl bg-[var(--card-subtle)] border border-dashed border-[var(--border)] text-center space-y-2">
                   <Wallet className="w-6 h-6 text-[var(--muted)] mx-auto" />
                   <p className="text-xs text-[var(--muted)] font-mono">
-                    No XRP Ledger address attached to this profile.
+                    No XRP Ledger wallet connected. Connect GemWallet, Crossmark, or Xaman.
                   </p>
                 </div>
               )}
@@ -1429,10 +1548,10 @@ export default function ProfilePage() {
                 className="flex-1 py-2.5 px-4 rounded-xl bg-[var(--card)] hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono font-bold text-[var(--foreground)] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
                 <Wallet className="w-3.5 h-3.5 text-[var(--gold)]" />
-                <span>{profile?.xrplAddress ? 'Change XRP Wallet' : 'Connect XRP Wallet'}</span>
+                <span>{resolvedXrpl ? 'Switch XRP Wallet' : 'Connect XRP Wallet'}</span>
               </button>
 
-              {profile?.xrplAddress && (
+              {resolvedXrpl && (
                 <button
                   type="button"
                   onClick={() => handleDisconnectWallet('xrpl')}
@@ -1529,7 +1648,7 @@ export default function ProfilePage() {
                   >
                     <span className="w-2 h-2 rounded-full bg-[#0081F2]" />
                     <span>XRPL Testnet</span>
-                    {profile?.xrplAddress && <span className="text-[10px] opacity-75 font-normal">({profile.xrplAddress.slice(0, 4)}...{profile.xrplAddress.slice(-3)})</span>}
+                    {resolvedXrpl && <span className="text-[10px] opacity-75 font-normal">({resolvedXrpl.slice(0, 4)}...{resolvedXrpl.slice(-3)})</span>}
                   </button>
 
                   <button
@@ -1543,7 +1662,7 @@ export default function ProfilePage() {
                   >
                     <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
                     <span>Stellar Testnet</span>
-                    {profile?.stellarAddress && <span className="text-[10px] opacity-75 font-normal">({profile.stellarAddress.slice(0, 4)}...{profile.stellarAddress.slice(-3)})</span>}
+                    {resolvedStellar && <span className="text-[10px] opacity-75 font-normal">({resolvedStellar.slice(0, 4)}...{resolvedStellar.slice(-3)})</span>}
                   </button>
                 </div>
               </div>
@@ -1551,9 +1670,9 @@ export default function ProfilePage() {
               {/* Current Active Address Badge */}
               <div className="flex items-center gap-2 text-xs font-mono">
                 <span className="text-[var(--muted)]">Queried Account:</span>
-                {(activeChain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress) ? (
-                  <span className="font-semibold text-[var(--gold)] truncate max-w-[220px]">
-                    {activeChain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress}
+                {(activeChain === 'xrpl' ? resolvedXrpl : resolvedStellar) ? (
+                  <span className="font-semibold text-[var(--gold)] truncate max-w-[220px]" title={activeChain === 'xrpl' ? resolvedXrpl : resolvedStellar}>
+                    {activeChain === 'xrpl' ? resolvedXrpl : resolvedStellar}
                   </span>
                 ) : (
                   <span className="text-amber-400 font-medium">None Connected</span>
@@ -1562,7 +1681,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Content States */}
-            {!(activeChain === 'xrpl' ? profile?.xrplAddress : profile?.stellarAddress) ? (
+            {!(activeChain === 'xrpl' ? resolvedXrpl : resolvedStellar) ? (
               <div className="nexus-glass-card p-8 rounded-3xl border border-dashed border-[var(--border)] text-center space-y-3">
                 <Wallet className="w-8 h-8 text-[var(--muted)] mx-auto opacity-50" />
                 <h3 className="text-sm font-bold text-[var(--foreground)]">
@@ -1814,16 +1933,16 @@ export default function ProfilePage() {
       </div>
 
       {/* RECENTLY CONNECTED WALLET METADATA */}
-      {profile?.lastConnectedWallet && (
+      {(profile?.lastConnectedWallet || sessionUser?.lastConnectedWallet) && (
         <div className="p-4 rounded-2xl nexus-glass-card border border-[var(--border)] text-xs font-mono text-[var(--muted)] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-[var(--gold)]" />
             <span>
-              Last connected via <strong>{profile.lastConnectedWallet.provider}</strong> on {new Date(profile.lastConnectedWallet.connectedAt).toLocaleString()}
+              Last connected via <strong>{(profile?.lastConnectedWallet || sessionUser?.lastConnectedWallet)?.provider}</strong> on {new Date((profile?.lastConnectedWallet || sessionUser?.lastConnectedWallet)!.connectedAt).toLocaleString()}
             </span>
           </div>
           <span className="uppercase text-[10px] px-2 py-0.5 rounded bg-[var(--card-subtle)] text-[var(--foreground)]">
-            {profile.lastConnectedWallet.network}
+            {(profile?.lastConnectedWallet || sessionUser?.lastConnectedWallet)?.network}
           </span>
         </div>
       )}

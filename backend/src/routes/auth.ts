@@ -3,6 +3,7 @@ import { AuthService } from '../services/auth.js';
 import { signToken } from '../services/jwt.js';
 import { LoginWithEmailSchema, Web3AuthChallengeSchema, Web3VerifySignatureSchema } from '../types/index.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { MongoService, MongoUserDoc } from '../services/mongo.js';
 
 export const authRouter = Router();
 
@@ -67,24 +68,98 @@ authRouter.post('/verify-signature', async (req: Request, res: Response) => {
 authRouter.post('/wallet-login', async (req: Request, res: Response) => {
   const walletAddress = String(req.body?.walletAddress || '').trim();
   const walletName = String(req.body?.walletName || 'Wallet').trim();
-  const chain = String(req.body?.chain || 'stellar').toLowerCase();
+  const rawChain = String(req.body?.chain || '').toLowerCase();
 
   if (!walletAddress) {
     return res.status(400).json({ success: false, error: 'walletAddress is required' });
   }
 
+  const isStellar = walletAddress.startsWith('G') || rawChain === 'stellar';
+  const isXrpl = walletAddress.startsWith('r') || rawChain === 'xrpl';
+  const network: 'stellar' | 'xrpl' = isStellar ? 'stellar' : 'xrpl';
+  const userId = `usr_${walletName.toLowerCase()}_${walletAddress.slice(0, 8)}`;
+  const now = new Date().toISOString();
+
   try {
-    const user = {
-      id: `usr_${walletName.toLowerCase()}_${walletAddress.slice(0, 8)}`,
-      walletAddress,
-      role: 'user' as const,
-      email: `${walletName.toLowerCase()}_${walletAddress.slice(-4)}@nexusrail.dev`,
+    const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
+    let userDoc: MongoUserDoc | null = await usersCol.findOne({
+      $or: [
+        { id: userId },
+        { walletAddress },
+        { stellarAddress: walletAddress },
+        { xrplAddress: walletAddress },
+      ],
+    });
+
+    const lastConnected = {
+      network,
+      provider: walletName,
+      address: walletAddress,
+      connectedAt: now,
     };
-    const token = signToken(user);
+
+    if (userDoc) {
+      const updateFields: any = {
+        updatedAt: now,
+        lastConnectedWallet: lastConnected,
+      };
+      if (isStellar && !userDoc.stellarAddress) updateFields.stellarAddress = walletAddress;
+      if (isXrpl && !userDoc.xrplAddress) updateFields.xrplAddress = walletAddress;
+      if (!userDoc.walletAddress) updateFields.walletAddress = walletAddress;
+
+      const existingWallets = (userDoc.wallets || []).filter((w: any) => w.network !== network);
+      existingWallets.push({
+        network,
+        address: walletAddress,
+        provider: walletName,
+        connectedAt: now,
+        verified: true,
+      });
+      updateFields.wallets = existingWallets;
+
+      await usersCol.updateOne({ id: userDoc.id }, { $set: updateFields });
+      userDoc = { ...userDoc, ...updateFields };
+    } else {
+      const newUserDoc: MongoUserDoc = {
+        id: userId,
+        name: `${walletName} Traveler`,
+        email: `${walletName.toLowerCase()}_${walletAddress.slice(-4)}@nexusrail.dev`,
+        walletAddress,
+        stellarAddress: isStellar ? walletAddress : undefined,
+        xrplAddress: isXrpl ? walletAddress : undefined,
+        role: 'user',
+        wallets: [
+          {
+            network,
+            address: walletAddress,
+            provider: walletName,
+            connectedAt: now,
+            verified: true,
+          },
+        ],
+        lastConnectedWallet: lastConnected,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await usersCol.insertOne(newUserDoc);
+      userDoc = newUserDoc;
+    }
+
+    const activeUser = userDoc!;
+    const tokenUser = {
+      id: activeUser.id,
+      name: activeUser.name,
+      email: activeUser.email,
+      walletAddress: activeUser.walletAddress,
+      stellarAddress: activeUser.stellarAddress,
+      xrplAddress: activeUser.xrplAddress,
+      role: activeUser.role,
+    };
+    const token = signToken(tokenUser);
     res.json({
       success: true,
       token,
-      user,
+      user: tokenUser,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to issue wallet session' });
@@ -128,17 +203,92 @@ authRouter.post('/manual-wallet', async (req: Request, res: Response) => {
   }
 
   try {
-    const user = {
-      id: `usr_${chain}_${rawAddress.slice(0, 8)}`,
-      walletAddress: rawAddress,
-      role: 'user' as const,
-      email: `${chain}_${rawAddress.slice(-4)}@nexusrail.dev`,
+    const isStellar = chain === 'stellar';
+    const isXrpl = chain === 'xrpl';
+    const network: 'stellar' | 'xrpl' = isStellar ? 'stellar' : 'xrpl';
+    const userId = `usr_${chain}_${rawAddress.slice(0, 8)}`;
+    const now = new Date().toISOString();
+    const provider = isStellar ? 'Freighter' : isXrpl ? 'GemWallet' : 'Web3';
+
+    const usersCol = await MongoService.getCollection<MongoUserDoc>('users');
+    let userDoc: MongoUserDoc | null = await usersCol.findOne({
+      $or: [
+        { id: userId },
+        { walletAddress: rawAddress },
+        { stellarAddress: rawAddress },
+        { xrplAddress: rawAddress },
+      ],
+    });
+
+    const lastConnected = {
+      network,
+      provider,
+      address: rawAddress,
+      connectedAt: now,
     };
-    const token = signToken(user);
+
+    if (userDoc) {
+      const updateFields: any = {
+        updatedAt: now,
+        lastConnectedWallet: lastConnected,
+      };
+      if (isStellar && !userDoc.stellarAddress) updateFields.stellarAddress = rawAddress;
+      if (isXrpl && !userDoc.xrplAddress) updateFields.xrplAddress = rawAddress;
+      if (!userDoc.walletAddress) updateFields.walletAddress = rawAddress;
+
+      const existingWallets = (userDoc.wallets || []).filter((w: any) => w.network !== network);
+      existingWallets.push({
+        network,
+        address: rawAddress,
+        provider,
+        connectedAt: now,
+        verified: true,
+      });
+      updateFields.wallets = existingWallets;
+
+      await usersCol.updateOne({ id: userDoc.id }, { $set: updateFields });
+      userDoc = { ...userDoc, ...updateFields };
+    } else {
+      const newUserDoc: MongoUserDoc = {
+        id: userId,
+        name: `${provider} Traveler`,
+        email: `${chain}_${rawAddress.slice(-4)}@nexusrail.dev`,
+        walletAddress: rawAddress,
+        stellarAddress: isStellar ? rawAddress : undefined,
+        xrplAddress: isXrpl ? rawAddress : undefined,
+        role: 'user',
+        wallets: [
+          {
+            network,
+            address: rawAddress,
+            provider,
+            connectedAt: now,
+            verified: true,
+          },
+        ],
+        lastConnectedWallet: lastConnected,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await usersCol.insertOne(newUserDoc);
+      userDoc = newUserDoc;
+    }
+
+    const activeUser = userDoc!;
+    const tokenUser = {
+      id: activeUser.id,
+      name: activeUser.name,
+      email: activeUser.email,
+      walletAddress: activeUser.walletAddress,
+      stellarAddress: activeUser.stellarAddress,
+      xrplAddress: activeUser.xrplAddress,
+      role: activeUser.role,
+    };
+    const token = signToken(tokenUser);
     res.json({
       success: true,
       token,
-      user,
+      user: tokenUser,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to authenticate manual wallet address' });
