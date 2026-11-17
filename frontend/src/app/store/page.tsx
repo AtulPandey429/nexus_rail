@@ -78,6 +78,7 @@ export default function StoreCatalogPage() {
   // Pagination State (Max 10 Products Per Page)
   const PAGE_SIZE = 10;
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState<boolean>(false);
 
   // Reset pagination to page 1 whenever filters change
   useEffect(() => {
@@ -240,6 +241,15 @@ export default function StoreCatalogPage() {
     };
   }, [resolvedCatalog]);
 
+  const categoryList = useMemo(() => [
+    { id: 'all', label: 'All products', count: categoryCounts.all },
+    { id: 'baskets', label: 'Smart Baskets', count: categoryCounts.baskets },
+    { id: 'live-assets', label: 'Live RWA & Tokens', count: categoryCounts.liveAssets },
+    { id: 'hardware', label: 'Hardware', count: categoryCounts.hardware },
+    { id: 'workspace', label: 'Workspace', count: categoryCounts.workspace },
+    { id: 'essentials', label: 'Essentials', count: categoryCounts.essentials },
+  ], [categoryCounts]);
+
   const getItemCartQty = (sku: string) => {
     const line = cartLines.find((c) => c.sku === sku);
     return line ? line.qty : 0;
@@ -295,13 +305,13 @@ export default function StoreCatalogPage() {
         </div>
 
         {/* Filter and Search Row */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
           <div className="text-xs font-mono text-[var(--muted)]">
             Collection / <span className="text-[var(--foreground)] font-medium">All products</span>
           </div>
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto">
-            {/* Search Input with Debouncing & Clean Icon (Removed floating logo) */}
+            {/* Search Input with Debouncing & Clean Icon */}
             <div className="relative flex-1 sm:w-64">
               <Search className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
@@ -324,6 +334,24 @@ export default function StoreCatalogPage() {
               )}
             </div>
 
+            {/* Mobile / Tablet Filter Toggle Button (< lg) */}
+            <button
+              type="button"
+              onClick={() => setMobileFilterOpen((prev) => !prev)}
+              className={`lg:hidden h-10 px-3.5 rounded-xl nexus-glass-surface border text-xs font-mono flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                mobileFilterOpen || maxPrice < 600
+                  ? 'border-[var(--gold)] text-[var(--gold-bright)] bg-[var(--gold)]/10 font-bold'
+                  : 'border-[var(--border)] text-[var(--foreground)]'
+              }`}
+              aria-label="Toggle price filters"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filters</span>
+              {maxPrice < 600 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
+              )}
+            </button>
+
             {/* Perfectly Aligned Sort Dropdown with Matching Height & Custom Chevron */}
             <div className="relative shrink-0">
               <select
@@ -342,11 +370,73 @@ export default function StoreCatalogPage() {
           </div>
         </div>
 
-        {/* Two-Column Layout (Sidebar + 3x2 Grid) */}
+        {/* Mobile & Tablet Horizontal Category Pills Bar (< lg) */}
+        <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {categoryList.map((cat) => {
+            const isActive = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id as CategoryFilter)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-mono whitespace-nowrap shrink-0 flex items-center gap-2 transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-[var(--gold)] text-black font-bold shadow-md shadow-[var(--gold)]/20'
+                    : 'nexus-glass-surface border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                <span>{cat.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isActive ? 'bg-black/20 text-black' : 'bg-white/10 text-[var(--muted)]'
+                  }`}
+                >
+                  {cat.count < 10 ? `0${cat.count}` : cat.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Mobile / Tablet Collapsible Filters Drawer (< lg) */}
+        {mobileFilterOpen && (
+          <div className="lg:hidden p-4 rounded-2xl nexus-glass-surface border border-[var(--border)] space-y-3 animate-in slide-in-from-top-2 duration-200 shadow-xl">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono uppercase tracking-wider text-[var(--gold)] font-bold">
+                Filter by Max Price
+              </span>
+              <span className="text-xs font-mono font-bold text-[var(--foreground)]">
+                Up to ${maxPrice}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="600"
+              step="10"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(Number(e.target.value))}
+              className="w-full h-1.5 bg-[var(--card)] rounded-lg appearance-none cursor-pointer accent-[var(--gold)]"
+            />
+            <div className="flex justify-between items-center text-xs font-mono text-[var(--muted)] pt-1">
+              <span>$0</span>
+              <button
+                type="button"
+                onClick={() => setMaxPrice(600)}
+                className="text-[11px] text-[var(--gold)] hover:underline cursor-pointer"
+              >
+                Reset Price
+              </button>
+              <span>$600</span>
+            </div>
+          </div>
+        )}
+
+        {/* Two-Column Layout (Sidebar + Grid) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Left Sidebar (Categories & Price Range) */}
-          <div className="lg:col-span-3 rounded-2xl nexus-glass-surface p-5 space-y-6 self-start shadow-lg">
+          {/* Left Sidebar (Desktop Only: hidden on < lg, sticky on >= lg) */}
+          <div className="hidden lg:block lg:col-span-3 rounded-2xl nexus-glass-surface p-5 space-y-6 sticky top-24 self-start shadow-lg">
             
             {/* Categories */}
             <div className="space-y-2">
@@ -355,14 +445,7 @@ export default function StoreCatalogPage() {
               </div>
 
               <div className="space-y-1">
-                {[
-                  { id: 'all', label: 'All products', count: categoryCounts.all },
-                  { id: 'baskets', label: 'Smart Baskets', count: categoryCounts.baskets },
-                  { id: 'live-assets', label: 'Live RWA & Tokens', count: categoryCounts.liveAssets },
-                  { id: 'hardware', label: 'Hardware', count: categoryCounts.hardware },
-                  { id: 'workspace', label: 'Workspace', count: categoryCounts.workspace },
-                  { id: 'essentials', label: 'Essentials', count: categoryCounts.essentials },
-                ].map((cat) => {
+                {categoryList.map((cat) => {
                   const isActive = selectedCategory === cat.id;
                   return (
                     <button
@@ -421,8 +504,8 @@ export default function StoreCatalogPage() {
             </div>
           </div>
 
-          {/* Right Area: 6 Products in a 3x2 Grid */}
-          <div className="lg:col-span-9 space-y-4">
+          {/* Right Area: Products Grid */}
+          <div className="w-full lg:col-span-9 space-y-4">
             
             {/* Header info */}
             <div className="flex items-center justify-between text-[11px] font-mono text-[var(--muted)]">
@@ -433,7 +516,7 @@ export default function StoreCatalogPage() {
             </div>
 
             {/* Product & Basket Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {paginatedProducts.map((product) => {
                 const qty = getItemCartQty(product.sku);
                 const inCart = qty > 0;
