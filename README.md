@@ -103,6 +103,7 @@ nexus-rail/
 │   ├── src/
 │   │   ├── app/                # App Router pages (store, cart, checkout, swap, admin, profile, receipt, guide, payment)
 │   │   ├── components/         # Organized by domain:
+│   │   │   ├── admin/          # Modular Admin Console shell, design primitives & 11 tabs (incl. AnalyticsTab)
 │   │   │   ├── layout/         # AppShell, SiteHeader, SiteFooter, ThemeProvider
 │   │   │   ├── wallet/         # WalletConnectModal, WalletIcons, AuthModal
 │   │   │   ├── checkout/       # MultiRailCheckoutSelector, StripeCheckoutModal, TransactionSafetyCenter
@@ -119,7 +120,7 @@ nexus-rail/
 │   │   ├── config/             # Environment schema validation
 │   │   ├── middleware/         # Auth and security middlewares
 │   │   ├── routes/             # REST API endpoints
-│   │   ├── services/           # Stellar, XRPL, Stripe, $NR AMM, AI, and MongoDB services
+│   │   ├── services/           # Stellar, XRPL, Stripe, $NXL AMM, Analytics, AI, and MongoDB services
 │   │   ├── types/              # Self-contained Backend TypeScript definitions & Zod schemas
 │   │   └── workers/            # Ledger watcher, Webhook DLQ, and keep-alive workers
 │   ├── render.yaml             # Standalone Render configuration
@@ -183,9 +184,26 @@ npm run dev:frontend
 
 ---
 
+## 📊 Admin Console, Business Analytics & Optimizations
+
+- **Modular Admin Console (`/admin`, `/admin/orders`)**:
+  - 11 scoped views: **Executive overview**, **Business analytics**, **Orders & settlements**, **Fulfillment queue**, **Treasury & split**, **Custody & asset ledger**, **$NXL liquidity pool**, **Dual-rail vaults**, **Baskets & catalog**, **Exchange rates & oracles**, **AI settlement desk**, and **Security audit trail**.
+  - All views read live MongoDB, Redis/cache, oracle, and blockchain telemetry with zero hardcoded mock numbers or demo datasets.
+- **Business Analytics (`AnalyticsTab` + `GET /api/v1/admin/analytics`)**:
+  - Supports `7d`, `30d`, `90d`, `1y`, and `all` date ranges with `day`, `week`, and `month` granularities.
+  - Strictly distinguishes **settled order volume** (`PAID`, `FULFILLING`, `FULFILLED`), **platform revenue** (`platform_treasury` fees, spreads, gas surplus), **net owner profit**, **$NXL AMM reserve liquidity**, and **assets under custody**.
+  - Explicitly documents unavailable metrics (`dataQuality.unavailableMetrics`) when underlying accounting ledgers (bank cash balance, external fiat deposits, COGS, negative refund entries) do not exist.
+- **Database Indexes & Backend Performance**:
+  - Compound and descending indexes on `users` (`createdAt`, `created_at`), `orders` (`created_at`, `status + created_at`, `payment_rail + created_at`), `wallet_ledger` (`created_at`, `type + created_at`), `user_holdings` (`symbol + quantity`), `token_withdrawals` (`created_at`), and `platform_chain_logs` (`created_at`).
+  - Server-side MongoDB `$facet` and `$lookup` aggregations replace full-collection scans in `AdminAnalyticsService`, `TreasuryService.getTreasurySummary()`, `PortfolioService.getPlatformAUC()`, `GET /api/v1/admin/stats`, `GET /api/v1/admin/orders`, and `GET /api/v1/analytics/summary`.
+  - Short-TTL caching (`RedisCacheService`) on analytics (`30s`), admin products (`60s`), Soroban contract/RPC metadata (`60s`), and XRPL/Stellar dual-rail summary (`30s`) with write-through cache invalidation.
+
+---
+
 ## 📜 Scripts
 
 - `npm run build`: Compiles backend TypeScript and builds the Next.js frontend.
+- `npm test`: Runs the backend Node.js test suite (`backend/test/**/*.test.ts`).
 - `npm run dev:backend` (alias `dev:api`): Starts backend API in development mode with live reload.
 - `npm run dev:frontend` (alias `dev:web`): Starts Next.js development server.
 - `npm run build:backend` (alias `build:api`): Compiles the backend API (`tsc`).

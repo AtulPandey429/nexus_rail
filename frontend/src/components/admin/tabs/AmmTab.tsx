@@ -24,7 +24,7 @@ import {
   cn,
   inputClassName,
 } from '@/components/admin/AdminUI';
-import { MiniStat } from '@/components/admin/AdminBits';
+import { AssetAvatar, MiniStat } from '@/components/admin/AdminBits';
 import {
   formatNumber,
   formatUsd,
@@ -56,13 +56,13 @@ export function AmmTab({ model }: { model: AdminModel }) {
     handleDepositAmm,
   } = model;
 
-  const price = nrPoolStatus?.priceUsd ?? 1.025;
-  const change = nrPoolStatus?.change24hPercent ?? 2.4;
-  const reserveUsd = nrPoolStatus?.reserveUsd ?? 15000;
-  const poolSupply = nrPoolStatus?.poolNrSupply ?? 14634;
-  const circulating = nrPoolStatus?.circulatingNr ?? 5000;
-  const marketCap = nrPoolStatus?.marketCapUsd ?? poolSupply * price;
-  const feeInjections = nrPoolStatus?.cumulativeFeeInjectedUsd ?? 420.5;
+  const price = nrPoolStatus?.spotPriceUsd ?? nrPoolStatus?.priceUsd ?? 0;
+  const change = nrPoolStatus?.change24hPercent ?? 0;
+  const reserveUsd = nrPoolStatus?.reserveUsd ?? 0;
+  const poolSupply = nrPoolStatus?.poolNrSupply ?? 0;
+  const circulating = nrPoolStatus?.circulatingNr ?? 0;
+  const marketCap = nrPoolStatus?.marketCapUsd ?? circulating * price;
+  const feeInjections = nrPoolStatus?.cumulativeFeeInjectedUsd ?? 0;
   const backingRatio = marketCap > 0 ? Math.min(100, (reserveUsd / marketCap) * 100) : 0;
 
   return (
@@ -70,11 +70,24 @@ export function AmmTab({ model }: { model: AdminModel }) {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="$NXL spot price"
-          value={`${formatUsd(price, 4)}`}
+          value={nrPoolStatus ? formatUsd(price, 4) : '—'}
           icon={CircleDollarSign}
           tone="gold"
-          hint={`24h ${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}
-          aside={<Badge tone={change >= 0 ? 'success' : 'danger'} dot>{change >= 0 ? 'Up' : 'Down'}</Badge>}
+          hint={
+            <span className="inline-flex items-center gap-1.5">
+              <AssetAvatar symbol="NXL" size={16} />
+              <span>{nrPoolStatus ? `24h ${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : 'Awaiting pool sync'}</span>
+            </span>
+          }
+          aside={
+            nrPoolStatus ? (
+              <Badge tone={change >= 0 ? 'success' : 'danger'} dot>
+                {change >= 0 ? 'Up' : 'Down'}
+              </Badge>
+            ) : (
+              <Badge tone="neutral">Syncing</Badge>
+            )
+          }
         />
         <StatCard
           label="Reserve backing"
@@ -220,8 +233,26 @@ export function AmmTab({ model }: { model: AdminModel }) {
           {dualRailSummary?.xrpl ? (
             <>
               <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
-                <MiniStat label="XRP reserve" value={formatNumber(dualRailSummary.xrpl.reserveXrp, 2)} hint="Native XRP" />
-                <MiniStat label="NXL reserve" value={formatNumber(dualRailSummary.xrpl.reserveNr, 2)} hint="Issued NXL" />
+                <div className="flex items-center gap-3 rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
+                  <AssetAvatar symbol="XRP" size={30} />
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">XRP reserve</p>
+                    <p className="mt-1 truncate font-admin-mono text-[13px] font-semibold text-white admin-tabular">
+                      {formatNumber(dualRailSummary.xrpl.reserveXrp, 2)}
+                    </p>
+                    <p className="truncate text-[10px] text-admin-faint">Native XRP</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
+                  <AssetAvatar symbol="NXL" size={30} />
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">NXL reserve</p>
+                    <p className="mt-1 truncate font-admin-mono text-[13px] font-semibold text-white admin-tabular">
+                      {formatNumber(dualRailSummary.xrpl.reserveNr, 2)}
+                    </p>
+                    <p className="truncate text-[10px] text-admin-faint">Issued NXL</p>
+                  </div>
+                </div>
                 <MiniStat
                   label="Trading fee"
                   value={`${(dualRailSummary.xrpl.tradingFeeBps / 100).toFixed(2)}%`}

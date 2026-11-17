@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import Image from 'next/image';
 import {
   Activity,
   Bot,
@@ -15,6 +16,7 @@ import {
 import { Badge, Card, SectionHeader, StatCard, cn } from '@/components/admin/AdminUI';
 
 export function AgentTab() {
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const capabilities = [
     {
       icon: Scale,
@@ -49,8 +51,19 @@ export function AgentTab() {
         <span className="pointer-events-none absolute -bottom-24 right-1/3 h-56 w-56 rounded-full bg-sky-500/[0.05] blur-3xl" aria-hidden="true" />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">
-            <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-admin-gold/25 bg-admin-gold/10 text-admin-gold-soft">
-              <Bot className="h-5 w-5" aria-hidden="true" />
+            <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-admin-gold/25 bg-admin-gold/10 text-admin-gold-soft">
+              {!avatarFailed ? (
+                <Image
+                  src="/images/nexus-ai-bot-avatar-128.png"
+                  alt="NexusRail AI Agent"
+                  width={48}
+                  height={48}
+                  onError={() => setAvatarFailed(true)}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Bot className="h-5 w-5" aria-hidden="true" />
+              )}
               <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0F131B] bg-emerald-400" aria-hidden="true" />
             </span>
             <div>

@@ -29,7 +29,7 @@ import {
   Td,
   Th,
 } from '@/components/admin/AdminUI';
-import { FilterChip, PaginationBar } from '@/components/admin/AdminBits';
+import { AdminBrandMark, FilterChip, PaginationBar } from '@/components/admin/AdminBits';
 import {
   formatDateTime,
   formatUsd,
@@ -155,9 +155,7 @@ export default function AdminOrdersPage() {
   if (!user) {
     return (
       <div className="admin-canvas flex min-h-screen flex-col items-center justify-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-admin-gold/30 bg-admin-gold/10 font-admin-mono text-sm font-bold text-admin-gold-soft">
-          N
-        </span>
+        <AdminBrandMark size={44} />
         <p className="text-xs text-admin-muted">Opening fulfillment queue…</p>
       </div>
     );
@@ -273,7 +271,7 @@ export default function AdminOrdersPage() {
                             {initialsFor(order.buyerEmail)}
                           </span>
                           <span className="max-w-[220px] truncate text-xs text-slate-300">
-                            {order.buyerEmail || 'buyer@example.com'}
+                            {order.buyerEmail || '—'}
                           </span>
                         </div>
                       </Td>

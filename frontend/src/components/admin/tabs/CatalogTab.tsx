@@ -16,7 +16,7 @@ import {
   Td,
   Th,
 } from '@/components/admin/AdminUI';
-import { FilterChip, PaginationBar, RailBadge } from '@/components/admin/AdminBits';
+import { FilterChip, PaginationBar, ProductThumb, RailBadge } from '@/components/admin/AdminBits';
 import { formatMoney, type AdminModel } from '@/components/admin/adminModel';
 
 export function CatalogTab({ model }: { model: AdminModel }) {
@@ -152,13 +152,13 @@ export function CatalogTab({ model }: { model: AdminModel }) {
                   </tr>
                 ))
               ) : paginatedCatalog.length > 0 ? (
-                paginatedCatalog.map((product) => {
+                paginatedCatalog.map((product, index) => {
                   const status = product.active === false ? 'PAUSED' : 'ACTIVE';
                   const priceCents = product.priceCents ?? product.price_cents ?? 0;
                   const rail = product.settlementRail || product.rail || 'Dual-rail';
                   return (
                     <tr
-                      key={product.id || product.sku}
+                      key={`${product.id || product.sku || 'catalog'}-${index}`}
                       className="transition-colors hover:bg-white/[0.022]"
                     >
                       <Td>
@@ -167,9 +167,18 @@ export function CatalogTab({ model }: { model: AdminModel }) {
                         </span>
                       </Td>
                       <Td>
-                        <span className="block max-w-[260px] truncate text-xs font-medium text-white">
-                          {product.title}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <ProductThumb
+                            sku={product.sku}
+                            title={product.title}
+                            category={product.category}
+                            isBasket={Boolean(product.is_basket ?? product.isBasket)}
+                            size={34}
+                          />
+                          <span className="block max-w-[230px] truncate text-xs font-medium text-white">
+                            {product.title}
+                          </span>
+                        </div>
                       </Td>
                       <Td>
                         <Badge tone="neutral">{String(product.category || 'Uncategorized')}</Badge>
@@ -195,7 +204,7 @@ export function CatalogTab({ model }: { model: AdminModel }) {
                       title="No catalog items found"
                       description="Try a different search term or refresh the catalog from the product service."
                       action={
-                        <Button variant="secondary" size="sm" icon={RefreshCw} loading={catalogLoading} onClick={loadAdminProducts}>
+                        <Button variant="secondary" size="sm" icon={RefreshCw} loading={catalogLoading} onClick={() => loadAdminProducts(true)}>
                           Refresh catalog
                         </Button>
                       }

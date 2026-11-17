@@ -28,9 +28,10 @@ import {
   Th,
   cn,
 } from '@/components/admin/AdminUI';
-import { RailBadge, RailSplitDonut } from '@/components/admin/AdminBits';
+import { AssetAvatar, RailBadge, RailSplitDonut } from '@/components/admin/AdminBits';
 import {
   formatMoney,
+  formatNumber,
   formatUsd,
   initialsFor,
   truncateMiddle,
@@ -38,19 +39,59 @@ import {
 } from '@/components/admin/adminModel';
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
 
-const STELLAR_SHARE = 58.4;
-const XRPL_SHARE = 41.6;
-
 export function OverviewTab({ model }: { model: AdminModel }) {
   const {
     treasurySummary,
+    analytics,
     nrPoolStatus,
+    dualRailSummary,
+    vaultBalances,
+    vaultBalancesLoading,
     rpcHealth,
     rates,
     liveOrders,
+    ordersLoading,
     setActiveTab,
     lastSyncedAt,
   } = model;
+
+  const railRows =
+    analytics?.railBreakdown && analytics.railBreakdown.length > 0
+      ? analytics.railBreakdown
+      : Object.entries(
+          liveOrders
+            .filter((order) => ['PAID', 'FULFILLING', 'FULFILLED'].includes(order.status))
+            .reduce<Record<string, number>>((acc, order) => {
+              const key = order.rail || 'UNKNOWN';
+              acc[key] = (acc[key] || 0) + (order.totalCents ?? 0);
+              return acc;
+            }, {})
+        ).map(([key, volumeCents]) => ({ key, label: key, count: 0, volumeCents }));
+
+  const volumeFor = (pattern: RegExp) =>
+    railRows.filter((row) => pattern.test(row.key.toUpperCase())).reduce((sum, row) => sum + row.volumeCents, 0);
+  const stellarVolume = volumeFor(/STELLAR|XLM|USDC/);
+  const xrplVolume = volumeFor(/XRPL|XRP|RLUSD/);
+  const otherVolume = railRows
+    .filter((row) => !/STELLAR|XLM|USDC|XRPL|XRP|RLUSD/.test(row.key.toUpperCase()))
+    .reduce((sum, row) => sum + row.volumeCents, 0);
+  const railTotal = stellarVolume + xrplVolume + otherVolume;
+  const stellarShare = railTotal > 0 ? (stellarVolume / railTotal) * 100 : 0;
+  const xrplShare = railTotal > 0 ? (xrplVolume / railTotal) * 100 : 0;
+  const otherShare = railTotal > 0 ? (otherVolume / railTotal) * 100 : 0;
+
+  const stellarVault = vaultBalances.find((v) => v.chainId.toLowerCase() === 'stellar');
+  const xrplVault = vaultBalances.find((v) => v.chainId.toLowerCase() === 'xrpl');
+  const stellarVaultLabel = stellarVault
+    ? `${formatNumber(stellarVault.vaultBalance, 2)} ${stellarVault.assetSymbol}`
+    : vaultBalancesLoading
+      ? 'Syncing…'
+      : 'Unavailable';
+  const xrplVaultLabel = xrplVault
+    ? `${formatNumber(xrplVault.vaultBalance, 2)} ${xrplVault.assetSymbol}`
+    : vaultBalancesLoading
+      ? 'Syncing…'
+      : 'Unavailable';
 
   const revenueRows = [
     { label: 'Order fees', value: treasurySummary?.breakdown?.orderFeesCents ?? 0, tone: 'gold' as const },
@@ -77,14 +118,16 @@ export function OverviewTab({ model }: { model: AdminModel }) {
     {
       icon: Radio,
       name: 'XRPL XLS-30d node',
-      detail: 's.altnet.rippletest.net',
-      ok: true,
+      detail: dualRailSummary?.xrpl?.status
+        ? `AMM ${dualRailSummary.xrpl.status} · s.altnet.rippletest.net`
+        : 's.altnet.rippletest.net',
+      ok: Boolean(dualRailSummary?.xrpl || xrplVault),
     },
     {
       icon: TrendingUp,
       name: 'Real-time oracle feed',
-      detail: rates?.source ? `${rates.source.toUpperCase()} · ${rates.fromCache ? 'cached' : 'live'}` : 'CoinCap + live fallback',
-      ok: true,
+      detail: rates?.source ? `${rates.source.toUpperCase()} · ${rates.fromCache ? 'cached' : 'live'}` : 'Awaiting oracle sync',
+      ok: Boolean(rates),
     },
     {
       icon: Coins,
@@ -144,27 +187,37 @@ export function OverviewTab({ model }: { model: AdminModel }) {
             action={<Badge tone="success" dot>Active</Badge>}
           />
           <div className="mt-6 flex flex-col items-center gap-7 sm:flex-row">
-            <RailSplitDonut stellarPct={STELLAR_SHARE} xrplPct={XRPL_SHARE} />
-            <div className="w-full space-y-5">
+            <RailSplitDonut stellarPct={stellarShare} xrplPct={xrplShare} otherPct={otherShare} />
+            <div className="w-full space-y-4">
               <RailLegend
                 label="Stellar rail"
                 assets="XLM · USDC"
-                share={STELLAR_SHARE}
-                amount="$108,010.50"
+                share={stellarShare}
+                amount={formatMoney(stellarVolume)}
                 color="bg-sky-400"
                 bar="cyan"
               />
               <RailLegend
                 label="XRPL rail"
                 assets="XRP · RLUSD"
-                share={XRPL_SHARE}
-                amount="$76,909.90"
+                share={xrplShare}
+                amount={formatMoney(xrplVolume)}
                 color="bg-violet-400"
                 bar="violet"
               />
+              {otherVolume > 0 && (
+                <RailLegend
+                  label="Multi-rail & card / wallet"
+                  assets="MULTI · STRIPE · WALLET"
+                  share={otherShare}
+                  amount={formatMoney(otherVolume)}
+                  color="bg-admin-gold"
+                  bar="gold"
+                />
+              )}
               <div className="flex items-center justify-between border-t border-admin-border/70 pt-3.5 text-[11px] text-admin-faint">
                 <span>Combined settled value</span>
-                <span className="font-admin-mono font-semibold text-slate-200">$184,920.40</span>
+                <span className="font-admin-mono font-semibold text-slate-200">{formatMoney(railTotal)}</span>
               </div>
             </div>
           </div>
@@ -174,7 +227,7 @@ export function OverviewTab({ model }: { model: AdminModel }) {
           <SectionHeader
             eyebrow="Custody"
             title="Hot vault liquidity"
-            description="Operational balances held in the dual-rail platform vaults."
+            description="Live on-chain operational balances held in the dual-rail platform vaults."
             action={
               <Button variant="ghost" size="sm" onClick={() => setActiveTab('vaults')}>
                 Manage
@@ -185,23 +238,27 @@ export function OverviewTab({ model }: { model: AdminModel }) {
           <div className="mt-5 space-y-2.5">
             <VaultRow
               chain="Stellar"
-              network="Stellar testnet"
-              balance="10,000.00 XLM"
+              symbol="XLM"
+              network={stellarVault?.network ? `Stellar ${stellarVault.network}` : 'Stellar testnet'}
+              balance={stellarVaultLabel}
               address={PLATFORM_STELLAR_VAULT}
-              tone="sky"
             />
             <VaultRow
               chain="XRPL"
-              network="XRPL testnet"
-              balance="100.00 XRP"
+              symbol="XRP"
+              network={xrplVault?.network ? `XRPL ${xrplVault.network}` : 'XRPL testnet'}
+              balance={xrplVaultLabel}
               address={PLATFORM_XRPL_VAULT}
-              tone="violet"
             />
           </div>
           <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.05] px-3.5 py-2.5">
             <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden="true" />
             <p className="text-[11px] leading-relaxed text-emerald-200/80">
-              Both custody vaults are reachable and reporting balances.
+              {stellarVault && xrplVault
+                ? 'Both custody vaults are reachable and reporting live on-chain balances.'
+                : vaultBalancesLoading
+                  ? 'Querying Stellar Horizon and XRPL testnet nodes for live vault balances…'
+                  : 'Vault telemetry synced; any unreachable chain shows Unavailable until the node responds.'}
             </p>
           </div>
         </Card>
@@ -305,47 +362,65 @@ export function OverviewTab({ model }: { model: AdminModel }) {
               </tr>
             </thead>
             <tbody>
-              {liveOrders.slice(0, 4).map((order) => (
-                <tr key={order.id} className="transition-colors hover:bg-white/[0.022]">
-                  <Td>
-                    <span className="font-admin-mono text-xs font-semibold text-white">{order.orderNumber}</span>
-                    <p className="mt-0.5 text-[10px] text-admin-faint">{order.createdAt}</p>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[9px] font-bold text-slate-300">
-                        {initialsFor(order.buyerEmail)}
-                      </span>
-                      <span className="max-w-[190px] truncate text-xs text-slate-300">{order.buyerEmail}</span>
-                    </div>
-                  </Td>
-                  <Td>
-                    <RailBadge rail={order.rail} />
-                  </Td>
-                  <Td>
-                    <span className="font-admin-mono text-xs font-semibold text-admin-gold-soft">{order.amount}</span>
-                  </Td>
-                  <Td>
-                    <StatusBadge status={order.status} />
-                  </Td>
-                  <Td>
-                    {order.txHash ? (
-                      <a
-                        href={order.explorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 font-admin-mono text-[11px] text-sky-300 transition-colors hover:text-sky-200"
-                        title={order.txHash}
-                      >
-                        {truncateMiddle(order.txHash, 8, 6)}
-                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                      </a>
-                    ) : (
-                      <span className="text-[11px] text-admin-faint">—</span>
-                    )}
-                  </Td>
+              {ordersLoading && liveOrders.length === 0 ? (
+                Array.from({ length: 4 }).map((_, index) => (
+                  <tr key={index}>
+                    {Array.from({ length: 6 }).map((__, cell) => (
+                      <Td key={cell}>
+                        <span className="admin-skeleton block h-3 w-20 rounded bg-white/[0.06]" />
+                      </Td>
+                    ))}
+                  </tr>
+                ))
+              ) : liveOrders.length > 0 ? (
+                liveOrders.slice(0, 4).map((order) => (
+                  <tr key={order.id} className="transition-colors hover:bg-white/[0.022]">
+                    <Td>
+                      <span className="font-admin-mono text-xs font-semibold text-white">{order.orderNumber}</span>
+                      <p className="mt-0.5 text-[10px] text-admin-faint">{order.createdAt}</p>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[9px] font-bold text-slate-300">
+                          {initialsFor(order.buyerEmail)}
+                        </span>
+                        <span className="max-w-[190px] truncate text-xs text-slate-300">{order.buyerEmail}</span>
+                      </div>
+                    </Td>
+                    <Td>
+                      <RailBadge rail={order.rail} />
+                    </Td>
+                    <Td>
+                      <span className="font-admin-mono text-xs font-semibold text-admin-gold-soft">{order.amount}</span>
+                    </Td>
+                    <Td>
+                      <StatusBadge status={order.status} />
+                    </Td>
+                    <Td>
+                      {order.txHash ? (
+                        <a
+                          href={order.explorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 font-admin-mono text-[11px] text-sky-300 transition-colors hover:text-sky-200"
+                          title={order.txHash}
+                        >
+                          {truncateMiddle(order.txHash, 8, 6)}
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-admin-faint">—</span>
+                      )}
+                    </Td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-xs text-admin-faint">
+                    No settlement orders recorded yet.
+                  </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </Table>
         </TableWrap>
@@ -370,7 +445,7 @@ function RailLegend({
   share: number;
   amount: string;
   color: string;
-  bar: 'cyan' | 'violet';
+  bar: 'cyan' | 'violet' | 'gold';
 }) {
   return (
     <div>
@@ -394,31 +469,22 @@ function RailLegend({
 
 function VaultRow({
   chain,
+  symbol,
   network,
   balance,
   address,
-  tone,
 }: {
   chain: string;
+  symbol: string;
   network: string;
   balance: string;
   address: string;
-  tone: 'sky' | 'violet';
 }) {
   return (
     <div className="rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-3 transition-colors hover:border-white/[0.12]">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <span
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-lg border font-admin-mono text-[9px] font-bold',
-              tone === 'sky'
-                ? 'border-sky-400/20 bg-sky-400/10 text-sky-300'
-                : 'border-violet-400/20 bg-violet-400/10 text-violet-300'
-            )}
-          >
-            {chain.slice(0, 2).toUpperCase()}
-          </span>
+          <AssetAvatar symbol={symbol} size={28} />
           <div>
             <p className="text-[11px] font-medium text-slate-200">{chain} platform vault</p>
             <p className="text-[10px] text-admin-faint">{network}</p>

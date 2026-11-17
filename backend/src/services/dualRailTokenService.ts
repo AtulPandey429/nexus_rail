@@ -9,6 +9,7 @@ import {
   MongoChainActionLogDoc,
   ChainActionType,
 } from './mongo.js';
+import { RedisCacheService } from './redis.js';
 import type { DualRailTokenSummaryDTO, ChainActionLogDTO } from '../types/index.js';
 
 export const STELLAR_NR_ASSET_CODE = env.STELLAR_NR_ASSET_CODE || 'NXL';
@@ -438,6 +439,11 @@ export class DualRailTokenService {
    * Returns consolidated dual-rail telemetry across Stellar & XRPL
    */
   static async getDualRailSummary(): Promise<DualRailTokenSummaryDTO> {
+    // XRPL RPC summary is slow and rate-limited; serve a short-lived cache.
+    const cacheKey = 'admin:dual-rail:summary';
+    const cached = await RedisCacheService.getCache<DualRailTokenSummaryDTO>(cacheKey);
+    if (cached) return cached;
+
     // 1. Stellar Status
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
     const stellarToken =
@@ -488,7 +494,7 @@ export class DualRailTokenService {
     const logsCol = await MongoService.getCollection<MongoChainActionLogDoc>('platform_chain_logs');
     const recentLogs = await logsCol.find({}).sort({ created_at: -1 }).limit(20).toArray();
 
-    return {
+    const summary: DualRailTokenSummaryDTO = {
       stellar: {
         assetCode: STELLAR_NR_ASSET_CODE,
         issuerAddress: stellarToken?.issuer_address || STELLAR_NR_ISSUER,
@@ -534,5 +540,8 @@ export class DualRailTokenService {
         created_at: l.created_at,
       })),
     };
+
+    await RedisCacheService.setCache(cacheKey, summary, 30);
+    return summary;
   }
 }

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getFxQuote, usdCentsToAsset } from './market.js';
+import { getFxQuote, getMetalQuote, usdCentsToAsset } from './market.js';
 
 export interface QuoteTicket {
   ticketId: string;
@@ -26,11 +26,21 @@ export class RatesService {
   }
 
   static async getExchangeRates() {
-    const quote = await getFxQuote();
+    const [quote, metal] = await Promise.all([
+      getFxQuote(),
+      getMetalQuote().catch(() => null),
+    ]);
     return {
       USD: 1,
       XRP: quote.xrpUsd,
       XLM: quote.xlmUsd,
+      xrp24hChange: quote.xrp24hChange ?? 0,
+      xlm24hChange: quote.xlm24hChange ?? 0,
+      goldUsdPerGram: metal?.goldUsdPerGram ?? null,
+      gold24hChange: metal?.gold24hChange ?? null,
+      silverUsdPerGram: metal?.silverUsdPerGram ?? null,
+      silver24hChange: metal?.silver24hChange ?? null,
+      usdInrRate: metal?.usdInrRate ?? null,
       source: quote.source,
       fromCache: quote.fromCache,
       timestamp: quote.fetchedAt,

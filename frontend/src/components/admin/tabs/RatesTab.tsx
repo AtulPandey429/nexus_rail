@@ -9,6 +9,7 @@ import {
   SectionHeader,
   StatCard,
 } from '@/components/admin/AdminUI';
+import { AssetAvatar } from '@/components/admin/AdminBits';
 import {
   formatDateTime,
   formatUsd,
@@ -18,59 +19,70 @@ import {
 export function RatesTab({ model }: { model: AdminModel }) {
   const { rates, ratesLoading, nrPoolStatus } = model;
 
+  const nxlSpotPrice = nrPoolStatus?.spotPriceUsd ?? nrPoolStatus?.priceUsd;
+  const nxlChange = nrPoolStatus?.change24hPercent;
+
   const cards = [
     {
       pair: 'XLM / USD',
-      value: formatUsd(rates?.xlmUsd || 0.1365, 4),
-      change: '+1.8%',
+      symbol: 'XLM',
+      value: rates?.xlmUsd ? formatUsd(rates.xlmUsd, 4) : ratesLoading ? 'Syncing…' : 'Unavailable',
+      change: typeof rates?.xlm24hChange === 'number' ? rates.xlm24hChange : null,
       tone: 'cyan' as const,
       hint: 'Stellar Lumens',
     },
     {
       pair: 'XRP / USD',
-      value: formatUsd(rates?.xrpUsd || 1.924, 4),
-      change: '+3.2%',
+      symbol: 'XRP',
+      value: rates?.xrpUsd ? formatUsd(rates.xrpUsd, 4) : ratesLoading ? 'Syncing…' : 'Unavailable',
+      change: typeof rates?.xrp24hChange === 'number' ? rates.xrp24hChange : null,
       tone: 'violet' as const,
       hint: 'XRP Ledger',
     },
     {
       pair: 'NXL / USD',
-      value: formatUsd(nrPoolStatus?.priceUsd || 1.025, 4),
-      change: '+2.4%',
+      symbol: 'NXL',
+      value: typeof nxlSpotPrice === 'number' && nxlSpotPrice > 0 ? formatUsd(nxlSpotPrice, 4) : 'Awaiting sync',
+      change: typeof nxlChange === 'number' ? nxlChange : null,
       tone: 'gold' as const,
-      hint: 'Protocol token',
+      hint: 'Protocol AMM token',
     },
     {
       pair: 'GOLD / USD (g)',
-      value: '$84.50',
-      change: '+0.5%',
+      symbol: 'GOLD_G',
+      value: typeof rates?.goldUsdPerGram === 'number' && rates.goldUsdPerGram > 0
+        ? formatUsd(rates.goldUsdPerGram, 2)
+        : ratesLoading
+          ? 'Syncing…'
+          : 'Unavailable',
+      change: typeof rates?.gold24hChange === 'number' ? rates.gold24hChange : null,
       tone: 'emerald' as const,
-      hint: 'Tokenized metal',
+      hint: 'PAXG spot per gram',
     },
   ];
 
   const oracles = [
     {
       name: 'NexusRail rate API',
-      detail: rates?.source ? `Source: ${rates.source}` : 'Backend aggregator',
-      status: 'Operational',
-      tone: 'success' as const,
+      detail: rates?.source ? `Source: ${rates.source.toUpperCase()}` : 'Awaiting live rate fetch',
+      status: rates ? 'Operational' : ratesLoading ? 'Syncing' : 'Unavailable',
+      tone: rates ? ('success' as const) : ratesLoading ? ('warning' as const) : ('danger' as const),
     },
     {
       name: 'Stellar DEX',
-      detail: 'XLM / USDC orderbook',
-      status: 'Operational',
-      tone: 'success' as const,
+      detail: rates?.xlmUsd ? `XLM @ ${formatUsd(rates.xlmUsd, 4)}` : 'XLM / USDC orderbook',
+      status: rates?.xlmUsd ? 'Operational' : 'Syncing',
+      tone: rates?.xlmUsd ? ('success' as const) : ('warning' as const),
     },
     {
       name: 'XRPL DEX',
-      detail: 'XRP / RLUSD orderbook',
-      status: 'Operational',
-      tone: 'success' as const,
+      detail: rates?.xrpUsd ? `XRP @ ${formatUsd(rates.xrpUsd, 4)}` : 'XRP / RLUSD orderbook',
+      status: rates?.xrpUsd ? 'Operational' : 'Syncing',
+      tone: rates?.xrpUsd ? ('success' as const) : ('warning' as const),
     },
     {
       name: 'Protocol AMM',
-      detail: 'NXL constant-product pool',
+      detail: nxlSpotPrice ? `NXL @ ${formatUsd(nxlSpotPrice, 4)}` : 'NXL constant-product pool',
       status: nrPoolStatus ? 'Active' : 'Awaiting sync',
       tone: nrPoolStatus ? ('success' as const) : ('warning' as const),
     },
@@ -90,8 +102,24 @@ export function RatesTab({ model }: { model: AdminModel }) {
             }
             icon={TrendingUp}
             tone={card.tone}
-            hint={card.hint}
-            aside={<Badge tone="success" dot>{card.change} 24h</Badge>}
+            hint={
+              <span className="inline-flex items-center gap-1.5">
+                <AssetAvatar symbol={card.symbol} size={16} />
+                <span>{card.hint}</span>
+              </span>
+            }
+            aside={
+              card.change !== null ? (
+                <Badge tone={card.change >= 0 ? 'success' : 'danger'} dot>
+                  {card.change >= 0 ? '+' : ''}
+                  {card.change.toFixed(2)}% 24h
+                </Badge>
+              ) : (
+                <Badge tone={rates ? 'info' : 'neutral'} dot>
+                  {rates ? 'Live' : 'Syncing'}
+                </Badge>
+              )
+            }
           />
         ))}
       </div>
@@ -139,11 +167,19 @@ export function RatesTab({ model }: { model: AdminModel }) {
         <Card className="p-5 sm:p-6">
           <SectionHeader eyebrow="Caching" title="Quote cache policy" description="Rate freshness across the console." />
           <div className="mt-4 divide-y divide-white/[0.045]">
-            <MetricRow label="Primary source" value={rates?.source ? rates.source.toUpperCase() : 'NEXUS-API'} />
-            <MetricRow label="Cache state" value={rates?.fromCache ? 'Cached' : 'Live fetch'} />
+            <MetricRow label="Primary source" value={rates?.source ? rates.source.toUpperCase() : '—'} />
+            <MetricRow label="Cache state" value={rates ? (rates.fromCache ? 'Cached' : 'Live fetch') : '—'} />
             <MetricRow
               label="TTL remaining"
               value={typeof rates?.ttlMinutesRemaining === 'number' ? `${rates.ttlMinutesRemaining} min` : '—'}
+            />
+            <MetricRow
+              label="Silver / USD (g)"
+              value={typeof rates?.silverUsdPerGram === 'number' && rates.silverUsdPerGram > 0 ? formatUsd(rates.silverUsdPerGram, 2) : '—'}
+            />
+            <MetricRow
+              label="USD / INR"
+              value={typeof rates?.usdInrRate === 'number' && rates.usdInrRate > 0 ? `₹${rates.usdInrRate.toFixed(2)}` : '—'}
             />
             <MetricRow label="Last fetched" value={formatDateTime(rates?.fetchedAt)} />
           </div>

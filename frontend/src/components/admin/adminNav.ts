@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   BookOpen,
   Bot,
   ClipboardCheck,
@@ -36,6 +37,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { id: 'overview', label: 'Executive overview', group: 'Overview', icon: LayoutDashboard },
+  { id: 'analytics', label: 'Business analytics', group: 'Overview', icon: BarChart3 },
   { id: 'orders', label: 'Orders & settlements', group: 'Operations', icon: ShoppingCart },
   {
     id: 'fulfillment',
@@ -45,11 +47,11 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     href: '/admin/orders',
   },
   { id: 'treasury', label: 'Treasury & split', group: 'Operations', icon: DollarSign },
-  { id: 'ledger', label: 'AUC & master ledger', group: 'Liquidity & assets', icon: BookOpen },
-  { id: 'amm', label: '$NXL protocol AMM', group: 'Liquidity & assets', icon: Coins },
+  { id: 'ledger', label: 'Custody & asset ledger', group: 'Liquidity & assets', icon: BookOpen },
+  { id: 'amm', label: '$NXL liquidity pool', group: 'Liquidity & assets', icon: Coins },
   { id: 'vaults', label: 'Dual-rail vaults', group: 'Liquidity & assets', icon: Vault },
   { id: 'catalog', label: 'Baskets & catalog', group: 'Liquidity & assets', icon: Layers },
-  { id: 'rates', label: 'FX & chain oracles', group: 'Intelligence & security', icon: TrendingUp },
+  { id: 'rates', label: 'Exchange rates & oracles', group: 'Intelligence & security', icon: TrendingUp },
   { id: 'agent', label: 'AI settlement desk', group: 'Intelligence & security', icon: Bot },
   { id: 'audit', label: 'Security audit trail', group: 'Intelligence & security', icon: ListChecks },
 ];

@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import Image from 'next/image';
+import { ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 import { Badge, cn, type BadgeTone } from '@/components/admin/AdminUI';
 
 export function PaginationBar({
@@ -10,15 +11,21 @@ export function PaginationBar({
   pageSize,
   onPageChange,
   itemLabel = 'entries',
+  itemLabelSingular,
 }: {
   currentPage: number;
   totalItems: number;
   pageSize: number;
   onPageChange: (page: number) => void;
   itemLabel?: string;
+  itemLabelSingular?: string;
 }) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   if (totalItems === 0) return null;
+
+  const singularLabel =
+    itemLabelSingular || (itemLabel === 'entries' ? 'entry' : itemLabel.replace(/s$/, ''));
+  const displayLabel = totalItems === 1 ? singularLabel : itemLabel;
 
   const startItem = (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
@@ -37,7 +44,7 @@ export function PaginationBar({
         {' – '}
         <span className="font-admin-mono font-semibold text-slate-200 admin-tabular">{endItem}</span> of{' '}
         <span className="font-admin-mono font-semibold text-slate-200 admin-tabular">{totalItems}</span>{' '}
-        {itemLabel}
+        {displayLabel}
       </p>
       <div className="flex items-center gap-1">
         <button
@@ -129,15 +136,16 @@ export function FilterChip({
 export function RailSplitDonut({
   stellarPct,
   xrplPct,
+  otherPct = 0,
 }: {
   stellarPct: number;
   xrplPct: number;
+  otherPct?: number;
 }) {
   const radius = 54;
-  const circumference = 2 * Math.PI * radius;
   return (
     <div className="relative h-40 w-40 shrink-0">
-      <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90" role="img" aria-label="Settlement volume split between Stellar and XRPL rails">
+      <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90" role="img" aria-label="Settlement volume split between Stellar, XRPL, and other rails">
         <circle cx="70" cy="70" r={radius} fill="none" stroke="rgba(255,255,255,0.055)" strokeWidth="14" />
         <circle
           cx="70"
@@ -162,9 +170,25 @@ export function RailSplitDonut({
           strokeDasharray={`${xrplPct} ${100 - xrplPct}`}
           strokeDashoffset={-stellarPct}
         />
+        {otherPct > 0 && (
+          <circle
+            cx="70"
+            cy="70"
+            r={radius}
+            fill="none"
+            stroke="#e9b949"
+            strokeWidth="14"
+            strokeLinecap="round"
+            pathLength={100}
+            strokeDasharray={`${otherPct} ${100 - otherPct}`}
+            strokeDashoffset={-(stellarPct + xrplPct)}
+          />
+        )}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-admin-mono text-2xl font-semibold tracking-tight text-white">2</span>
+        <span className="font-admin-mono text-2xl font-semibold tracking-tight text-white">
+          {otherPct > 0 ? 3 : 2}
+        </span>
         <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-admin-faint">rails</span>
       </div>
     </div>
@@ -197,5 +221,277 @@ export function MiniStat({
       <p className={cn('mt-1.5 truncate font-admin-mono text-[13px] font-semibold admin-tabular', tone)}>{value}</p>
       {hint && <p className="mt-0.5 truncate text-[10px] text-admin-faint">{hint}</p>}
     </div>
+  );
+}
+
+export function AdminBrandMark({
+  size = 36,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <span
+      className={cn(
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-admin-gold/30 bg-gradient-to-br from-[#2A2415] to-[#14120C] shadow-admin-glow',
+        className
+      )}
+      style={{ width: size, height: size }}
+    >
+      {!failed ? (
+        <Image
+          src="/logo-icon.webp"
+          alt="NexusRail"
+          width={size}
+          height={size}
+          onError={() => setFailed(true)}
+          className="h-full w-full object-contain p-1"
+        />
+      ) : (
+        <span className="font-admin-mono text-sm font-bold text-admin-gold-soft">N</span>
+      )}
+    </span>
+  );
+}
+
+export function AssetAvatar({
+  symbol,
+  size = 28,
+  className,
+}: {
+  symbol?: string | null;
+  size?: number;
+  className?: string;
+}) {
+  const [nxlFailed, setNxlFailed] = useState(false);
+  const key = (symbol || '').toUpperCase().trim();
+
+  if (key === 'NXL' || key === 'NR' || key.includes('NXL')) {
+    return (
+      <span
+        className={cn(
+          'flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-admin-gold/30 bg-admin-gold/10',
+          className
+        )}
+        style={{ width: size, height: size }}
+      >
+        {!nxlFailed ? (
+          <Image
+            src="/logo-icon.webp"
+            alt="$NXL"
+            width={size}
+            height={size}
+            onError={() => setNxlFailed(true)}
+            className="h-full w-full object-contain p-0.5"
+          />
+        ) : (
+          <span className="font-admin-mono text-[9px] font-bold text-admin-gold-soft">NXL</span>
+        )}
+      </span>
+    );
+  }
+
+  if (key.includes('XLM') || key.includes('STELLAR')) {
+    return (
+      <span
+        className={cn(
+          'flex shrink-0 items-center justify-center rounded-lg border border-sky-400/25 bg-sky-400/10 text-sky-300',
+          className
+        )}
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" className="h-[60%] w-[60%]" fill="none">
+          <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M4 15.5L20 6.5M4 18.5L20 9.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (key.includes('XRP') || key.includes('XRPL')) {
+    return (
+      <span
+        className={cn(
+          'flex shrink-0 items-center justify-center rounded-lg border border-violet-400/25 bg-violet-400/10 text-violet-300',
+          className
+        )}
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" className="h-[60%] w-[60%]" fill="none">
+          <path
+            d="M5 5l5.4 5.2a2.3 2.3 0 003.2 0L19 5M5 19l5.4-5.2a2.3 2.3 0 013.2 0L19 19"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+    );
+  }
+
+  if (key.includes('USDC')) {
+    return (
+      <span
+        className={cn(
+          'flex shrink-0 items-center justify-center rounded-lg border border-blue-400/25 bg-blue-400/10 text-blue-300',
+          className
+        )}
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" className="h-[62%] w-[62%]" fill="none">
+          <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M12 7v10M9.8 10c0-1 .9-1.7 2.2-1.7s2.2.7 2.2 1.7c0 2-4.4 1.3-4.4 3.5 0 1 1 1.8 2.2 1.8s2.2-.7 2.2-1.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (key.includes('RLUSD')) {
+    return (
+      <span
+        className={cn(
+          'flex shrink-0 items-center justify-center rounded-lg border border-emerald-400/25 bg-emerald-400/10 text-emerald-300 font-admin-mono text-[9px] font-bold',
+          className
+        )}
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        R$
+      </span>
+    );
+  }
+
+  if (key.includes('GOLD')) {
+    return (
+      <span
+        className={cn(
+          'flex shrink-0 items-center justify-center rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300',
+          className
+        )}
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" className="h-[60%] w-[60%]" fill="none">
+          <path d="M5 17l2-8h10l2 8H5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M8.5 9l1-3.5h5l1 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (key.includes('SILVER')) {
+    return (
+      <span
+        className={cn(
+          'flex shrink-0 items-center justify-center rounded-lg border border-slate-300/25 bg-slate-300/10 text-slate-200',
+          className
+        )}
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" className="h-[60%] w-[60%]" fill="none">
+          <path d="M4.5 16.5L7 8.5h10l2.5 8H4.5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] font-admin-mono text-[9px] font-bold text-slate-300',
+        className
+      )}
+      style={{ width: size, height: size }}
+    >
+      {(key || 'AS').slice(0, 3)}
+    </span>
+  );
+}
+
+const PRODUCT_THUMB_MAP: Record<string, string> = {
+  'RAIL-ONE': '/products/rail-one.png',
+  'NODE-STAND': '/products/node-stand.png',
+  'RELAY-MAT': '/products/relay-mat.png',
+  'RAIL-CABLES': '/products/rail-cables.png',
+  'NEXUS-TEE': '/products/nexus-tee.png',
+  'SIGNAL-CAP': '/products/signal-cap.png',
+};
+
+export function ProductThumb({
+  sku,
+  title,
+  category,
+  isBasket,
+  size = 34,
+}: {
+  sku?: string;
+  title?: string;
+  category?: string;
+  isBasket?: boolean;
+  size?: number;
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const upperSku = (sku || '').toUpperCase().trim();
+  const mappedSrc = PRODUCT_THUMB_MAP[upperSku];
+
+  if (mappedSrc && !imgFailed) {
+    return (
+      <span
+        className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-admin-border bg-[#0A0E15]"
+        style={{ width: size, height: size }}
+      >
+        <Image
+          src={mappedSrc}
+          alt={title || upperSku || 'Product'}
+          width={size}
+          height={size}
+          onError={() => setImgFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      </span>
+    );
+  }
+
+  if (upperSku.includes('GOLD')) return <AssetAvatar symbol="GOLD_G" size={size} />;
+  if (upperSku.includes('SILVER')) return <AssetAvatar symbol="SILVER_G" size={size} />;
+  if (upperSku.includes('NXL') || upperSku.includes('NR-')) return <AssetAvatar symbol="NXL" size={size} />;
+  if (upperSku.includes('XRP')) return <AssetAvatar symbol="XRP" size={size} />;
+  if (upperSku.includes('XLM')) return <AssetAvatar symbol="XLM" size={size} />;
+
+  if (isBasket || category === 'baskets' || upperSku.startsWith('BASKET')) {
+    return (
+      <span
+        className="flex shrink-0 items-center justify-center rounded-lg border border-admin-gold/25 bg-admin-gold/10 text-admin-gold-soft"
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        <Layers className="h-4 w-4" />
+      </span>
+    );
+  }
+
+  const initials = (title || upperSku || 'NR')
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase();
+
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] font-admin-mono text-[10px] font-bold text-slate-300"
+      style={{ width: size, height: size }}
+    >
+      {initials || 'NR'}
+    </span>
   );
 }

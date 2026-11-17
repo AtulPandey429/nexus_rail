@@ -327,7 +327,8 @@ export type ChainActionType =
   | 'AMM_CREATE'
   | 'AMM_DEPOSIT'
   | 'AMM_WITHDRAW'
-  | 'CROSS_CHAIN_BRIDGE';
+  | 'CROSS_CHAIN_BRIDGE'
+  | 'CONTRACT_SPLIT';
 
 export interface MongoChainActionLogDoc {
   _id?: any;
@@ -451,6 +452,8 @@ export class MongoService {
         { unique: true, partialFilterExpression: { walletAddress: { $type: 'string' } } }
       );
       await db.collection('users').createIndex({ id: 1 }, { unique: true });
+      await db.collection('users').createIndex({ createdAt: -1 });
+      await db.collection('users').createIndex({ created_at: -1 }, { sparse: true });
 
       // 2. Auth Nonces (auto-expire with TTL)
       await db.collection('auth_nonces').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
@@ -463,6 +466,9 @@ export class MongoService {
       // 4. Orders
       await db.collection('orders').createIndex({ order_number: 1 }, { unique: true });
       await db.collection('orders').createIndex({ user_id: 1, created_at: -1 });
+      await db.collection('orders').createIndex({ created_at: -1 });
+      await db.collection('orders').createIndex({ status: 1, created_at: -1 });
+      await db.collection('orders').createIndex({ payment_rail: 1, created_at: -1 });
 
       // 5. Proposals (TTL auto-cleanup)
       await db.collection('proposals').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
@@ -474,6 +480,8 @@ export class MongoService {
       // 7. Wallet Balances & Ledger
       await db.collection('wallet_balances').createIndex({ user_id: 1, currency: 1 }, { unique: true });
       await db.collection('wallet_ledger').createIndex({ user_id: 1, created_at: -1 });
+      await db.collection('wallet_ledger').createIndex({ created_at: -1 });
+      await db.collection('wallet_ledger').createIndex({ type: 1, created_at: -1 });
 
       // 8. Catalog Guide Messages
       await db.collection('guide_messages').createIndex({ user_id: 1, created_at: 1 });
@@ -489,6 +497,7 @@ export class MongoService {
       // 11. User Holdings & Portfolio Events
       await db.collection('user_holdings').createIndex({ user_id: 1, symbol: 1 }, { unique: true });
       await db.collection('user_holdings').createIndex({ user_id: 1 });
+      await db.collection('user_holdings').createIndex({ symbol: 1, quantity: 1 });
       await db.collection('portfolio_events').createIndex({ user_id: 1, created_at: -1 });
       await db.collection('portfolio_events').createIndex({ type: 1, created_at: -1 });
 
@@ -508,9 +517,11 @@ export class MongoService {
       await db.collection('platform_tokens').createIndex({ symbol: 1, chain: 1 }, { unique: true });
       await db.collection('token_withdrawals').createIndex({ id: 1 }, { unique: true });
       await db.collection('token_withdrawals').createIndex({ user_id: 1, created_at: -1 });
+      await db.collection('token_withdrawals').createIndex({ created_at: -1 });
 
       // 16. Dual-Rail On-Chain Action Logs & AMM Pools
       await db.collection('platform_chain_logs').createIndex({ chain: 1, created_at: -1 });
+      await db.collection('platform_chain_logs').createIndex({ created_at: -1 });
       await db.collection('platform_chain_logs').createIndex({ action: 1 });
       await db.collection('platform_chain_logs').createIndex({ tx_hash: 1 }, { unique: true, sparse: true });
       await db.collection('platform_amm_pools').createIndex({ chain: 1, symbol: 1 }, { unique: true });

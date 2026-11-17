@@ -666,10 +666,58 @@ paths:
 
   /api/v1/analytics/summary:
     get:
-      summary: Public Revenue & Order Telemetry
+      summary: Admin Revenue & Order Telemetry Summary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ['true', 'false']
       responses:
         '200':
-          description: Aggregated paid revenue and payment rail distribution
+          description: Aggregated paid order volume, treasury revenue, owner profit, and payment rail distribution
+        '401':
+          description: Unauthorized
+        '403':
+          description: Admin role required
+
+  /api/v1/admin/analytics:
+    get:
+      summary: Admin Business Analytics & Financial Trends
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ['7d', '30d', '90d', '1y', 'all']
+            default: '30d'
+        - name: granularity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ['day', 'week', 'month']
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ['true', 'false']
+      responses:
+        '200':
+          description: Aggregated users, orders, revenue, owner profit, custody, and series telemetry
+        '400':
+          description: Invalid query parameters
+        '401':
+          description: Unauthorized
+        '403':
+          description: Admin role required
 
   /api/v1/rwa/live-prices:
     get:

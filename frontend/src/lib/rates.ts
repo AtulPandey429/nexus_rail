@@ -8,6 +8,13 @@ import { useEffect, useState, useCallback } from 'react';
 export interface ExchangeRatesData {
   xlmUsd: number;
   xrpUsd: number;
+  xlm24hChange?: number;
+  xrp24hChange?: number;
+  goldUsdPerGram?: number | null;
+  gold24hChange?: number | null;
+  silverUsdPerGram?: number | null;
+  silver24hChange?: number | null;
+  usdInrRate?: number | null;
   source: 'nexus-api' | 'binance' | 'coingecko' | 'cache';
   fromCache: boolean;
   fetchedAt: string;
@@ -85,6 +92,13 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
           const rates: ExchangeRatesData = {
             xlmUsd: Number(json.data.XLM),
             xrpUsd: Number(json.data.XRP),
+            xlm24hChange: typeof json.data.xlm24hChange === 'number' ? json.data.xlm24hChange : undefined,
+            xrp24hChange: typeof json.data.xrp24hChange === 'number' ? json.data.xrp24hChange : undefined,
+            goldUsdPerGram: typeof json.data.goldUsdPerGram === 'number' ? json.data.goldUsdPerGram : null,
+            gold24hChange: typeof json.data.gold24hChange === 'number' ? json.data.gold24hChange : null,
+            silverUsdPerGram: typeof json.data.silverUsdPerGram === 'number' ? json.data.silverUsdPerGram : null,
+            silver24hChange: typeof json.data.silver24hChange === 'number' ? json.data.silver24hChange : null,
+            usdInrRate: typeof json.data.usdInrRate === 'number' ? json.data.usdInrRate : null,
             source: 'nexus-api',
             fromCache: false,
             fetchedAt: json.data.timestamp || new Date().toISOString(),

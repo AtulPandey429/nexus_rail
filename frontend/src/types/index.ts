@@ -250,7 +250,7 @@ export interface OnChainTokenDTO {
 export interface ChainActionLogDTO {
   id: string;
   chain: 'STELLAR' | 'XRPL';
-  action: 'MINT' | 'TRUSTLINE' | 'AMM_CREATE' | 'AMM_DEPOSIT' | 'AMM_WITHDRAW' | 'CROSS_CHAIN_BRIDGE';
+  action: 'MINT' | 'TRUSTLINE' | 'AMM_CREATE' | 'AMM_DEPOSIT' | 'AMM_WITHDRAW' | 'CROSS_CHAIN_BRIDGE' | 'CONTRACT_SPLIT';
   reference_id?: string;
   operator_id: string;
   tx_hash: string;
@@ -314,5 +314,119 @@ export interface OnChainWithdrawalResponse {
   ledgerSeq?: number;
   remainingNrBalance: number;
   explorerUrl: string;
+}
+
+// ============================================================================
+// Admin Analytics (real aggregates from orders, treasury, users and custody)
+// ============================================================================
+
+export type AdminAnalyticsRangeKey = '7d' | '30d' | '90d' | '1y' | 'all';
+export type AdminAnalyticsGranularity = 'day' | 'week' | 'month';
+
+export interface AdminAnalyticsBucket {
+  bucket: string;
+  label: string;
+  orderVolumeCents: number;
+  settledOrders: number;
+  totalOrders: number;
+  revenueCents: number;
+  ownerProfitCents: number;
+  newUsers: number;
+}
+
+export interface AdminAnalyticsBreakdownRow {
+  key: string;
+  label: string;
+  count: number;
+  volumeCents: number;
+}
+
+export interface AdminAnalyticsRevenueRow {
+  key: string;
+  label: string;
+  grossCents: number;
+  revenueCents: number;
+}
+
+export interface AdminAnalyticsTopProduct {
+  sku: string;
+  title: string;
+  quantity: number;
+  revenueCents: number;
+}
+
+export interface AdminAnalyticsRecentOrder {
+  id: string;
+  orderNumber: string;
+  buyerEmail: string;
+  buyerName?: string;
+  status: string;
+  rail: string;
+  totalCents: number;
+  createdAt: string;
+}
+
+export interface AdminAnalyticsResponse {
+  range: {
+    key: AdminAnalyticsRangeKey;
+    label: string;
+    from: string | null;
+    to: string;
+    days: number | null;
+    granularity: AdminAnalyticsGranularity;
+  };
+  generatedAt: string;
+  overview: {
+    totalUsers: number;
+    activeUsers: number;
+    newUsers: number;
+    userGrowthPct: number | null;
+    totalOrders: number;
+    settledOrders: number;
+    pendingOrders: number;
+    failedOrders: number;
+    successRatePct: number;
+    orderVolumeCents: number;
+    averageOrderValueCents: number;
+    grossTreasuryVolumeCents: number;
+    revenueCents: number;
+    feeCents: number;
+    spreadCents: number;
+    gasArbitrageCents: number;
+    ownerProfitCents: number;
+    nrPoolInjectedCents: number;
+    zeroSumDifferenceCents: number;
+    isBalanced: boolean;
+    custodyUsdCents: number;
+    nrPoolReserveUsdCents: number;
+    walletCreditsCents: number;
+    walletDebitsCents: number;
+    tokenWithdrawalsCount: number;
+    tokenWithdrawalUnits: number;
+  };
+  lifetime: {
+    orderVolumeCents: number;
+    settledOrders: number;
+    totalOrders: number;
+    revenueCents: number;
+    ownerProfitCents: number;
+    grossTreasuryVolumeCents: number;
+    totalUsers: number;
+  };
+  series: AdminAnalyticsBucket[];
+  statusBreakdown: AdminAnalyticsBreakdownRow[];
+  railBreakdown: AdminAnalyticsBreakdownRow[];
+  revenueBreakdown: AdminAnalyticsRevenueRow[];
+  topProducts: AdminAnalyticsTopProduct[];
+  custodyAssets: PlatformAUCResponse['assets'];
+  recentOrders: AdminAnalyticsRecentOrder[];
+  dataQuality: {
+    notes: string[];
+    unavailableMetrics: Array<{
+      metric: string;
+      reason: string;
+      requiredChange: string;
+    }>;
+  };
 }
 

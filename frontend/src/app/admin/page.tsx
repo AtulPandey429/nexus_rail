@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle,
   ArrowUpRight,
   Check,
   ClipboardCheck,
@@ -25,16 +24,21 @@ import {
   inputClassName,
 } from '@/components/admin/AdminUI';
 import { CredentialsModal, type CredentialsData } from '@/components/admin/CredentialsModal';
+import { AdminBrandMark } from '@/components/admin/AdminBits';
 import {
   ADMIN_TABS,
+  formatDateTime,
+  formatMoney,
   type AdminModel,
   type AdminTab,
   type FeedbackTone,
   type LiveOrder,
   type NrPoolStatus,
   type StellarRpcHealth,
+  type VaultBalance,
 } from '@/components/admin/adminModel';
 import { OverviewTab } from '@/components/admin/tabs/OverviewTab';
+import { AnalyticsTab } from '@/components/admin/tabs/AnalyticsTab';
 import { TreasuryTab } from '@/components/admin/tabs/TreasuryTab';
 import { OrdersTab } from '@/components/admin/tabs/OrdersTab';
 import { LedgerTab } from '@/components/admin/tabs/LedgerTab';
@@ -47,6 +51,9 @@ import { AuditTab } from '@/components/admin/tabs/AuditTab';
 import { readSession, type SessionUser, onSessionChange, saveSession, clearSession } from '@/lib/shop';
 import { useLiveExchangeRates } from '@/lib/rates';
 import type {
+  AdminAnalyticsGranularity,
+  AdminAnalyticsRangeKey,
+  AdminAnalyticsResponse,
   ChainActionLogDTO,
   DualRailTokenSummaryDTO,
   PlatformAUCResponse,
@@ -67,6 +74,11 @@ const TAB_META: Record<AdminTab, { title: string; description: string; eyebrow: 
     title: 'Executive overview',
     description: 'Real-time liquidity, settlement performance, and 50/50 profit distribution across Stellar and XRPL.',
   },
+  analytics: {
+    eyebrow: 'Business intelligence',
+    title: 'Business analytics',
+    description: 'Real order, revenue, profit, user, and custody trends from the platform database.',
+  },
   treasury: {
     eyebrow: 'Treasury',
     title: 'Treasury & profit split',
@@ -79,12 +91,12 @@ const TAB_META: Record<AdminTab, { title: string; description: string; eyebrow: 
   },
   ledger: {
     eyebrow: 'Custody',
-    title: 'Assets under custody',
+    title: 'Custody & asset ledger',
     description: 'Double-entry reconciliation across cold custody and hot operational vaults.',
   },
   amm: {
     eyebrow: 'Liquidity',
-    title: '$NXL protocol AMM',
+    title: '$NXL liquidity pool',
     description: 'Bonding-curve liquidity, reserve injections, and the constant-product invariant.',
   },
   vaults: {
@@ -99,7 +111,7 @@ const TAB_META: Record<AdminTab, { title: string; description: string; eyebrow: 
   },
   rates: {
     eyebrow: 'Oracle mesh',
-    title: 'FX & chain oracles',
+    title: 'Exchange rates & oracles',
     description: 'Live exchange rates powering Stellar and XRPL settlement pricing.',
   },
   agent: {
@@ -114,77 +126,6 @@ const TAB_META: Record<AdminTab, { title: string; description: string; eyebrow: 
   },
 };
 
-const DEMO_ORDERS: LiveOrder[] = [
-  {
-    id: '#NR8K2P9X',
-    orderNumber: '#NR8K2P9X',
-    buyerEmail: 'alex@nexusrail.com',
-    rail: 'Stellar (XLM)',
-    amount: '200.02 XLM',
-    status: 'PAID',
-    txHash: '8fa2b109c91d4e02aaef06aa74b18086343e6f7df6f4a32570e361d2ed4ecf0946',
-    explorerUrl:
-      'https://stellar.expert/explorer/testnet/tx/8fa2b109c91d4e02aaef06aa74b18086343e6f7df6f4a32570e361d2ed4ecf0946',
-    createdAt: 'Just now',
-  },
-  {
-    id: 'NR-2026-000122',
-    orderNumber: 'NR-2026-000122',
-    buyerEmail: 'sarah.dev@crypto.org',
-    rail: 'XRPL (XRP)',
-    amount: '58.00 XRP',
-    status: 'FULFILLED',
-    txHash: '2F84AE95420138AC529524584288424AE01488204928A4081024881024881024',
-    explorerUrl:
-      'https://testnet.xrpl.org/transactions/2F84AE95420138AC529524584288424AE01488204928A4081024881024881024',
-    createdAt: '12m ago',
-  },
-  {
-    id: 'SWAP-XLM-XRP-09',
-    orderNumber: 'SWAP-901',
-    buyerEmail: 'vault.trader@stellar.org',
-    rail: 'Cross-Chain Swap (XRP -> XLM)',
-    amount: '100.00 XRP -> 733.50 XLM',
-    status: 'SETTLED',
-    txHash: '4D09AEB40828A012480182408210480218408124082148012840128401284012',
-    explorerUrl: 'https://stellar.expert/explorer/testnet',
-    createdAt: '24m ago',
-  },
-  {
-    id: 'NR-1046',
-    orderNumber: 'NR-1046',
-    buyerEmail: 'merchant@retailchain.com',
-    rail: 'Stellar (USDC)',
-    amount: '49.99 USDC',
-    status: 'PAID',
-    txHash: '91024AE401284081240812408124081240812408124081240812408124081240',
-    explorerUrl: 'https://stellar.expert/explorer/testnet',
-    createdAt: '1h ago',
-  },
-  {
-    id: 'NR-1045',
-    orderNumber: 'NR-1045',
-    buyerEmail: 'client@fintech.io',
-    rail: 'XRPL (RLUSD)',
-    amount: '120.50 RLUSD',
-    status: 'PAID',
-    txHash: '77A4201824018240812408124081240812408124081240812408124081240812',
-    explorerUrl: 'https://testnet.xrpl.org',
-    createdAt: '2h ago',
-  },
-  {
-    id: 'NR-1044',
-    orderNumber: 'NR-1044',
-    buyerEmail: 'investor@hedge.fund',
-    rail: 'Stellar (XLM)',
-    amount: '500.00 XLM',
-    status: 'FULFILLED',
-    txHash: '3109AEB40828A012480182408210480218408124082148012840128401284012',
-    explorerUrl: 'https://stellar.expert/explorer/testnet',
-    createdAt: '3h ago',
-  },
-];
-
 function authHeaders(): Record<string, string> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -195,6 +136,18 @@ function feedbackMessage(json: any, fallback: string) {
   if (json?.error?.message) return json.error.message;
   if (json?.message) return json.message;
   return fallback;
+}
+
+function explorerUrlFor(rail: string | undefined, txHash: string | undefined) {
+  if (!txHash) return '';
+  const value = (rail || '').toUpperCase();
+  if (value.includes('XRPL') || value.includes('XRP') || value.includes('RLUSD')) {
+    return `https://testnet.xrpl.org/transactions/${txHash}`;
+  }
+  if (value.includes('STELLAR') || value.includes('XLM') || value.includes('USDC')) {
+    return `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+  }
+  return '';
 }
 
 export default function AdminConsolePage() {
@@ -210,8 +163,16 @@ export default function AdminConsolePage() {
   const [adminAuthError, setAdminAuthError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
+  /* Analytics */
+  const [analytics, setAnalytics] = useState<AdminAnalyticsResponse | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState('');
+  const [analyticsRange, setAnalyticsRange] = useState<AdminAnalyticsRangeKey>('30d');
+  const [analyticsGranularity, setAnalyticsGranularity] = useState<AdminAnalyticsGranularity | 'auto'>('auto');
+
   /* Orders */
-  const [liveOrders] = useState<LiveOrder[]>(DEMO_ORDERS);
+  const [liveOrders, setLiveOrders] = useState<LiveOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersSearch, setOrdersSearch] = useState('');
   const [ordersPage, setOrdersPage] = useState(1);
   const [ordersStatusFilter, setOrdersStatusFilter] = useState('ALL');
@@ -236,6 +197,8 @@ export default function AdminConsolePage() {
   /* Custody */
   const [aucData, setAucData] = useState<PlatformAUCResponse | null>(null);
   const [aucLoading, setAucLoading] = useState(false);
+  const [vaultBalances, setVaultBalances] = useState<VaultBalance[]>([]);
+  const [vaultBalancesLoading, setVaultBalancesLoading] = useState(false);
 
   /* Treasury */
   const [treasurySummary, setTreasurySummary] = useState<TreasurySummaryResponse | null>(null);
@@ -326,6 +289,86 @@ export default function AdminConsolePage() {
     }
   };
 
+  const loadVaultBalances = async () => {
+    setVaultBalancesLoading(true);
+    try {
+      const response = await fetch('/api/v1/crypto/providers', { cache: 'no-store' });
+      const json = await response.json().catch(() => null);
+      if (response.ok && json?.success && Array.isArray(json.data)) {
+        setVaultBalances(json.data as VaultBalance[]);
+      }
+    } catch (error: any) {
+      console.warn('⚠️ [Admin] Failed to load vault balances:', error.message);
+    } finally {
+      setVaultBalancesLoading(false);
+    }
+  };
+
+  const loadAdminOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const response = await fetch('/api/v1/admin/orders?limit=200', {
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
+      const json = await response.json().catch(() => null);
+      if (!response.ok || !json?.success) {
+        throw new Error(feedbackMessage(json, 'Unable to load the order ledger.'));
+      }
+      const rows = Array.isArray(json?.data?.orders) ? json.data.orders : [];
+      setLiveOrders(
+        rows.map((row: any) => {
+          const txHash = row.txHash || row.tx_hash || '';
+          const rail = row.rail || row.payment_rail || 'UNKNOWN';
+          const totalCents = Number(row.totalCents ?? row.total_cents ?? 0);
+          return {
+            id: row.id || row.orderNumber || '',
+            orderNumber: row.orderNumber || row.order_number || '—',
+            buyerEmail: row.buyerEmail || row.buyer_email || '—',
+            rail,
+            amount: formatMoney(totalCents),
+            totalCents,
+            status: row.status || 'UNKNOWN',
+            txHash,
+            explorerUrl: explorerUrlFor(rail, txHash),
+            createdAt: formatDateTime(row.createdAt || row.created_at),
+          } satisfies LiveOrder;
+        })
+      );
+    } catch (error: any) {
+      console.warn('⚠️ [Admin] Failed to load orders:', error.message);
+      setLiveOrders([]);
+    } finally {
+      setOrdersLoading(false);
+      setLastSyncedAt(new Date());
+    }
+  };
+
+  const loadAnalytics = async (options?: { refresh?: boolean }) => {
+    setAnalyticsLoading(true);
+    setAnalyticsError('');
+    try {
+      const params = new URLSearchParams({ range: analyticsRange });
+      if (analyticsGranularity !== 'auto') params.set('granularity', analyticsGranularity);
+      if (options?.refresh) params.set('refresh', 'true');
+
+      const response = await fetch(`/api/v1/admin/analytics?${params.toString()}`, {
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
+      const json = await response.json().catch(() => null);
+      if (!response.ok || !json?.success || !json?.data) {
+        throw new Error(feedbackMessage(json, 'Unable to load business analytics.'));
+      }
+      setAnalytics(json.data as AdminAnalyticsResponse);
+    } catch (error: any) {
+      setAnalyticsError(error.message || 'Unable to load business analytics.');
+    } finally {
+      setAnalyticsLoading(false);
+      setLastSyncedAt(new Date());
+    }
+  };
+
   const loadNrPoolStatus = async () => {
     try {
       const response = await fetch('/api/v1/nr-token/status', { cache: 'no-store' });
@@ -340,10 +383,13 @@ export default function AdminConsolePage() {
     }
   };
 
-  const loadAdminProducts = async () => {
+  const loadAdminProducts = async (force = false) => {
     setCatalogLoading(true);
     try {
-      const response = await fetch('/api/v1/products', { cache: 'no-store' });
+      const response = await fetch(`/api/v1/admin/products${force ? '?refresh=true' : ''}`, {
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
       if (response.ok) {
         const json = await response.json();
         const payload = json?.data;
@@ -473,9 +519,12 @@ export default function AdminConsolePage() {
     void loadTreasuryData();
     void loadNrPoolStatus();
     void loadPlatformAUC();
+    void loadVaultBalances();
     void loadDualRailStatus();
     void loadChainLogs();
     void loadAdminProducts();
+    void loadAdminOrders();
+    void loadAnalytics({ refresh: true });
   };
 
   useEffect(() => {
@@ -483,12 +532,22 @@ export default function AdminConsolePage() {
     void loadNrPoolStatus();
     void loadAdminProducts();
     void loadPlatformAUC();
+    void loadVaultBalances();
     void loadTreasuryData();
     void loadDualRailStatus();
     void loadChainLogs();
+    void loadAdminOrders();
+    void loadAnalytics();
     // Existing console refresh contract: run once when an admin session becomes active.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || activeTab !== 'analytics') return;
+    void loadAnalytics();
+    // Range/granularity changes intentionally refetch; loadAnalytics reads the latest values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, activeTab, analyticsRange, analyticsGranularity]);
 
   /* ----------------------------- Auth actions --------------------------- */
   const handleAdminLogin = async (event?: React.FormEvent) => {
@@ -562,6 +621,7 @@ export default function AdminConsolePage() {
         void loadTreasuryData();
         void loadNrPoolStatus();
         void loadChainLogs();
+        void loadAnalytics({ refresh: true });
       } else {
         setSplitFeedbackTone('error');
         setSplitFeedback(feedbackMessage(json, 'Failed to trigger the profit split.'));
@@ -602,6 +662,7 @@ export default function AdminConsolePage() {
         setConfigFeedbackTone('success');
         setConfigFeedback('Treasury fee configuration saved.');
         void loadTreasuryData();
+        void loadAnalytics({ refresh: true });
       } else {
         setConfigFeedbackTone('error');
         setConfigFeedback(feedbackMessage(json, 'Failed to save the treasury configuration.'));
@@ -634,6 +695,7 @@ export default function AdminConsolePage() {
         setReserveFeedback(`Reserve updated by ${deltaUsd >= 0 ? '+' : ''}$${deltaUsd.toFixed(2)} USD.`);
         void loadNrPoolStatus();
         void loadChainLogs();
+        void loadAnalytics({ refresh: true });
       } else {
         setReserveFeedbackTone('error');
         setReserveFeedback(feedbackMessage(json, 'Failed to update the reserve.'));
@@ -719,7 +781,7 @@ export default function AdminConsolePage() {
     const query = treasurySearch.trim().toLowerCase();
     if (!query) return treasuryEntries;
     return treasuryEntries.filter((entry) =>
-      [entry.source_ref, entry.source_type, entry.notes, entry.id]
+      [entry.reference_id, entry.source_ref, entry.source_type, entry.rail, entry.notes, entry.id]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query))
     );
@@ -749,7 +811,17 @@ export default function AdminConsolePage() {
     activeTab,
     setActiveTab,
     lastSyncedAt,
+    analytics,
+    analyticsLoading,
+    analyticsError,
+    analyticsRange,
+    setAnalyticsRange,
+    analyticsGranularity,
+    setAnalyticsGranularity,
+    loadAnalytics,
     liveOrders,
+    ordersLoading,
+    loadAdminOrders,
     ordersSearch,
     setOrdersSearch,
     ordersPage,
@@ -783,6 +855,9 @@ export default function AdminConsolePage() {
     aucData,
     aucLoading,
     loadPlatformAUC,
+    vaultBalances,
+    vaultBalancesLoading,
+    loadVaultBalances,
     treasurySummary,
     treasuryConfig,
     treasuryEntries,
@@ -847,9 +922,7 @@ export default function AdminConsolePage() {
   if (!sessionReady) {
     return (
       <div className="admin-canvas flex min-h-screen flex-col items-center justify-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-admin-gold/30 bg-admin-gold/10 font-admin-mono text-sm font-bold text-admin-gold-soft">
-          N
-        </span>
+        <AdminBrandMark size={44} />
         <p className="text-xs text-admin-muted">Verifying operator session…</p>
       </div>
     );
@@ -866,9 +939,7 @@ export default function AdminConsolePage() {
             <span className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-admin-gold/[0.07] blur-3xl" aria-hidden="true" />
             <div className="relative">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-admin-gold/30 bg-admin-gold/10 font-admin-mono text-sm font-bold text-admin-gold-soft">
-                  N
-                </span>
+                <AdminBrandMark size={36} />
                 <div>
                   <p className="text-sm font-semibold tracking-tight text-white">nexusrail</p>
                   <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-admin-faint">
@@ -907,9 +978,7 @@ export default function AdminConsolePage() {
 
           <div className="p-6 sm:p-9">
             <div className="flex items-center gap-2 lg:hidden">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-admin-gold/30 bg-admin-gold/10 font-admin-mono text-xs font-bold text-admin-gold-soft">
-                N
-              </span>
+              <AdminBrandMark size={32} />
               <div>
                 <p className="text-sm font-semibold text-white">nexusrail</p>
                 <p className="text-[9px] uppercase tracking-[0.18em] text-admin-faint">Operator console</p>
@@ -1009,6 +1078,17 @@ export default function AdminConsolePage() {
         Refresh state
       </Button>
     );
+  } else if (activeTab === 'analytics') {
+    headerActions = (
+      <Button
+        variant="secondary"
+        icon={RefreshCw}
+        loading={analyticsLoading}
+        onClick={() => loadAnalytics({ refresh: true })}
+      >
+        Refresh analytics
+      </Button>
+    );
   } else if (activeTab === 'treasury') {
     headerActions = (
       <Button variant="secondary" icon={RefreshCw} loading={treasuryLoading} onClick={loadTreasuryData}>
@@ -1036,7 +1116,15 @@ export default function AdminConsolePage() {
   } else if (activeTab === 'vaults') {
     headerActions = (
       <>
-        <Button variant="secondary" icon={RefreshCw} loading={dualRailLoading} onClick={loadDualRailStatus}>
+        <Button
+          variant="secondary"
+          icon={RefreshCw}
+          loading={dualRailLoading || vaultBalancesLoading}
+          onClick={() => {
+            void loadDualRailStatus();
+            void loadVaultBalances();
+          }}
+        >
           Sync parity
         </Button>
         <Button variant="primary" icon={KeyRound} onClick={openCredentials}>
@@ -1046,7 +1134,7 @@ export default function AdminConsolePage() {
     );
   } else if (activeTab === 'catalog') {
     headerActions = (
-      <Button variant="secondary" icon={RefreshCw} loading={catalogLoading} onClick={loadAdminProducts}>
+      <Button variant="secondary" icon={RefreshCw} loading={catalogLoading} onClick={() => loadAdminProducts(true)}>
         Refresh catalog
       </Button>
     );
@@ -1079,6 +1167,7 @@ export default function AdminConsolePage() {
         navItems={ADMIN_NAV_ITEMS}
       >
         {activeTab === 'overview' && <OverviewTab model={model} />}
+        {activeTab === 'analytics' && <AnalyticsTab model={model} />}
         {activeTab === 'treasury' && <TreasuryTab model={model} />}
         {activeTab === 'orders' && <OrdersTab model={model} />}
         {activeTab === 'ledger' && <LedgerTab model={model} />}

@@ -5,6 +5,7 @@ import {
   MongoSmartContractDoc,
   ContractUpgradeEntry,
 } from './mongo.js';
+import { RedisCacheService } from './redis.js';
 
 export interface StellarRpcHealthResult {
   status: 'HEALTHY' | 'DEGRADED' | 'OFFLINE';
@@ -41,6 +42,37 @@ export const DEFAULT_NEXUS_VAULT_CONTRACT: MongoSmartContractDoc = {
   last_verified_at: new Date().toISOString(),
   explorer_url: `https://stellar.expert/explorer/testnet/contract/${env.STELLAR_NR_CONTRACT_ID || 'CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC'}`,
 };
+
+export interface SmartContractWithDto extends MongoSmartContractDoc {
+  contractId: string;
+  protocolVersion: number;
+  currentWasmHash: string;
+  adminAddress: string;
+  treasuryAddress: string;
+  nrReserveAddress: string;
+  feeBps: number;
+  ownerSplitPct: number;
+  deployedAt: string;
+  lastVerifiedAt: string;
+  explorerUrl: string;
+}
+
+function withContractDto(contract: MongoSmartContractDoc): SmartContractWithDto {
+  return {
+    ...contract,
+    contractId: contract.contract_id,
+    protocolVersion: contract.protocol_version,
+    currentWasmHash: contract.current_wasm_hash,
+    adminAddress: contract.admin_address,
+    treasuryAddress: contract.treasury_address,
+    nrReserveAddress: contract.nr_reserve_address,
+    feeBps: contract.fee_bps,
+    ownerSplitPct: contract.owner_split_pct,
+    deployedAt: contract.deployed_at,
+    lastVerifiedAt: contract.last_verified_at,
+    explorerUrl: contract.explorer_url,
+  };
+}
 
 export class SorobanService {
   private static getRpcUrl(): string {
@@ -150,9 +182,17 @@ export class SorobanService {
    * Retrieves smart contract record with live RPC health status.
    */
   static async getContractMetadata(contractId?: string): Promise<{
-    contract: MongoSmartContractDoc;
+    contract: SmartContractWithDto;
     rpcHealth: StellarRpcHealthResult;
   }> {
+    // External Soroban RPC health checks are expensive; cache metadata briefly.
+    const cacheKey = `admin:contract:${contractId || 'nexus-vault'}`;
+    const cached = await RedisCacheService.getCache<{
+      contract: SmartContractWithDto;
+      rpcHealth: StellarRpcHealthResult;
+    }>(cacheKey);
+    if (cached) return cached;
+
     const contractsCol = await MongoService.getCollection<MongoSmartContractDoc>('platform_contracts');
     let contract: MongoSmartContractDoc | null = contractId
       ? await contractsCol.findOne({ contract_id: contractId })
@@ -166,11 +206,17 @@ export class SorobanService {
     const rpcHealth = await this.getStellarRpcHealth();
 
     // Update last_verified_at in DB
+    const verifiedAt = new Date().toISOString();
     await contractsCol
-      .updateOne({ contract_id: finalContract.contract_id }, { $set: { last_verified_at: new Date().toISOString() } })
+      .updateOne({ contract_id: finalContract.contract_id }, { $set: { last_verified_at: verifiedAt } })
       .catch(() => {});
 
-    return { contract: finalContract, rpcHealth };
+    const result = {
+      contract: withContractDto({ ...finalContract, last_verified_at: verifiedAt }),
+      rpcHealth,
+    };
+    await RedisCacheService.setCache(cacheKey, result, 60);
+    return result;
   }
 
   /**
@@ -210,6 +256,11 @@ export class SorobanService {
         },
       }
     );
+
+    await Promise.all([
+      RedisCacheService.invalidateCache(`admin:contract:${contractId}`),
+      RedisCacheService.invalidateCache('admin:contract:nexus-vault'),
+    ]);
 
     return (await contractsCol.findOne({ contract_id: contractId }))!;
   }

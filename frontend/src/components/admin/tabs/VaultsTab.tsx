@@ -7,7 +7,6 @@ import {
   KeyRound,
   RefreshCw,
   ShieldCheck,
-  Vault,
 } from 'lucide-react';
 import {
   Badge,
@@ -20,7 +19,7 @@ import {
   Skeleton,
   cn,
 } from '@/components/admin/AdminUI';
-import { MiniStat } from '@/components/admin/AdminBits';
+import { AssetAvatar, MiniStat } from '@/components/admin/AdminBits';
 import {
   formatNumber,
   truncateMiddle,
@@ -29,7 +28,15 @@ import {
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
 
 export function VaultsTab({ model }: { model: AdminModel }) {
-  const { dualRailSummary, dualRailLoading, loadDualRailStatus, openCredentials } = model;
+  const {
+    dualRailSummary,
+    dualRailLoading,
+    loadDualRailStatus,
+    vaultBalances,
+    vaultBalancesLoading,
+    loadVaultBalances,
+    openCredentials,
+  } = model;
   const parity = dualRailSummary?.parity;
   const stellar = dualRailSummary?.stellar;
   const xrpl = dualRailSummary?.xrpl;
@@ -37,14 +44,36 @@ export function VaultsTab({ model }: { model: AdminModel }) {
   const supplyCap = parity?.totalSupplyCap ?? 0;
   const utilization = supplyCap > 0 ? Math.min(100, (circulating / supplyCap) * 100) : 0;
 
+  const stellarVault = vaultBalances.find((v) => v.chainId.toLowerCase() === 'stellar');
+  const xrplVault = vaultBalances.find((v) => v.chainId.toLowerCase() === 'xrpl');
+
+  const stellarBalanceText = stellarVault
+    ? `${formatNumber(stellarVault.vaultBalance, 2)} ${stellarVault.assetSymbol}`
+    : vaultBalancesLoading
+      ? 'Syncing…'
+      : '—';
+  const xrplBalanceText = xrplVault
+    ? `${formatNumber(xrplVault.vaultBalance, 2)} ${xrplVault.assetSymbol}`
+    : vaultBalancesLoading
+      ? 'Syncing…'
+      : '—';
+
+  const handleSync = () => {
+    void loadDualRailStatus();
+    void loadVaultBalances();
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-2">
         <VaultCard
           chain="Stellar"
-          network="Stellar testnet"
+          symbol="XLM"
+          network={stellarVault?.network ? `Stellar ${stellarVault.network}` : 'Stellar testnet'}
           description="Soroban settlement vault and NXL distribution account."
-          balance="10,000.00 XLM"
+          balance={stellarBalanceText}
+          reachable={Boolean(stellarVault)}
+          loading={vaultBalancesLoading}
           address={PLATFORM_STELLAR_VAULT}
           explorerUrl={`https://stellar.expert/explorer/testnet/account/${PLATFORM_STELLAR_VAULT}`}
           explorerLabel="Stellar Expert"
@@ -52,9 +81,12 @@ export function VaultsTab({ model }: { model: AdminModel }) {
         />
         <VaultCard
           chain="XRPL"
-          network="XRPL testnet"
+          symbol="XRP"
+          network={xrplVault?.network ? `XRPL ${xrplVault.network}` : 'XRPL testnet'}
           description="XLS-30d liquidity vault and issued-asset distributor."
-          balance="100.00 XRP"
+          balance={xrplBalanceText}
+          reachable={Boolean(xrplVault)}
+          loading={vaultBalancesLoading}
           address={PLATFORM_XRPL_VAULT}
           explorerUrl={`https://testnet.xrpl.org/accounts/${PLATFORM_XRPL_VAULT}`}
           explorerLabel="XRPL explorer"
@@ -73,7 +105,7 @@ export function VaultsTab({ model }: { model: AdminModel }) {
                 <Badge tone={parity?.isBalanced ? 'success' : 'warning'} dot>
                   {parity ? (parity.isBalanced ? 'Balanced' : 'Mismatch') : 'Not synced'}
                 </Badge>
-                <Button variant="ghost" size="sm" icon={RefreshCw} loading={dualRailLoading} onClick={loadDualRailStatus}>
+                <Button variant="ghost" size="sm" icon={RefreshCw} loading={dualRailLoading || vaultBalancesLoading} onClick={handleSync}>
                   Sync
                 </Button>
               </div>
@@ -233,18 +265,24 @@ export function VaultsTab({ model }: { model: AdminModel }) {
 
 function VaultCard({
   chain,
+  symbol,
   network,
   description,
   balance,
+  reachable,
+  loading,
   address,
   explorerUrl,
   explorerLabel,
   tone,
 }: {
   chain: string;
+  symbol: string;
   network: string;
   description: string;
   balance: string;
+  reachable: boolean;
+  loading: boolean;
   address: string;
   explorerUrl: string;
   explorerLabel: string;
@@ -253,12 +291,10 @@ function VaultCard({
   const toneClasses =
     tone === 'sky'
       ? {
-          icon: 'border-sky-400/25 bg-sky-400/10 text-sky-300',
           line: 'via-sky-400/60',
           glow: 'bg-sky-500/[0.06]',
         }
       : {
-          icon: 'border-violet-400/25 bg-violet-400/10 text-violet-300',
           line: 'via-violet-400/60',
           glow: 'bg-violet-500/[0.06]',
         };
@@ -276,9 +312,7 @@ function VaultCard({
       <div className="relative">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className={cn('flex h-10 w-10 items-center justify-center rounded-xl border', toneClasses.icon)}>
-              <Vault className="h-4 w-4" aria-hidden="true" />
-            </span>
+            <AssetAvatar symbol={symbol} size={40} />
             <div>
               <h3 className="text-[15px] font-semibold tracking-tight text-white">{chain} platform vault</h3>
               <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-admin-faint">{network}</p>
@@ -296,7 +330,9 @@ function VaultCard({
               {balance}
             </p>
           </div>
-          <Badge tone="success" dot>Operational</Badge>
+          <Badge tone={reachable ? 'success' : loading ? 'warning' : 'neutral'} dot>
+            {reachable ? 'Operational' : loading ? 'Syncing' : 'Unavailable'}
+          </Badge>
         </div>
 
         <div className="mt-4 rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-3">

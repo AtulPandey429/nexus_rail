@@ -325,6 +325,7 @@ html.lenis, html.lenis body {
 }
 
 .admin-scope .admin-canvas {
+  overflow-x: clip;
   background-color: var(--admin-bg);
   background-image:
     radial-gradient(ellipse 70% 55% at 82% -12%, rgba(233, 185, 73, 0.075), transparent 60%),

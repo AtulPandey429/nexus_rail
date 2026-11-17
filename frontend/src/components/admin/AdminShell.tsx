@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { IconButton, cn } from '@/components/admin/AdminUI';
+import { AdminBrandMark } from '@/components/admin/AdminBits';
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_NAV_ITEMS,
@@ -72,10 +73,7 @@ function Brand({ onNavigateHome }: { onNavigateHome?: () => void }) {
       className="group flex items-center gap-3 rounded-xl focus-visible:outline-none"
       aria-label="NexusRail operator console home"
     >
-      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-admin-gold/30 bg-gradient-to-br from-[#2A2415] to-[#14120C] font-admin-mono text-sm font-bold text-admin-gold-soft shadow-admin-glow">
-        N
-        <span className="absolute bottom-1 right-1 h-1 w-1 rounded-full bg-admin-gold" aria-hidden="true" />
-      </span>
+      <AdminBrandMark size={36} />
       <span className="min-w-0">
         <span className="flex items-baseline gap-1.5">
           <span className="text-[15px] font-semibold tracking-tight text-white">nexusrail</span>
@@ -290,7 +288,7 @@ export function AdminShell({
         <div className="flex h-16 shrink-0 items-center border-b border-admin-border/60 px-5">
           <Brand />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+        <div data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
           <NavList items={navItems} activeId={activeId} onNavigate={onNavigate} />
         </div>
         <SidebarFooter onOpenCredentials={onOpenCredentials} onSignOut={onSignOut} />
@@ -324,7 +322,7 @@ export function AdminShell({
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+            <div data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
               <NavList items={navItems} activeId={activeId} onNavigate={handleNavigate} />
             </div>
             <div className="border-t border-admin-border/70 px-4 py-4">

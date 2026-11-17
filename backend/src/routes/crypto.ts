@@ -5,6 +5,7 @@ import { verifyToken } from '../services/jwt.js';
 import { walletService } from '../services/wallet.js';
 import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
 import { DualRailTokenService } from '../services/dualRailTokenService.js';
+import { RedisCacheService } from '../services/redis.js';
 
 export const cryptoRouter = Router();
 
@@ -139,6 +140,7 @@ const handleTokenWithdraw = async (req: Request, res: Response) => {
 
     // Atomic debit of user's internal wallet
     await walletService.applyEntry(userId, requestedMicro, 'DEBIT', 'NXL', withdrawalId);
+    await RedisCacheService.invalidateCache('admin:dual-rail:summary');
     const updatedBalances = await walletService.getBalance(userId);
 
     res.json({

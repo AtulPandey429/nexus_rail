@@ -175,41 +175,73 @@ export class TreasuryService {
     const now = Date.now();
     const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
 
-    const [allEntries, recentEntries] = await Promise.all([
-      treasuryCol.find({}).toArray(),
-      treasuryCol.find({ created_at: { $gte: twentyFourHoursAgo } }).toArray(),
-    ]);
+    // Single server-side pass: lifetime totals, 24h totals, and source breakdown.
+    const [facet] = await treasuryCol
+      .aggregate<{
+        lifetime: Array<{
+          gross: number;
+          revenue: number;
+          ownerProfit: number;
+          nrPoolInjected: number;
+        }>;
+        recent: Array<{ revenue: number; ownerProfit: number }>;
+        breakdown: Array<{ _id: string; fee: number; spread: number; gas: number }>;
+      }>([
+        {
+          $facet: {
+            lifetime: [
+              {
+                $group: {
+                  _id: null,
+                  gross: { $sum: { $ifNull: ['$gross_cents', 0] } },
+                  revenue: { $sum: { $ifNull: ['$total_revenue_cents', 0] } },
+                  ownerProfit: { $sum: { $ifNull: ['$net_owner_profit_cents', 0] } },
+                  nrPoolInjected: { $sum: { $ifNull: ['$nr_pool_injected_cents', 0] } },
+                },
+              },
+            ],
+            recent: [
+              { $match: { created_at: { $gte: twentyFourHoursAgo } } },
+              {
+                $group: {
+                  _id: null,
+                  revenue: { $sum: { $ifNull: ['$total_revenue_cents', 0] } },
+                  ownerProfit: { $sum: { $ifNull: ['$net_owner_profit_cents', 0] } },
+                },
+              },
+            ],
+            breakdown: [
+              {
+                $group: {
+                  _id: '$source_type',
+                  fee: { $sum: { $ifNull: ['$fee_cents', 0] } },
+                  spread: { $sum: { $ifNull: ['$spread_cents', 0] } },
+                  gas: { $sum: { $ifNull: ['$gas_arbitrage_cents', 0] } },
+                },
+              },
+            ],
+          },
+        },
+      ])
+      .toArray();
 
-    let totalGrossVolumeCents = 0;
-    let totalRevenueCents = 0;
-    let netOwnerProfitCents = 0;
-    let nrPoolInjectedCents = 0;
+    const lifetime = facet?.lifetime?.[0];
+    const recent = facet?.recent?.[0];
+    const breakdownRows = facet?.breakdown || [];
 
-    let orderFeesCents = 0;
-    let swapSpreadsCents = 0;
-    let cashoutSpreadsCents = 0;
-    let aiFeesCents = 0;
-    let gasSurplusCents = 0;
+    const totalGrossVolumeCents = Number(lifetime?.gross || 0);
+    const totalRevenueCents = Number(lifetime?.revenue || 0);
+    const netOwnerProfitCents = Number(lifetime?.ownerProfit || 0);
+    const nrPoolInjectedCents = Number(lifetime?.nrPoolInjected || 0);
 
-    for (const doc of allEntries) {
-      totalGrossVolumeCents += doc.gross_cents || 0;
-      totalRevenueCents += doc.total_revenue_cents || 0;
-      netOwnerProfitCents += doc.net_owner_profit_cents || 0;
-      nrPoolInjectedCents += doc.nr_pool_injected_cents || 0;
+    const orderFeesCents = Number(breakdownRows.find((row) => row._id === 'ORDER')?.fee || 0);
+    const swapSpreadsCents = Number(breakdownRows.find((row) => row._id === 'SWAP')?.spread || 0);
+    const cashoutSpreadsCents = Number(breakdownRows.find((row) => row._id === 'SELL_SPREAD')?.spread || 0);
+    const aiFeesCents = Number(breakdownRows.find((row) => row._id === 'AI_EXECUTION')?.fee || 0);
+    const gasSurplusCents = Number(breakdownRows.find((row) => row._id === 'GAS_ARBITRAGE')?.gas || 0);
 
-      if (doc.source_type === 'ORDER') orderFeesCents += doc.fee_cents || 0;
-      else if (doc.source_type === 'SWAP') swapSpreadsCents += doc.spread_cents || 0;
-      else if (doc.source_type === 'SELL_SPREAD') cashoutSpreadsCents += doc.spread_cents || 0;
-      else if (doc.source_type === 'AI_EXECUTION') aiFeesCents += doc.fee_cents || 0;
-      else if (doc.source_type === 'GAS_ARBITRAGE') gasSurplusCents += doc.gas_arbitrage_cents || 0;
-    }
-
-    let revenue24hCents = 0;
-    let ownerProfit24hCents = 0;
-    for (const r of recentEntries) {
-      revenue24hCents += r.total_revenue_cents || 0;
-      ownerProfit24hCents += r.net_owner_profit_cents || 0;
-    }
+    const revenue24hCents = Number(recent?.revenue || 0);
+    const ownerProfit24hCents = Number(recent?.ownerProfit || 0);
 
     // Double-Entry Invariant: Net Owner Profit + NR Buyback Injection === Total Revenue
     const zeroSumDifferenceCents = (netOwnerProfitCents + nrPoolInjectedCents) - totalRevenueCents;

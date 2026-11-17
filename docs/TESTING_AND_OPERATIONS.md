@@ -11,6 +11,12 @@ NexusRail includes specialized integration test runners located in `scripts/`. B
 ### A. Test Execution Quick Reference
 
 ```bash
+# Run the full backend unit & integration test suite (Node.js test runner + tsx)
+npm test
+
+# Run the admin analytics, performance & security suite
+npm run test --workspace=@nexusrail/backend -- test/admin-analytics.test.ts
+
 # 1. Master End-to-End Suite (Validates all 7 subsystems end-to-end)
 node --experimental-require-module scripts/verify-master-flow.mjs
 
@@ -54,9 +60,17 @@ node --experimental-require-module scripts/test-phase5-ledger-agent.mjs
   - Token signature tampering rejection (`crypto.timingSafeEqual`).
   - Expired JWT token rejection.
   - Role-forgery rejection (attempting to elevate role from `user` to `admin`).
-  - Deterministic XRPL destination tag derivation within safe range `[100000, 2147483647]`.
+  - Deterministic XRPL destination tag derivation within safe range `[100000, 2099999999]`.
   - Stellar memo formatting compliance (prefix `NR` and exact 28-byte limit).
   - On-chain exploit prevention (unvalidated or non-existent transaction hashes rejected).
+
+### Admin Analytics, Performance & Security Suite (`backend/test/admin-analytics.test.ts`)
+- **Tested Capabilities:**
+  - `AdminAnalyticsService.getAnalytics` across `7d`, `30d`, `90d`, `1y`, and `all` ranges with `day`, `week`, and `month` granularities.
+  - Zero-sum split invariant (`ownerProfitCents + nrPoolInjectedCents - revenueCents === 0`) and strict separation of settled order volume vs platform revenue vs owner profit.
+  - `SorobanService.getContractMetadata()` compatibility across both `snake_case` and `camelCase` DTO properties.
+  - Server-side MongoDB aggregation checks for `TreasuryService.getTreasurySummary()` and `PortfolioService.getPlatformAUC()`.
+  - Role-based authorization (`401` unauthenticated, `403` non-admin, `400` invalid query params) on `GET /api/v1/admin/analytics` and `GET /api/v1/analytics/summary`.
 
 ---
 

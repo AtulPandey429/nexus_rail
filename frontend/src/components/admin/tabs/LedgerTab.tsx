@@ -1,90 +1,61 @@
 'use client';
 
 import React from 'react';
-import { Boxes, Landmark, Scale, ShieldCheck } from 'lucide-react';
+import { Boxes, Landmark, RefreshCw, Scale, ShieldCheck } from 'lucide-react';
 import {
   Badge,
+  Button,
   Card,
+  EmptyState,
   MetricRow,
   ProgressBar,
   SectionHeader,
+  Skeleton,
   StatCard,
   cn,
 } from '@/components/admin/AdminUI';
+import { AssetAvatar } from '@/components/admin/AdminBits';
 import {
   formatDateTime,
   formatMoney,
+  formatNumber,
   formatQuantity,
   formatUsd,
   type AdminModel,
 } from '@/components/admin/adminModel';
 
-type LedgerAsset = {
-  symbol: string;
-  label: string;
-  quantity: number;
-  usd?: number;
-};
-
-const FALLBACK_ASSETS: LedgerAsset[] = [
-  { symbol: 'XLM', label: 'Stellar Lumens', quantity: 124500 },
-  { symbol: 'XRP', label: 'XRP Ledger', quantity: 89400 },
-  { symbol: 'USDC', label: 'USD Coin', quantity: 45200 },
-  { symbol: 'RLUSD', label: 'Ripple USD', quantity: 32150 },
-  { symbol: 'GOLD_G', label: 'Physical gold', quantity: 120.5 },
-  { symbol: 'SILVER_G', label: 'Physical silver', quantity: 4500 },
-];
-
-function assetTheme(symbol: string) {
-  if (symbol.includes('XLM')) return 'border-sky-400/20 bg-sky-400/10 text-sky-300';
-  if (symbol.includes('XRP')) return 'border-violet-400/20 bg-violet-400/10 text-violet-300';
-  if (symbol.includes('USDC')) return 'border-blue-400/20 bg-blue-400/10 text-blue-300';
-  if (symbol.includes('RLUSD')) return 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
-  if (symbol.includes('GOLD')) return 'border-admin-gold/25 bg-admin-gold/10 text-admin-gold-soft';
-  return 'border-white/10 bg-white/[0.05] text-slate-300';
-}
-
 export function LedgerTab({ model }: { model: AdminModel }) {
-  const { aucData, aucLoading, lastSyncedAt } = model;
+  const { aucData, aucLoading, loadPlatformAUC, lastSyncedAt } = model;
 
-  const assets: LedgerAsset[] =
-    aucData?.assets && aucData.assets.length > 0
-      ? aucData.assets.map((asset) => ({
-          symbol: String(asset.symbol),
-          label: asset.label,
-          quantity: asset.total_quantity,
-          usd: asset.valuation_usd_cents / 100,
-        }))
-      : FALLBACK_ASSETS;
-
-  const totalCustody = aucData ? aucData.total_custody_usd_cents / 100 : 184920.4;
-  const assetCount = aucData?.assets?.length || assets.length;
+  const assets = aucData?.assets ?? [];
+  const totalCustody = aucData ? aucData.total_custody_usd_cents / 100 : 0;
+  const assetCount = assets.length;
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard
           label="Total system AUC"
-          value={formatUsd(totalCustody)}
+          value={aucData ? formatUsd(totalCustody) : aucLoading ? 'Syncing…' : '$0.00'}
           icon={Landmark}
           tone="gold"
-          hint="Aggregated across all asset classes"
-          aside={<Badge tone={aucData ? 'success' : 'neutral'} dot>{aucData ? 'Verified' : 'Snapshot'}</Badge>}
+          hint="Live oracle valuation of positive user holdings"
+          aside={<Badge tone={aucData ? 'success' : 'neutral'} dot>{aucData ? 'Live DB' : 'Awaiting sync'}</Badge>}
         />
         <StatCard
           label="Assets under custody"
-          value={`${assetCount} classes`}
+          value={`${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`}
           icon={Boxes}
           tone="cyan"
-          hint="Stellar and XRPL trustlines"
+          hint="Distinct assets with positive balances"
         />
         <StatCard
-          label="Invariant health"
-          value="Zero variance"
+          label="Spread earned"
+          value={formatMoney(aucData?.total_spread_earned_cents ?? 0)}
           icon={Scale}
           tone="emerald"
-          hint="Assets = liabilities + equity"
-          aside={<Badge tone="success" dot>Balanced</Badge>}
+          hint="Realized cashout spreads recorded"
+          aside={<Badge tone="success" dot>Verified</Badge>}
         />
       </div>
 
@@ -92,48 +63,69 @@ export function LedgerTab({ model }: { model: AdminModel }) {
         <SectionHeader
           eyebrow="Custody"
           title="Custodial asset allocation"
-          description="Live balances held across cold custody and hot operational vaults."
+          description="Live balances held across user custody portfolios valued at real-time oracle prices."
           action={
             <Badge tone="neutral">
-              {aucLoading ? 'Re-verifying…' : lastSyncedAt ? `Synced ${formatDateTime(lastSyncedAt)}` : 'Snapshot'}
+              {aucLoading ? 'Re-verifying…' : lastSyncedAt ? `Synced ${formatDateTime(lastSyncedAt)}` : 'Live ledger'}
             </Badge>
           }
         />
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          {assets.map((asset) => {
-            const share = asset.usd && totalCustody > 0 ? (asset.usd / totalCustody) * 100 : 0;
-            return (
-              <div
-                key={asset.symbol}
-                className="rounded-xl border border-admin-border bg-gradient-to-b from-[#0E121A] to-[#0A0E15] p-4 transition-colors hover:border-white/[0.12]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-lg border font-admin-mono text-[9px] font-bold',
-                      assetTheme(asset.symbol)
-                    )}
-                  >
-                    {asset.symbol.replace('_G', '').slice(0, 4)}
-                  </span>
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-admin-faint">
-                    {asset.symbol.replace('_G', '')}
-                  </span>
-                </div>
-                <p className="mt-3 truncate text-[10px] text-admin-muted">{asset.label}</p>
-                <p className="mt-1 truncate font-admin-mono text-[15px] font-semibold text-white admin-tabular">
-                  {formatQuantity(asset.quantity, asset.symbol)}
-                </p>
-                <p className="mt-0.5 truncate font-admin-mono text-[10px] text-admin-faint">
-                  {asset.usd !== undefined ? formatUsd(asset.usd) : 'Oracle priced'}
-                </p>
-                {share > 0 && (
-                  <ProgressBar value={share} tone="gold" className="mt-2.5 h-1" label={`${asset.label} allocation`} />
-                )}
+        {aucLoading && !aucData ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="rounded-xl border border-admin-border bg-[#0A0E15] p-4">
+                <Skeleton className="h-8 w-8 rounded-lg" />
+                <Skeleton className="mt-3 h-3 w-24" />
+                <Skeleton className="mt-2 h-5 w-28" />
+                <Skeleton className="mt-2 h-2 w-20" />
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : assets.length > 0 ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {assets.map((asset) => {
+              const usdValue = asset.valuation_usd_cents / 100;
+              const share = totalCustody > 0 ? (usdValue / totalCustody) * 100 : 0;
+              return (
+                <div
+                  key={asset.symbol}
+                  className="rounded-xl border border-admin-border bg-gradient-to-b from-[#0E121A] to-[#0A0E15] p-4 transition-colors hover:border-white/[0.12]"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <AssetAvatar symbol={asset.symbol} size={32} />
+                    <span className="font-admin-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-admin-faint">
+                      {asset.symbol.replace('_G', '')} · {formatNumber(asset.user_count)}{' '}
+                      {asset.user_count === 1 ? 'holder' : 'holders'}
+                    </span>
+                  </div>
+                  <p className="mt-3 truncate text-[11px] font-medium text-admin-muted">{asset.label}</p>
+                  <p className="mt-1 truncate font-admin-mono text-[16px] font-semibold text-white admin-tabular">
+                    {formatQuantity(asset.total_quantity, asset.symbol)}
+                  </p>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-admin-faint">
+                    <span className="font-admin-mono">{formatUsd(usdValue)}</span>
+                    <span className="font-admin-mono">@ {formatMoney(asset.current_price_cents)}</span>
+                  </div>
+                  {share > 0 && (
+                    <ProgressBar value={share} tone="gold" className="mt-2.5 h-1" label={`${asset.label} allocation`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4">
+            <EmptyState
+              title="No active custodial holdings"
+              description="User asset balances will appear here once settled orders or portfolio holdings are credited."
+              action={
+                <Button variant="secondary" size="sm" icon={RefreshCw} loading={aucLoading} onClick={loadPlatformAUC}>
+                  Re-verify AUC
+                </Button>
+              }
+            />
+          </div>
+        )}
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-3">

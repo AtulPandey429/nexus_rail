@@ -450,12 +450,19 @@
   {
     "success": true,
     "data": {
-      "usd": 1,
-      "xrpUsd": 1.2972,
-      "xlmUsd": 0.1778,
-      "source": "coingecko",
+      "USD": 1,
+      "XRP": 1.2972,
+      "XLM": 0.1778,
+      "xrp24hChange": 2.15,
+      "xlm24hChange": 1.42,
+      "goldUsdPerGram": 88.5,
+      "gold24hChange": 0.45,
+      "silverUsdPerGram": 1.05,
+      "silver24hChange": 0.3,
+      "usdInrRate": 86.5,
+      "source": "binance",
       "fromCache": false,
-      "fetchedAt": "2026-10-20T11:00:00.000Z"
+      "timestamp": "2026-10-20T11:00:00.000Z"
     }
   }
   ```
@@ -581,17 +588,88 @@
 
 ### `GET /api/v1/analytics/summary`
 - **Status:** Production-verified
-- **Auth:** None
+- **Auth:** Required (`Bearer <token>` with `role: "admin"`)
+- **Query Params:** `?refresh=true` (optional; bypasses 30s cache)
+- **Behavior:** Server-side MongoDB `$facet` aggregation over `orders` and `platform_treasury` (separating settled order volume from treasury fee/spread revenue and owner profit).
+- **Response (200):**
+  ```json
+  {
+    "success": true,
+    "cached": false,
+    "data": {
+      "totalVolumeCents": 68620,
+      "totalRevenueCents": 2367,
+      "netOwnerProfitCents": 1185,
+      "totalOrders": 23,
+      "settledOrders": 10,
+      "railBreakdown": { "STRIPE": 2, "WALLET": 3, "XLM": 5 },
+      "averageOrderValueCents": 6862,
+      "timestamp": "2026-11-17T05:45:00.000Z"
+    }
+  }
+  ```
+
+### `GET /api/v1/admin/analytics`
+- **Status:** Production-verified
+- **Auth:** Required (`role: "admin"`)
+- **Query Params:**
+  - `range`: `'7d' | '30d' | '90d' | '1y' | 'all'` (default `'30d'`)
+  - `granularity`: `'day' | 'week' | 'month'` (optional; auto-resolved by range if omitted)
+  - `refresh`: `'true' | 'false'` (optional; bypasses 30s cache)
 - **Response (200):**
   ```json
   {
     "success": true,
     "data": {
-      "totalRevenueCents": 17940,
-      "totalOrders": 4,
-      "railBreakdown": { "STELLAR": 2, "XRPL": 1, "STRIPE": 1 },
-      "averageOrderValueCents": 4485,
-      "timestamp": "2026-10-20T11:00:00.000Z"
+      "range": {
+        "key": "30d",
+        "label": "Last 30 days",
+        "from": "2026-10-18T05:45:00.000Z",
+        "to": "2026-11-17T05:45:00.000Z",
+        "days": 30,
+        "granularity": "day"
+      },
+      "generatedAt": "2026-11-17T05:45:00.000Z",
+      "overview": {
+        "totalUsers": 18,
+        "activeUsers": 6,
+        "newUsers": 18,
+        "userGrowthPct": null,
+        "totalOrders": 23,
+        "settledOrders": 10,
+        "pendingOrders": 13,
+        "failedOrders": 0,
+        "successRatePct": 100,
+        "orderVolumeCents": 81520,
+        "averageOrderValueCents": 8152,
+        "grossTreasuryVolumeCents": 283031,
+        "revenueCents": 2367,
+        "feeCents": 1629,
+        "spreadCents": 558,
+        "gasArbitrageCents": 180,
+        "ownerProfitCents": 1185,
+        "nrPoolInjectedCents": 1182,
+        "zeroSumDifferenceCents": 0,
+        "isBalanced": true,
+        "custodyUsdCents": 25600,
+        "nrPoolReserveUsdCents": 10000000,
+        "walletCreditsCents": 225904,
+        "walletDebitsCents": 26800,
+        "tokenWithdrawalsCount": 9,
+        "tokenWithdrawalUnits": 225
+      },
+      "lifetime": { "...": "..." },
+      "series": [ "..." ],
+      "statusBreakdown": [ "..." ],
+      "railBreakdown": [ "..." ],
+      "revenueBreakdown": [ "..." ],
+      "topProducts": [ "..." ],
+      "custodyAssets": [ "..." ],
+      "recentOrders": [ "..." ],
+      "dataQuality": {
+        "notes": [ "..." ],
+        "unavailableMetrics": [ "..." ]
+      }
     }
   }
   ```
@@ -599,18 +677,31 @@
 ### `GET /api/v1/admin/stats`
 - **Status:** Implemented
 - **Auth:** Required (`role: "admin"`)
-- **Response (200):** `{ "success": true, "data": { "totalVolumeCents": ..., "totalOrdersCount": ..., "productsCount": 10, "usersCount": ... } }`
+- **Response (200):** `{ "success": true, "data": { "totalVolumeCents": ..., "totalOrdersCount": ..., "productsCount": 20, "usersCount": ..., "treasury": {...}, "nrPool": {...}, "contract": {...}, "rpcHealth": {...} } }`
 
 ### `GET /api/v1/admin/orders`
 - **Status:** Implemented
 - **Auth:** Required (`role: "admin"`)
-- **Response (200):** Full list of all orders across all users with settlement status.
+- **Query Params:** `?limit=200&offset=0&status=PAID` (`limit` clamped `1..500`, `status` validated against order statuses)
+- **Response (200):** Paginated `{ "success": true, "status": "success", "data": { "orders": [...], "total": 23, "limit": 200, "offset": 0 } }` with buyer email/name resolved via MongoDB `$lookup`.
 
 ### `PATCH /api/v1/admin/orders/:id`
 - **Status:** Implemented
 - **Auth:** Required (`role: "admin"`)
 - **Request Body:** `{ "status": "FULFILLING" }`
-- **State Machine Guard:** Enforces valid order transitions (`PENDING` -> `PAID` -> `FULFILLING` -> `FULFILLED`).
+- **State Machine Guard:** Enforces valid order transitions (`PENDING` -> `PAID` -> `FULFILLING` -> `FULFILLED`), credits portfolio allocations if transitioning to settled state, and invalidates analytics caches.
+
+### `GET /api/v1/admin/products`
+- **Status:** Implemented
+- **Auth:** Required (`role: "admin"`)
+- **Query Params:** `?refresh=true` (optional; bypasses 60s cache)
+- **Response (200):** `{ "success": true, "cached": false, "data": { "products": [...] } }`
+
+### `POST /api/v1/admin/treasury/trigger-split`
+- **Status:** Implemented
+- **Auth:** Required (`role: "admin"`)
+- **Request Body:** `{ "reason": "Manual operator execution from admin console" }`
+- **Behavior:** Idempotently reconciles settled orders into `user_holdings` and `platform_treasury` (50/50 split), appends a `CONTRACT_SPLIT` record to `platform_chain_logs`, invalidates analytics caches, and returns `{ "success": true, "data": { "summary": {...}, "reconciledOrdersCount": 0, "referenceId": "SPLIT-...", "txHash": "split_..." } }`.
 
 ---
 

@@ -76,7 +76,7 @@ export function SectionHeader({
             {eyebrow}
           </p>
         )}
-        <h3 className="text-[15px] font-semibold tracking-tight text-white">{title}</h3>
+        <h2 className="text-[15px] font-semibold tracking-tight text-white">{title}</h2>
         {description && (
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-admin-muted">{description}</p>
         )}
@@ -647,7 +647,7 @@ export function Modal({
           </div>
           <IconButton label="Close dialog" icon={X} onClick={onClose} className="shrink-0" />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+        <div data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
         {footer && (
           <div className="flex flex-col-reverse gap-2 border-t border-admin-border bg-[#090C12]/80 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
             {footer}
@@ -699,7 +699,7 @@ export function CopyValue({
       type="button"
       onClick={copy}
       title={copied ? 'Copied' : label}
-      aria-label={copied ? 'Copied to clipboard' : label}
+      aria-label={copied ? `Copied: ${display ?? value ?? ''}` : `${label}: ${display ?? value ?? ''}`}
       className={cn(
         'group inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-slate-400 transition-colors hover:text-white',
         mono && 'font-admin-mono text-[11px]',

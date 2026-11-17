@@ -7,8 +7,6 @@ import {
   ExternalLink,
   Landmark,
   RefreshCw,
-  Scale,
-  ShieldCheck,
   Wallet,
 } from 'lucide-react';
 import {
@@ -19,11 +17,9 @@ import {
   EmptyState,
   Feedback,
   Field,
-  ProgressBar,
   SearchInput,
   SectionHeader,
   StatCard,
-  StatusBadge,
   Table,
   TableWrap,
   Td,
@@ -31,12 +27,11 @@ import {
   cn,
   inputClassName,
 } from '@/components/admin/AdminUI';
-import { MiniStat, PaginationBar } from '@/components/admin/AdminBits';
+import { MiniStat, PaginationBar, RailBadge } from '@/components/admin/AdminBits';
 import {
   formatDate,
   formatDateTime,
   formatMoney,
-  formatNumber,
   formatUsd,
   truncateMiddle,
   type AdminModel,
@@ -80,6 +75,18 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
 
   const balanced = treasurySummary?.isBalanced !== false;
   const ownerShare = 100 - buybackSharePctInput;
+
+  const sc = smartContract as any;
+  const contractId = sc?.contractId || sc?.contract_id || '';
+  const contractNetwork = sc?.network || 'testnet';
+  const contractStatus = sc?.status || 'ACTIVE';
+  const protocolVersion = sc?.protocolVersion ?? sc?.protocol_version ?? 22;
+  const feeBps = sc?.feeBps ?? sc?.fee_bps ?? 0;
+  const ownerSplitPct = sc?.ownerSplitPct ?? sc?.owner_split_pct ?? 50;
+  const currentWasmHash = sc?.currentWasmHash || sc?.current_wasm_hash || '';
+  const treasuryAddress = sc?.treasuryAddress || sc?.treasury_address || '';
+  const nrReserveAddress = sc?.nrReserveAddress || sc?.nr_reserve_address || '';
+  const contractExplorerUrl = sc?.explorerUrl || sc?.explorer_url || '';
 
   return (
     <div className="space-y-4">
@@ -285,9 +292,9 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
           title="Nexus vault smart contract"
           description="Deployed Protocol 22 contract metadata and on-chain treasury routing."
           action={
-            smartContract?.explorerUrl ? (
+            contractExplorerUrl ? (
               <a
-                href={smartContract.explorerUrl}
+                href={contractExplorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-[11px] font-medium text-sky-300 transition-colors hover:text-sky-200"
@@ -306,31 +313,31 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
               <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">Contract ID</p>
               <div className="mt-1.5">
                 <CopyValue
-                  value={smartContract.contractId}
-                  display={truncateMiddle(smartContract.contractId, 10, 8)}
+                  value={contractId}
+                  display={truncateMiddle(contractId, 10, 8)}
                   label="Copy contract ID"
                 />
               </div>
             </div>
             <MiniStat
               label="Network"
-              value={`${smartContract.network} · v${smartContract.protocolVersion}`}
-              hint={smartContract.status}
-              tone={smartContract.status === 'ACTIVE' ? 'text-emerald-300' : 'text-amber-300'}
+              value={`${contractNetwork} · v${protocolVersion}`}
+              hint={contractStatus}
+              tone={contractStatus === 'ACTIVE' ? 'text-emerald-300' : 'text-amber-300'}
             />
-            <MiniStat label="Protocol fee" value={`${smartContract.feeBps} bps`} hint="Applied at contract level" />
+            <MiniStat label="Protocol fee" value={`${feeBps} bps`} hint="Applied at contract level" />
             <MiniStat
               label="Owner split"
-              value={`${smartContract.ownerSplitPct}%`}
-              hint={`Pool ${100 - smartContract.ownerSplitPct}%`}
+              value={`${ownerSplitPct}%`}
+              hint={`Pool ${100 - ownerSplitPct}%`}
               tone="text-admin-gold-soft"
             />
             <div className="rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3 sm:col-span-2">
               <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">WASM hash</p>
               <div className="mt-1.5">
                 <CopyValue
-                  value={smartContract.currentWasmHash}
-                  display={truncateMiddle(smartContract.currentWasmHash, 18, 10)}
+                  value={currentWasmHash}
+                  display={truncateMiddle(currentWasmHash, 18, 10)}
                   label="Copy WASM hash"
                 />
               </div>
@@ -339,8 +346,8 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
               <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">Treasury address</p>
               <div className="mt-1.5">
                 <CopyValue
-                  value={smartContract.treasuryAddress}
-                  display={truncateMiddle(smartContract.treasuryAddress, 8, 6)}
+                  value={treasuryAddress}
+                  display={truncateMiddle(treasuryAddress, 8, 6)}
                   label="Copy treasury address"
                 />
               </div>
@@ -349,8 +356,8 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
               <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">NXL reserve</p>
               <div className="mt-1.5">
                 <CopyValue
-                  value={smartContract.nrReserveAddress}
-                  display={truncateMiddle(smartContract.nrReserveAddress, 8, 6)}
+                  value={nrReserveAddress}
+                  display={truncateMiddle(nrReserveAddress, 8, 6)}
                   label="Copy reserve address"
                 />
               </div>
@@ -391,23 +398,24 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
           }
         />
         <TableWrap className="mt-5">
-          <Table minWidth={920}>
+          <Table minWidth={960}>
             <thead>
               <tr>
                 <Th>Date</Th>
                 <Th>Source</Th>
+                <Th>Rail</Th>
                 <Th>Reference</Th>
-                <Th align="right">Gross fee</Th>
+                <Th align="right">Gross volume</Th>
+                <Th align="right">Revenue</Th>
                 <Th align="right">Owner profit</Th>
                 <Th align="right">$NXL buyback</Th>
-                <Th>Status</Th>
               </tr>
             </thead>
             <tbody>
               {treasuryLoading && treasuryEntries.length === 0 ? (
                 Array.from({ length: 4 }).map((_, index) => (
                   <tr key={index}>
-                    {Array.from({ length: 7 }).map((__, cell) => (
+                    {Array.from({ length: 8 }).map((__, cell) => (
                       <Td key={cell}>
                         <span className="admin-skeleton block h-3 w-20 rounded bg-white/[0.06]" />
                       </Td>
@@ -415,46 +423,57 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
                   </tr>
                 ))
               ) : paginatedTreasuryEntries.length > 0 ? (
-                paginatedTreasuryEntries.map((item, index) => (
-                  <tr key={item.id || index} className="transition-colors hover:bg-white/[0.022]">
-                    <Td>
-                      <span className="whitespace-nowrap text-[11px] text-admin-muted">
-                        {formatDate(item.created_at)}
-                      </span>
-                    </Td>
-                    <Td>
-                      <Badge tone="neutral">{String(item.source_type || 'internal').toUpperCase()}</Badge>
-                    </Td>
-                    <Td>
-                      <CopyValue
-                        value={item.source_ref || ''}
-                        display={item.source_ref || 'TR-SETTLE-001'}
-                        label="Copy entry reference"
-                      />
-                    </Td>
-                    <Td align="right">
-                      <span className="font-admin-mono text-xs font-semibold text-slate-100">
-                        {formatMoney(item.gross_fee_cents)}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-admin-mono text-xs font-semibold text-admin-gold-soft">
-                        {formatMoney(item.owner_profit_cents)}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-admin-mono text-xs font-semibold text-sky-300">
-                        {formatMoney(item.nr_pool_cents)}
-                      </span>
-                    </Td>
-                    <Td>
-                      <StatusBadge status={item.status || 'SPLIT'} />
-                    </Td>
-                  </tr>
-                ))
+                paginatedTreasuryEntries.map((item, index) => {
+                  const refValue = item.reference_id || item.source_ref || item.id || '';
+                  const revenueCents = item.total_revenue_cents ?? item.gross_fee_cents ?? 0;
+                  const ownerProfitCents = item.net_owner_profit_cents ?? item.owner_profit_cents ?? 0;
+                  const buybackCents = item.nr_pool_injected_cents ?? item.nr_pool_cents ?? 0;
+                  return (
+                    <tr key={item.id || index} className="transition-colors hover:bg-white/[0.022]">
+                      <Td>
+                        <span className="whitespace-nowrap text-[11px] text-admin-muted">
+                          {formatDate(item.created_at)}
+                        </span>
+                      </Td>
+                      <Td>
+                        <Badge tone="neutral">{String(item.source_type || 'INTERNAL').toUpperCase()}</Badge>
+                      </Td>
+                      <Td>
+                        <RailBadge rail={item.rail || 'INTERNAL'} />
+                      </Td>
+                      <Td>
+                        <CopyValue
+                          value={refValue}
+                          display={truncateMiddle(refValue, 12, 8)}
+                          label="Copy entry reference"
+                        />
+                      </Td>
+                      <Td align="right">
+                        <span className="font-admin-mono text-xs text-slate-300 admin-tabular">
+                          {formatMoney(item.gross_cents ?? 0)}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <span className="font-admin-mono text-xs font-semibold text-slate-100 admin-tabular">
+                          {formatMoney(revenueCents)}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <span className="font-admin-mono text-xs font-semibold text-admin-gold-soft admin-tabular">
+                          {formatMoney(ownerProfitCents)}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <span className="font-admin-mono text-xs font-semibold text-sky-300 admin-tabular">
+                          {formatMoney(buybackCents)}
+                        </span>
+                      </Td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <EmptyState
                       title="No treasury entries found"
                       description="Settlement splits will appear here once the treasury engine records its first fee event."

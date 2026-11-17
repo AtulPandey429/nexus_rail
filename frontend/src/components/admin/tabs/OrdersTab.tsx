@@ -33,6 +33,7 @@ import {
 export function OrdersTab({ model }: { model: AdminModel }) {
   const {
     liveOrders,
+    ordersLoading,
     ordersSearch,
     setOrdersSearch,
     ordersPage,
@@ -44,15 +45,23 @@ export function OrdersTab({ model }: { model: AdminModel }) {
     ORDERS_PER_PAGE,
   } = model;
 
-  const paidCount = liveOrders.filter((order) => order.status === 'PAID').length;
-  const fulfilledCount = liveOrders.filter((order) => order.status === 'FULFILLED').length;
-  const settledCount = liveOrders.filter((order) => order.status === 'SETTLED').length;
+  const countFor = (status: string) => liveOrders.filter((order) => order.status === status).length;
+  const paidCount = countFor('PAID');
+  const fulfilledCount = countFor('FULFILLED');
+  const pendingCount = countFor('PENDING');
 
   const filters = [
     { id: 'ALL', label: 'All orders', count: liveOrders.length },
-    { id: 'PAID', label: 'Paid', count: paidCount },
-    { id: 'FULFILLED', label: 'Fulfilled', count: fulfilledCount },
-    { id: 'SETTLED', label: 'Settled', count: settledCount },
+    ...Array.from(new Set(liveOrders.map((order) => order.status)))
+      .filter((status) => status && status !== 'ALL')
+      .map((status) => ({
+        id: status,
+        label: status
+          .toLowerCase()
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (character) => character.toUpperCase()),
+        count: countFor(status),
+      })),
   ];
 
   const resetFilters = () => {
@@ -86,11 +95,11 @@ export function OrdersTab({ model }: { model: AdminModel }) {
           hint="Merchant delivery completed"
         />
         <StatCard
-          label="Cross-chain settled"
-          value={settledCount}
+          label="Awaiting payment"
+          value={pendingCount}
           icon={ArrowRightLeft}
           tone="violet"
-          hint="Rail-to-rail swaps finalized"
+          hint="Pending or underpaid settlement"
         />
       </div>
 
@@ -150,7 +159,17 @@ export function OrdersTab({ model }: { model: AdminModel }) {
               </tr>
             </thead>
             <tbody>
-              {paginatedOrders.length > 0 ? (
+              {ordersLoading && liveOrders.length === 0 ? (
+                Array.from({ length: 5 }).map((_, index) => (
+                  <tr key={index}>
+                    {Array.from({ length: 7 }).map((__, cell) => (
+                      <Td key={cell}>
+                        <span className="admin-skeleton block h-3 w-20 rounded bg-white/[0.06]" />
+                      </Td>
+                    ))}
+                  </tr>
+                ))
+              ) : paginatedOrders.length > 0 ? (
                 paginatedOrders.map((order) => (
                   <tr key={order.id} className="transition-colors hover:bg-white/[0.022]">
                     <Td>

@@ -60,3 +60,14 @@ This document catalogs all verified limitations, stubbed routes, partial impleme
 
 ### C. Stripe Webhook Testing
 - In local development, incoming webhooks require the Stripe CLI (`stripe listen --forward-to localhost:4000/api/v1/webhooks/stripe`) to forward signed events to the server. Without this, card orders remain in `PENDING` status.
+
+---
+
+## 4. Unavailable Financial Analytics Metrics
+
+`AdminAnalyticsService.getAnalytics()` reports only metrics backed by real MongoDB and on-chain records, and exposes missing financial metrics explicitly in `dataQuality.unavailableMetrics`:
+
+1. **Treasury cash balance**: Database tracks accrued fee splits (`platform_treasury`) and AMM pool reserves (`token_pool`), not a reconciled fiat bank/cash account ledger. Requires adding a treasury cash account ledger with opening balance, deposits, payouts, and reconciliation entries.
+2. **External fiat deposits**: `wallet_ledger` credits reflect internal cashout proceeds, cashback, and settlements rather than an external fiat deposit provider ledger. Requires persisting Stripe/bank deposit events in a dedicated deposits collection.
+3. **Gross profit / COGS**: Product cost basis (`cost_cents`) is not stored per product or order line item. Requires adding `cost_cents` at catalog/order-item level and recording COGS upon settlement.
+4. **Refund-adjusted net revenue**: Order refunds are not currently written as reversing negative revenue entries in `platform_treasury`. Requires emitting negative reversal records on refund transitions.

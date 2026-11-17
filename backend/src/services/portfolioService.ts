@@ -518,24 +518,23 @@ export class PortfolioService {
     const holdingsCol = await MongoService.getCollection<MongoUserHoldingDoc>('user_holdings');
     const eventsCol = await MongoService.getCollection<MongoPortfolioEventDoc>('portfolio_events');
 
-    const allHoldings = await holdingsCol.find({ quantity: { $gt: 0.000001 } }).toArray();
-    const snapshot = await getExtendedMarketSnapshot();
-    const nrPool = await NrTokenService.getPoolStats();
+    // Aggregate in MongoDB so large holdings collections never land in Node memory.
+    const [groupedRows, snapshot, nrPool] = await Promise.all([
+      holdingsCol
+        .aggregate<{ _id: AssetSymbol; totalQty: number; userCount: number }>([
+          { $match: { quantity: { $gt: 0.000001 } } },
+          { $group: { _id: '$symbol', totalQty: { $sum: '$quantity' }, users: { $addToSet: '$user_id' } } },
+          { $project: { _id: 1, totalQty: 1, userCount: { $size: '$users' } } },
+        ])
+        .toArray(),
+      getExtendedMarketSnapshot(),
+      NrTokenService.getPoolStats(),
+    ]);
 
-    const grouped: Record<string, { totalQty: number; userIds: Set<string> }> = {};
-
-    for (const h of allHoldings) {
-      if (!grouped[h.symbol]) {
-        grouped[h.symbol] = { totalQty: 0, userIds: new Set() };
-      }
-      grouped[h.symbol].totalQty += h.quantity;
-      grouped[h.symbol].userIds.add(h.user_id);
-    }
-
-    const assets = Object.entries(grouped).map(([sym, data]) => {
-      const symbol = sym as AssetSymbol;
+    const assets = groupedRows.map((row) => {
+      const symbol = row._id as AssetSymbol;
       const { priceCents } = this.getAssetPriceCents(symbol, snapshot, nrPool.spotPriceCents);
-      const totalQty = Number(data.totalQty.toFixed(6));
+      const totalQty = Number(Number(row.totalQty || 0).toFixed(6));
       const valuationCents = Math.round(totalQty * priceCents);
       return {
         symbol,
@@ -543,7 +542,7 @@ export class PortfolioService {
         total_quantity: totalQty,
         current_price_cents: priceCents,
         valuation_usd_cents: valuationCents,
-        user_count: data.userIds.size,
+        user_count: Number(row.userCount || 0),
       };
     });
 

@@ -1,6 +1,12 @@
+import crypto from 'crypto';
 import { Router, Response } from 'express';
 import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth.js';
-import { MongoService, MongoOrderDoc, MongoPlatformTokenDoc } from '../services/mongo.js';
+import {
+  MongoService,
+  MongoChainActionLogDoc,
+  MongoOrderDoc,
+  MongoPlatformTokenDoc,
+} from '../services/mongo.js';
 import { ProductService } from '../services/products.js';
 import { NrTokenService } from '../services/nrTokenService.js';
 import { RedisCacheService } from '../services/redis.js';
@@ -9,11 +15,18 @@ import { TreasuryService } from '../services/treasuryService.js';
 import { SorobanService } from '../services/soroban.js';
 import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
 import { DualRailTokenService } from '../services/dualRailTokenService.js';
+import { AdminAnalyticsService } from '../services/adminAnalyticsService.js';
 import { env } from '../config/env.js';
 import { z } from 'zod';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
+
+const AnalyticsQuerySchema = z.object({
+  range: z.enum(['7d', '30d', '90d', '1y', 'all']).default('30d'),
+  granularity: z.enum(['day', 'week', 'month']).optional(),
+  refresh: z.enum(['true', 'false']).optional(),
+});
 
 const AdjustReserveSchema = z.object({
   deltaUsdCents: z.number().int().refine((n) => n !== 0, 'deltaUsdCents must be non-zero'),
@@ -68,8 +81,28 @@ adminRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) => {
     const productsCol = await MongoService.getCollection('products');
     const usersCol = await MongoService.getCollection('users');
 
-    const [orders, productsCount, usersCount, treasury, nrPool, contractMeta] = await Promise.all([
-      ordersCol.find().toArray(),
+    // Aggregate in MongoDB instead of loading the full orders collection into Node.
+    const [orderStats, productsCount, usersCount, treasury, nrPool, contractMeta] = await Promise.all([
+      ordersCol
+        .aggregate<{ totalOrders: number; totalVolumeCents: number }>([
+          {
+            $group: {
+              _id: null,
+              totalOrders: { $sum: 1 },
+              totalVolumeCents: {
+                $sum: {
+                  $cond: [
+                    { $in: ['$status', ['PAID', 'FULFILLING', 'FULFILLED']] },
+                    { $ifNull: ['$total_cents', 0] },
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ])
+        .toArray()
+        .then((rows) => rows[0] || { totalOrders: 0, totalVolumeCents: 0 }),
       productsCol.countDocuments(),
       usersCol.countDocuments(),
       TreasuryService.getTreasurySummary().catch(() => null),
@@ -77,15 +110,12 @@ adminRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) => {
       SorobanService.getContractMetadata().catch(() => null),
     ]);
 
-    const paid = orders.filter((row) => ['PAID', 'FULFILLING', 'FULFILLED'].includes(row.status));
-    const totalVolumeCents = paid.reduce((sum, row) => sum + (row.total_cents || 0), 0);
-
     res.json({
       success: true,
       status: 'success',
       data: {
-        totalVolumeCents,
-        totalOrdersCount: orders.length,
+        totalVolumeCents: orderStats.totalVolumeCents,
+        totalOrdersCount: orderStats.totalOrders,
         productsCount,
         usersCount,
         treasury,
@@ -99,26 +129,86 @@ adminRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-adminRouter.get('/orders', async (_req: AuthenticatedRequest, res: Response) => {
+adminRouter.get('/analytics', async (req: AuthenticatedRequest, res: Response) => {
+  const parsed = AnalyticsQuerySchema.safeParse({
+    range: req.query.range ?? '30d',
+    granularity: req.query.granularity,
+    refresh: req.query.refresh,
+  });
+  if (!parsed.success) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid analytics query parameters',
+      details: parsed.error.format(),
+    });
+  }
+
   try {
+    const data = await AdminAnalyticsService.getAnalytics({
+      range: parsed.data.range,
+      granularity: parsed.data.granularity,
+      forceRefresh: parsed.data.refresh === 'true',
+    });
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to aggregate admin analytics' });
+  }
+});
+
+adminRouter.get('/orders', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const status = req.query.status ? String(req.query.status).toUpperCase() : null;
+    const validStatuses = ['PENDING', 'PAID', 'UNDERPAID', 'FULFILLING', 'FULFILLED', 'CANCELLED', 'REFUNDED', 'FAILED'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid order status filter' });
+    }
+
     const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
-    const orders = await ordersCol.find().sort({ created_at: -1 }).toArray();
+    const match = status ? { status } : {};
+    const [total, orders] = await Promise.all([
+      ordersCol.countDocuments(match as any),
+      ordersCol
+        .aggregate([
+          { $match: match },
+          { $sort: { created_at: -1 } },
+          { $skip: offset },
+          { $limit: limit },
+          {
+            $lookup: {
+              from: 'users',
+              let: { buyerId: '$user_id' },
+              pipeline: [
+                { $match: { $expr: { $eq: ['$id', '$$buyerId'] } } },
+                { $project: { _id: 0, email: 1, name: 1 } },
+              ],
+              as: 'buyer',
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              id: 1,
+              orderNumber: '$order_number',
+              status: 1,
+              totalCents: '$total_cents',
+              createdAt: '$created_at',
+              buyerEmail: { $ifNull: [{ $arrayElemAt: ['$buyer.email', 0] }, '$user_id'] },
+              buyerName: { $arrayElemAt: ['$buyer.name', 0] },
+              rail: '$payment_rail',
+              txHash: '$tx_hash',
+              items: 1,
+            },
+          },
+        ])
+        .toArray(),
+    ]);
 
     res.json({
       success: true,
       status: 'success',
-      data: {
-        orders: orders.map((row) => ({
-          id: row.id,
-          orderNumber: row.order_number,
-          status: row.status,
-          totalCents: row.total_cents,
-          createdAt: row.created_at,
-          buyerEmail: row.user_id,
-          rail: row.payment_rail,
-          items: row.items,
-        })),
-      },
+      data: { orders, total, limit, offset },
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -144,16 +234,30 @@ adminRouter.patch('/orders/:id', async (req: AuthenticatedRequest, res: Response
       { returnDocument: 'after' }
     );
 
+    if (updated && ['PAID', 'FULFILLING', 'FULFILLED'].includes(status)) {
+      await PortfolioService.creditOrderAllocations(updated).catch(() => {});
+    }
+    await AdminAnalyticsService.invalidateCache();
+
     res.json({ success: true, status: 'success', data: { order: updated } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-adminRouter.get('/products', async (_req: AuthenticatedRequest, res: Response) => {
+adminRouter.get('/products', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const products = await ProductService.getAllProductsForAdmin();
-    res.json({ success: true, data: { products } });
+    const forceRefresh = req.query.refresh === 'true';
+    const cacheKey = 'admin:products';
+    if (!forceRefresh) {
+      const cached = await RedisCacheService.getCache<any[]>('admin:products');
+      if (cached) {
+        return res.json({ success: true, cached: true, data: { products: cached } });
+      }
+    }
+    const products = await ProductService.getAllProductsForAdmin(forceRefresh);
+    await RedisCacheService.setCache(cacheKey, products, 60);
+    res.json({ success: true, cached: false, data: { products } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -167,7 +271,10 @@ adminRouter.post('/products', async (req: AuthenticatedRequest, res: Response) =
 
   try {
     const product = await ProductService.upsertAdminProduct(parsed.data);
-    await RedisCacheService.invalidateCache('products:active');
+    await Promise.all([
+      RedisCacheService.invalidateCache('products:active'),
+      RedisCacheService.invalidateCache('admin:products'),
+    ]);
     res.status(201).json({ success: true, data: { product } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to save product' });
@@ -186,7 +293,10 @@ adminRouter.patch('/products/:sku', async (req: AuthenticatedRequest, res: Respo
     if (!product) {
       return res.status(404).json({ success: false, error: `Product ${sku} not found` });
     }
-    await RedisCacheService.invalidateCache('products:active');
+    await Promise.all([
+      RedisCacheService.invalidateCache('products:active'),
+      RedisCacheService.invalidateCache('admin:products'),
+    ]);
     res.json({ success: true, data: { product } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to update product' });
@@ -224,6 +334,7 @@ adminRouter.post(['/nr-pool/adjust-reserve', '/nr-token/reserve', '/nxl-token/re
       adminId: req.user!.id,
       note: parsed.data.note,
     });
+    await AdminAnalyticsService.invalidateCache();
     res.json({ success: true, data: stats });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Reserve adjustment failed' });
@@ -276,9 +387,97 @@ adminRouter.get('/treasury/config', async (_req: AuthenticatedRequest, res: Resp
 adminRouter.patch('/treasury/config', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const updated = await TreasuryService.updateConfig(req.body, req.user?.id);
+    await AdminAnalyticsService.invalidateCache();
     res.json({ success: true, data: updated });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Failed to update treasury config' });
+  }
+});
+
+adminRouter.post('/treasury/trigger-split', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const [ordersCol, logsCol, config] = await Promise.all([
+      MongoService.getCollection<MongoOrderDoc>('orders'),
+      MongoService.getCollection<MongoChainActionLogDoc>('platform_chain_logs'),
+      TreasuryService.getConfig(),
+    ]);
+
+    const settledOrders = await ordersCol
+      .find({ status: { $in: ['PAID', 'FULFILLING', 'FULFILLED'] } })
+      .toArray();
+
+    let reconciledOrdersCount = 0;
+    for (const order of settledOrders) {
+      let touched = false;
+      if (order.portfolio_credited !== true) {
+        const credited = await PortfolioService.creditOrderAllocations(order).catch(() => false);
+        if (credited) touched = true;
+      }
+
+      const isPaidWithNr = order.payment_rail === 'NXL_TOKEN';
+      const orderFeeCents = isPaidWithNr
+        ? 0
+        : Math.round(((order.total_cents || 0) * config.order_fee_bps) / 10000);
+      const isCryptoRail = ['STELLAR', 'XRPL', 'XLM', 'XRP', 'STELLAR_USDC', 'USDC'].includes(
+        order.payment_rail
+      );
+      const gasArbitrageCents = isCryptoRail ? config.gas_flat_cents : 0;
+
+      if (orderFeeCents > 0 || gasArbitrageCents > 0) {
+        const rev = await TreasuryService.recordRevenueEvent({
+          sourceType: 'ORDER',
+          referenceId: order.order_number,
+          grossCents: order.total_cents || 0,
+          feeCents: orderFeeCents,
+          gasArbitrageCents,
+          rail: (order.payment_rail as any) || 'INTERNAL',
+        });
+        if (!rev.isDuplicate) touched = true;
+      }
+
+      if (touched) reconciledOrdersCount += 1;
+    }
+
+    const [summary, contractMeta] = await Promise.all([
+      TreasuryService.getTreasurySummary(),
+      SorobanService.getContractMetadata().catch(() => null),
+    ]);
+
+    const txHash = `split_${crypto.randomUUID().replace(/-/g, '')}`;
+    const referenceId = `SPLIT-${Date.now().toString(36).toUpperCase()}`;
+    await logsCol.insertOne({
+      id: `log_${crypto.randomUUID()}`,
+      chain: 'STELLAR',
+      action: 'CONTRACT_SPLIT',
+      reference_id: referenceId,
+      operator_id: req.user!.id,
+      tx_hash: txHash,
+      amount_primary: summary.netOwnerProfitUsd,
+      amount_secondary: summary.nrPoolInjectedUsd,
+      details: {
+        reason: typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 160) : 'Manual treasury split',
+        reconciledOrdersCount,
+        totalRevenueCents: summary.totalRevenueCents,
+        zeroSumDifferenceCents: summary.zeroSumDifferenceCents,
+      },
+      explorer_url: contractMeta?.contract?.explorerUrl || contractMeta?.contract?.explorer_url || '',
+      status: 'SUCCESS',
+      created_at: new Date().toISOString(),
+    });
+
+    await AdminAnalyticsService.invalidateCache();
+
+    res.json({
+      success: true,
+      data: {
+        summary,
+        reconciledOrdersCount,
+        referenceId,
+        txHash,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to trigger profit split' });
   }
 });
 
@@ -343,6 +542,7 @@ adminRouter.post('/dual-rail/xrpl-amm/create', async (req: AuthenticatedRequest,
   try {
     const { initialXrp = 10, initialNr = 10 } = req.body || {};
     const result = await DualRailTokenService.deployOrSyncXrplAmm(req.user!.id, Number(initialXrp), Number(initialNr));
+    await RedisCacheService.invalidateCache('admin:dual-rail:summary');
     res.json({ success: true, data: result });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'XRPL AMMCreate failed' });
@@ -353,6 +553,7 @@ adminRouter.post('/dual-rail/xrpl-amm/deposit', async (req: AuthenticatedRequest
   try {
     const { xrpAmount = 5, nrAmount = 5 } = req.body || {};
     const result = await DualRailTokenService.depositXrplAmmLiquidity(req.user!.id, Number(xrpAmount), Number(nrAmount));
+    await RedisCacheService.invalidateCache('admin:dual-rail:summary');
     res.json({ success: true, data: result });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'XRPL AMMDeposit failed' });

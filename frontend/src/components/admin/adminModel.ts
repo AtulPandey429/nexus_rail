@@ -1,4 +1,7 @@
 import type {
+  AdminAnalyticsGranularity,
+  AdminAnalyticsRangeKey,
+  AdminAnalyticsResponse,
   ChainActionLogDTO,
   DualRailTokenSummaryDTO,
   PlatformAUCResponse,
@@ -14,6 +17,7 @@ import type { ExchangeRatesData } from '@/lib/rates';
 
 export type AdminTab =
   | 'overview'
+  | 'analytics'
   | 'treasury'
   | 'orders'
   | 'ledger'
@@ -26,6 +30,7 @@ export type AdminTab =
 
 export const ADMIN_TABS: AdminTab[] = [
   'overview',
+  'analytics',
   'treasury',
   'orders',
   'ledger',
@@ -43,6 +48,7 @@ export interface LiveOrder {
   buyerEmail: string;
   rail: string;
   amount: string;
+  totalCents?: number;
   status: string;
   txHash: string;
   explorerUrl: string;
@@ -50,14 +56,29 @@ export interface LiveOrder {
 }
 
 export interface NrPoolStatus {
-  priceUsd: number;
+  spotPriceUsd?: number;
+  spotPriceCents?: number;
+  priceUsd?: number;
   change24hPercent: number;
   reserveUsd: number;
+  reserveUsdCents?: number;
   poolNrSupply: number;
   circulatingNr: number;
+  totalSupplyNr?: number;
   marketCapUsd: number;
+  totalVolumeUsd?: number;
   cumulativeFeeInjectedUsd: number;
+  swapFeePercent?: number;
   invariantK: string;
+  updatedAt?: string;
+}
+
+export interface VaultBalance {
+  chainId: string;
+  assetSymbol: string;
+  network: string;
+  vaultBalance: number;
+  isTestnet: boolean;
 }
 
 export interface StellarRpcHealth {
@@ -76,8 +97,20 @@ export interface AdminModel {
   setActiveTab: (tab: AdminTab) => void;
   lastSyncedAt: Date | null;
 
+  /* Analytics */
+  analytics: AdminAnalyticsResponse | null;
+  analyticsLoading: boolean;
+  analyticsError: string;
+  analyticsRange: AdminAnalyticsRangeKey;
+  setAnalyticsRange: (range: AdminAnalyticsRangeKey) => void;
+  analyticsGranularity: AdminAnalyticsGranularity | 'auto';
+  setAnalyticsGranularity: (granularity: AdminAnalyticsGranularity | 'auto') => void;
+  loadAnalytics: (options?: { refresh?: boolean }) => void;
+
   /* Orders */
   liveOrders: LiveOrder[];
+  ordersLoading: boolean;
+  loadAdminOrders: () => void;
   ordersSearch: string;
   setOrdersSearch: (value: string) => void;
   ordersPage: number;
@@ -111,12 +144,17 @@ export interface AdminModel {
   filteredCatalog: any[];
   paginatedCatalog: any[];
   CATALOG_PER_PAGE: number;
-  loadAdminProducts: () => void;
+  loadAdminProducts: (force?: boolean) => void;
 
   /* Custody ledger */
   aucData: PlatformAUCResponse | null;
   aucLoading: boolean;
   loadPlatformAUC: () => void;
+
+  /* On-chain vault balances */
+  vaultBalances: VaultBalance[];
+  vaultBalancesLoading: boolean;
+  loadVaultBalances: () => void;
 
   /* Treasury */
   treasurySummary: TreasurySummaryResponse | null;

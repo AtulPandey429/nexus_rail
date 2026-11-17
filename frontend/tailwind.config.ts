@@ -40,7 +40,7 @@ const config: Config = {
           border: '#1E2533',
           'border-soft': 'rgba(255, 255, 255, 0.06)',
           muted: '#8B95A8',
-          faint: '#5E697C',
+          faint: '#828D9F',
           gold: '#E9B949',
           'gold-soft': '#F6D68A',
           cyan: '#38BDF8',
