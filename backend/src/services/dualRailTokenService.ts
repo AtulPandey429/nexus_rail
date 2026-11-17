@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { Client, Wallet, xrpToDrops, dropsToXrp, convertStringToHex } from 'xrpl';
-import { Horizon } from '@stellar/stellar-sdk';
+import { Horizon, Keypair, TransactionBuilder, Operation, Asset, Memo, Networks } from '@stellar/stellar-sdk';
 import { env } from '../config/env.js';
 import {
   MongoService,
@@ -399,11 +399,13 @@ export class DualRailTokenService {
   }> {
     const client = this.getXrplClient();
     await client.connect();
+    let issuer = env.XRPL_NR_ISSUER_ADDRESS || 'rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU';
+    let currencyHex = (env.XRPL_NR_CURRENCY_HEX || '').toUpperCase();
     try {
       const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
       const xrplToken = (await tokensCol.findOne({ chain: 'XRPL', symbol: 'NXL' })) || (await tokensCol.findOne({ chain: 'XRPL' }));
-      const issuer = xrplToken?.issuer_address || env.XRPL_NR_ISSUER_ADDRESS || 'rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU';
-      const currencyHex = (xrplToken?.currency_hex || env.XRPL_NR_CURRENCY_HEX || '').toUpperCase();
+      if (xrplToken?.issuer_address) issuer = xrplToken.issuer_address;
+      if (xrplToken?.currency_hex) currencyHex = xrplToken.currency_hex.toUpperCase();
 
       const linesRes = await client.request({
         command: 'account_lines',
@@ -439,6 +441,15 @@ export class DualRailTokenService {
         limit: match.limit,
         issuer,
         currency: match.currency,
+        account: accountAddress,
+      };
+    } catch {
+      return {
+        hasTrustline: false,
+        balance: 0,
+        limit: '0',
+        issuer,
+        currency,
         account: accountAddress,
       };
     } finally {
@@ -513,6 +524,130 @@ export class DualRailTokenService {
     } finally {
       await client.disconnect();
     }
+  }
+
+  /**
+   * Checks whether a Stellar account has established a Trustline (change_trust)
+   * for the official $NXL asset issued by the platform Stellar issuer.
+   */
+  static async checkStellarTrustline(
+    accountAddress: string,
+    assetCode: string = STELLAR_NR_ASSET_CODE
+  ): Promise<{
+    hasTrustline: boolean;
+    balance: number;
+    limit: string;
+    issuer: string;
+    assetCode: string;
+    account: string;
+  }> {
+    const server = new Horizon.Server(
+      env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
+    );
+    const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
+    const stellarToken = (await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' })) || (await tokensCol.findOne({ chain: 'STELLAR' }));
+    const issuer = stellarToken?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC || STELLAR_NR_ISSUER;
+
+    try {
+      const account = await server.loadAccount(accountAddress);
+      const match: any = account.balances.find((b: any) => {
+        const matchesIssuer = b.asset_issuer === issuer;
+        const matchesCode =
+          (b.asset_code || '').toUpperCase() === assetCode.toUpperCase() ||
+          (b.asset_code || '').toUpperCase() === 'NR';
+        return matchesIssuer && matchesCode;
+      });
+
+      if (!match) {
+        return {
+          hasTrustline: false,
+          balance: 0,
+          limit: '0',
+          issuer,
+          assetCode,
+          account: accountAddress,
+        };
+      }
+
+      return {
+        hasTrustline: true,
+        balance: parseFloat(match.balance || '0'),
+        limit: match.limit || 'unlimited',
+        issuer,
+        assetCode: match.asset_code,
+        account: accountAddress,
+      };
+    } catch {
+      return {
+        hasTrustline: false,
+        balance: 0,
+        limit: '0',
+        issuer,
+        assetCode,
+        account: accountAddress,
+      };
+    }
+  }
+
+  /**
+   * Broadcasts on-chain $NXL payout to user's external Stellar address (Freighter / LOBSTR / Albedo).
+   * Verifies that the recipient Stellar account has an active Trustline prior to broadcasting payment.
+   */
+  static async withdrawNrToStellarAddress(
+    userId: string,
+    amountNr: number,
+    destinationAddress: string
+  ): Promise<{ txHash: string; ledgerSeq: number; explorerUrl: string }> {
+    const server = new Horizon.Server(
+      env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
+    );
+    const distributorSecret = env.STELLAR_HOT_WALLET_SECRET || 'SDVE7PYD2TRLASLMZUNYXGPDEMNQUJ4KXGCSJTXRBRJOZ5K36P3DJWBP';
+    const distKey = Keypair.fromSecret(distributorSecret);
+
+    // Verify trustline on Stellar destination account
+    const trustline = await this.checkStellarTrustline(destinationAddress, STELLAR_NR_ASSET_CODE);
+    if (!trustline.hasTrustline) {
+      throw new Error(
+        `Stellar Trustline Missing: Recipient account "${destinationAddress}" has not established an active Trustline to Issuer "${trustline.issuer}" for asset "${STELLAR_NR_ASSET_CODE}". Please add the trustline in Freighter/LOBSTR first.`
+      );
+    }
+
+    const distAccount = await server.loadAccount(distKey.publicKey());
+    const asset = new Asset(STELLAR_NR_ASSET_CODE, trustline.issuer);
+
+    const tx = new TransactionBuilder(distAccount, {
+      fee: '100',
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: destinationAddress,
+          asset,
+          amount: Number(amountNr).toFixed(7),
+        })
+      )
+      .addMemo(Memo.text(`NXL-${userId.slice(0, 16)}`))
+      .setTimeout(120)
+      .build();
+
+    tx.sign(distKey);
+    const res = await server.submitTransaction(tx);
+    const txHash = res.hash;
+    const ledgerSeq = res.ledger || 0;
+    const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+
+    await this.logChainAction({
+      chain: 'STELLAR',
+      action: 'CROSS_CHAIN_BRIDGE',
+      operatorId: userId,
+      referenceId: `wd_stellar_${crypto.randomUUID().slice(0, 12)}`,
+      txHash,
+      ledgerSeq,
+      amountPrimary: `${amountNr} NXL`,
+      details: { destinationAddress, assetCode: STELLAR_NR_ASSET_CODE, issuer: trustline.issuer },
+    });
+
+    return { txHash, ledgerSeq, explorerUrl };
   }
 
   /**

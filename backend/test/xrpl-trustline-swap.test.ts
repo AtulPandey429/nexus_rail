@@ -4,15 +4,22 @@ import { DualRailTokenService } from '../src/services/dualRailTokenService.js';
 import { NrTokenService } from '../src/services/nrTokenService.js';
 
 describe('Suite: XRPL Trustline Verification & NXL Dual-Rail Swaps', () => {
-  const USER_ACCOUNT_WITHOUT_LINE = 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+  const USER_ACCOUNT_WITH_LINE = 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+  const RANDOM_ACCOUNT_WITHOUT_LINE = 'rPT1Sjq2YGrBMTttX4GZHjKu9DYfzbpAYe';
   const VAULT_ACCOUNT_WITH_LINE = 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp';
 
-  it('Verifies trustline absence for user account r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt', async () => {
-    const status = await DualRailTokenService.checkXrplTrustline(USER_ACCOUNT_WITHOUT_LINE, 'NXL');
-    assert.equal(status.hasTrustline, false, 'Account should not have trustline yet');
-    assert.equal(status.account, USER_ACCOUNT_WITHOUT_LINE);
+  it('Verifies trustline presence for user account r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt', async () => {
+    const status = await DualRailTokenService.checkXrplTrustline(USER_ACCOUNT_WITH_LINE, 'NXL');
+    assert.equal(status.hasTrustline, true, 'User account now has verified active trustline');
+    assert.equal(status.account, USER_ACCOUNT_WITH_LINE);
     assert.ok(status.issuer.startsWith('r'), 'Issuer must be a valid classic address');
     assert.equal(status.currency, 'NXL');
+    assert.ok(status.balance >= 0, 'Balance must be non-negative');
+  });
+
+  it('Verifies trustline absence for unconfigured account', async () => {
+    const status = await DualRailTokenService.checkXrplTrustline(RANDOM_ACCOUNT_WITHOUT_LINE, 'NXL');
+    assert.equal(status.hasTrustline, false, 'Unconfigured account should not have trustline');
   });
 
   it('Verifies trustline presence for platform vault distributor', async () => {
@@ -27,7 +34,7 @@ describe('Suite: XRPL Trustline Verification & NXL Dual-Rail Swaps', () => {
         await DualRailTokenService.withdrawNrToXrplAddress(
           'test_user',
           5,
-          USER_ACCOUNT_WITHOUT_LINE
+          RANDOM_ACCOUNT_WITHOUT_LINE
         );
       },
       (err: any) => {

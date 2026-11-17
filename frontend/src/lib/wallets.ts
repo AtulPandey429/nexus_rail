@@ -590,11 +590,14 @@ export async function authenticateWalletWithChallenge(params: {
 }
 
 // ============================================================================
-// XRPL Trustline Operations for $NXL Dual-Rail Architecture
+// Multi-Rail Trustline Operations for $NXL Dual-Rail Architecture (XRPL & Stellar)
 // ============================================================================
 
 export const XRPL_NR_ISSUER_ADDRESS = 'rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU';
 export const XRPL_NR_CURRENCY = 'NXL';
+
+export const STELLAR_NR_ISSUER_PUBLIC = 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ';
+export const STELLAR_NR_ASSET_CODE = 'NXL';
 
 export interface XrplTrustlineStatus {
   hasTrustline: boolean;
@@ -603,6 +606,62 @@ export interface XrplTrustlineStatus {
   issuer: string;
   currency: string;
   account: string;
+}
+
+export interface StellarTrustlineStatus {
+  hasTrustline: boolean;
+  balance: number;
+  limit: string;
+  issuer: string;
+  assetCode: string;
+  account: string;
+}
+
+/**
+ * Checks Stellar on-chain trustline status for an account via backend RPC gateway
+ */
+export async function checkStellarTrustline(
+  address: string,
+  assetCode: string = 'NXL'
+): Promise<StellarTrustlineStatus> {
+  if (!address || !address.startsWith('G')) {
+    return {
+      hasTrustline: false,
+      balance: 0,
+      limit: '0',
+      issuer: STELLAR_NR_ISSUER_PUBLIC,
+      assetCode,
+      account: address,
+    };
+  }
+  try {
+    const res = await fetch(
+      `/api/v1/swap/stellar/trustline-status?address=${encodeURIComponent(address)}&assetCode=${encodeURIComponent(assetCode)}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        return {
+          hasTrustline: Boolean(data.hasTrustline),
+          balance: Number(data.balance || 0),
+          limit: String(data.limit || '0'),
+          issuer: data.issuer || STELLAR_NR_ISSUER_PUBLIC,
+          assetCode: data.assetCode || assetCode,
+          account: address,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to query Stellar trustline status:', e);
+  }
+  return {
+    hasTrustline: false,
+    balance: 0,
+    limit: '0',
+    issuer: STELLAR_NR_ISSUER_PUBLIC,
+    assetCode,
+    account: address,
+  };
 }
 
 /**

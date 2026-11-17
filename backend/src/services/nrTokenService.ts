@@ -731,7 +731,7 @@ export class NrTokenService {
       order.payoutExplorerUrl = payout.explorerUrl;
       order.status = 'COMPLETED';
     } else if (order.toAsset === 'NXL' && isValidClassicAddress(order.userDestinationAddress)) {
-      // User explicitly requested delivery to an external XRPL wallet address
+      // User requested delivery to an external XRPL wallet address (Same-chain or Bridge)
       const tl = await DualRailTokenService.checkXrplTrustline(order.userDestinationAddress);
       if (tl.hasTrustline) {
         try {
@@ -752,6 +752,29 @@ export class NrTokenService {
         order.status = 'AWAITING_TRUSTLINE';
         order.trustlineRequired = true;
         order.trustlineMessage = `Recipient account "${order.userDestinationAddress}" has not established an active Trustline to Issuer "${tl.issuer}" for currency "NXL". Your internal balance is safely credited, and on-chain tokens can be claimed once the trustline is enabled.`;
+      }
+    } else if (order.toAsset === 'NXL' && StrKey.isValidEd25519PublicKey(order.userDestinationAddress)) {
+      // User requested cross-chain delivery to an external Stellar wallet address (G...)
+      const tl = await DualRailTokenService.checkStellarTrustline(order.userDestinationAddress);
+      if (tl.hasTrustline) {
+        try {
+          const payout = await DualRailTokenService.withdrawNrToStellarAddress(
+            userId,
+            order.receiveAmount,
+            order.userDestinationAddress
+          );
+          order.payoutTxHash = payout.txHash;
+          order.payoutExplorerUrl = payout.explorerUrl;
+          order.status = 'COMPLETED';
+        } catch (payoutErr: any) {
+          order.status = 'AWAITING_TRUSTLINE';
+          order.trustlineRequired = true;
+          order.trustlineMessage = payoutErr.message;
+        }
+      } else {
+        order.status = 'AWAITING_TRUSTLINE';
+        order.trustlineRequired = true;
+        order.trustlineMessage = `Recipient Stellar account "${order.userDestinationAddress}" has not established an active Trustline to Issuer "${tl.issuer}" for asset "NXL". Your internal balance is safely credited, and on-chain tokens can be claimed once the trustline is enabled.`;
       }
     } else {
       order.payoutTxHash = `nr_ledger_out_${crypto.randomBytes(12).toString('hex')}`;

@@ -22,6 +22,8 @@ import {
   Key,
   AlertTriangle,
   Sparkles,
+  Layers,
+  Globe,
 } from 'lucide-react';
 import { useLiveExchangeRates } from '@/lib/rates';
 import { readSession, SessionUser, onSessionChange } from '@/lib/shop';
@@ -36,11 +38,14 @@ import {
   payWithGemWallet,
   payWithCrossmark,
   checkXrplTrustline,
+  checkStellarTrustline,
   setGemWalletTrustline,
   setCrossmarkTrustline,
   claimPendingXrplSwap,
   XrplTrustlineStatus,
+  StellarTrustlineStatus,
   XRPL_NR_ISSUER_ADDRESS,
+  STELLAR_NR_ISSUER_PUBLIC,
 } from '@/lib/wallets';
 
 type SwapToken = 'XRP' | 'XLM' | 'NXL' | 'USD' | 'USDC' | 'RLUSD';
@@ -125,11 +130,19 @@ export default function SwapPage() {
     journalEntry?: string;
   } | null>(null);
 
+  // Swap Mode: Same-Chain (Direct Ledger Swap) vs Cross-Chain (Multi-Ledger Bridge)
+  const [swapMode, setSwapMode] = useState<'same_chain' | 'cross_chain'>('same_chain');
+  const [targetChain, setTargetChain] = useState<'XRPL' | 'STELLAR'>('XRPL');
+
   // XRPL Trustline & Pending Claim States
   const [trustlineStatus, setTrustlineStatus] = useState<XrplTrustlineStatus | null>(null);
   const [checkingTrustline, setCheckingTrustline] = useState(false);
   const [settingTrustline, setSettingTrustline] = useState(false);
   const [trustlineActionMsg, setTrustlineActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Stellar Trustline State
+  const [stellarTrustlineStatus, setStellarTrustlineStatus] = useState<StellarTrustlineStatus | null>(null);
+  const [checkingStellarTrustline, setCheckingStellarTrustline] = useState(false);
 
   // Pending swap recovery state (e.g. for user r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt)
   const [pendingClaimStatus, setPendingClaimStatus] = useState<'idle' | 'checking' | 'ready' | 'claiming' | 'claimed' | 'error'>('idle');
@@ -148,29 +161,46 @@ export default function SwapPage() {
     checkGemWalletInstalled().then(setHasGemWallet);
   }, []);
 
-  // Synchronize session and auto-fill destination wallet
+  // Synchronize session and auto-fill destination wallet based on Swap Mode
   useEffect(() => {
     const sync = () => {
       const u = readSession().user;
       setUser(u);
       if (u) {
-        if (toToken === 'XLM') {
-          setDestinationAddress(u.walletAddress?.startsWith('G') ? u.walletAddress : 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC');
-        } else if (toToken === 'XRP') {
-          setDestinationAddress(u.walletAddress?.startsWith('r') ? u.walletAddress : 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp');
-        } else if (toToken === 'NXL') {
-          const xrplAddr = u.xrplAddress || (u.walletAddress?.startsWith('r') ? u.walletAddress : '');
-          if (xrplAddr) {
+        if (swapMode === 'same_chain') {
+          if (fromToken === 'XRP' || toToken === 'XRP') {
+            const xrplAddr = u.xrplAddress || (u.walletAddress?.startsWith('r') ? u.walletAddress : 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp');
             setDestinationAddress(xrplAddr);
+            setTargetChain('XRPL');
+          } else if (fromToken === 'XLM' || toToken === 'XLM') {
+            const stellarAddr = u.stellarAddress || (u.walletAddress?.startsWith('G') ? u.walletAddress : 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC');
+            setDestinationAddress(stellarAddr);
+            setTargetChain('STELLAR');
+          } else if (toToken === 'NXL') {
+            const preferred = u.xrplAddress || (u.walletAddress?.startsWith('r') ? u.walletAddress : (u.stellarAddress || ''));
+            if (preferred) setDestinationAddress(preferred);
+          }
+        } else {
+          // Cross-Chain Mode
+          if (targetChain === 'XRPL') {
+            const xrplAddr = u.xrplAddress || (u.walletAddress?.startsWith('r') ? u.walletAddress : '');
+            if (xrplAddr && (!destinationAddress || destinationAddress.startsWith('G'))) {
+              setDestinationAddress(xrplAddr);
+            }
+          } else {
+            const stellarAddr = u.stellarAddress || (u.walletAddress?.startsWith('G') ? u.walletAddress : '');
+            if (stellarAddr && (!destinationAddress || destinationAddress.startsWith('r'))) {
+              setDestinationAddress(stellarAddr);
+            }
           }
         }
       }
     };
     sync();
     return onSessionChange(sync);
-  }, [toToken]);
+  }, [toToken, fromToken, swapMode, targetChain]);
 
-  // Check XRPL Trustline & Pending Recovery when destination changes
+  // Check on-chain Trustline status on destination address (XRPL & Stellar)
   useEffect(() => {
     if (destinationAddress && destinationAddress.startsWith('r')) {
       setCheckingTrustline(true);
@@ -191,7 +221,17 @@ export default function SwapPage() {
     } else {
       setTrustlineStatus(null);
     }
-  }, [destinationAddress, toToken]);
+
+    if (destinationAddress && destinationAddress.startsWith('G')) {
+      setCheckingStellarTrustline(true);
+      checkStellarTrustline(destinationAddress, 'NXL')
+        .then((st) => setStellarTrustlineStatus(st))
+        .catch(() => setStellarTrustlineStatus(null))
+        .finally(() => setCheckingStellarTrustline(false));
+    } else {
+      setStellarTrustlineStatus(null);
+    }
+  }, [destinationAddress, toToken, targetChain, swapMode]);
 
   const handleSetTrustline = async () => {
     setSettingTrustline(true);
@@ -867,14 +907,73 @@ export default function SwapPage() {
           <div className="lg:col-span-6 space-y-4">
             <div className="rounded-2xl nexus-glass-card p-5 sm:p-7 space-y-4">
               
+              {/* Dual-Mode Switcher Tabs */}
+              <div className="grid grid-cols-2 p-1 rounded-xl bg-[var(--surface-solid)] border border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSwapMode('same_chain');
+                    if (fromToken === 'XRP') {
+                      setToToken('NXL');
+                      setTargetChain('XRPL');
+                      const xrplAddr = user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : '');
+                      if (xrplAddr) setDestinationAddress(xrplAddr);
+                    } else if (fromToken === 'XLM') {
+                      setToToken('NXL');
+                      setTargetChain('STELLAR');
+                      const stellarAddr = user?.stellarAddress || (user?.walletAddress?.startsWith('G') ? user.walletAddress : '');
+                      if (stellarAddr) setDestinationAddress(stellarAddr);
+                    }
+                  }}
+                  className={`py-2 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    swapMode === 'same_chain'
+                      ? 'bg-[var(--gold)] text-black shadow-md'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Simple Swap (Same-Chain)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSwapMode('cross_chain');
+                    if (fromToken === 'XRP') {
+                      setToToken('XLM');
+                      setTargetChain('STELLAR');
+                      const stellarAddr = user?.stellarAddress || (user?.walletAddress?.startsWith('G') ? user.walletAddress : '');
+                      if (stellarAddr) setDestinationAddress(stellarAddr);
+                    } else if (fromToken === 'XLM') {
+                      setToToken('XRP');
+                      setTargetChain('XRPL');
+                      const xrplAddr = user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : '');
+                      if (xrplAddr) setDestinationAddress(xrplAddr);
+                    }
+                  }}
+                  className={`py-2 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    swapMode === 'cross_chain'
+                      ? 'bg-[var(--gold)] text-black shadow-md'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Cross-Chain Bridge</span>
+                </button>
+              </div>
+
               {/* Card Title & Slippage Selector */}
               <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
-                    Swap Assets
+                    {swapMode === 'same_chain' ? 'Same-Chain Swap' : 'Cross-Chain Bridge'}
                   </h2>
-                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
-                    ESCROW ROUTE
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                    swapMode === 'same_chain'
+                      ? 'bg-amber-400/10 border-amber-400/30 text-amber-400'
+                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  }`}>
+                    {swapMode === 'same_chain' ? 'DIRECT LEDGER' : 'DUAL-RAIL BRIDGE'}
                   </span>
                 </div>
                 
@@ -1021,34 +1120,113 @@ export default function SwapPage() {
                 </div>
               </div>
 
-              {/* Box 3: User Destination Address Field */}
+              {/* Box 3: User Destination Address Field & Dual-Mode Routing */}
               {(toToken === 'XLM' || toToken === 'XRP' || toToken === 'NXL') ? (
                 <div className="p-3.5 rounded-xl nexus-glass-surface space-y-2.5">
-                  <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)]">
-                    <span className="flex items-center gap-1.5">
-                      <Wallet className="w-3.5 h-3.5 text-[var(--gold)]" />
-                      <span>Your Destination {toToken} Address:</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsWalletModalOpen(true)}
-                      className="text-[10px] text-[var(--gold)] hover:underline cursor-pointer"
-                    >
-                      Select Wallet
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={destinationAddress}
-                    onChange={(e) => setDestinationAddress(e.target.value)}
-                    placeholder={toToken === 'XLM' ? 'Enter Stellar G... address' : 'Enter XRPL r... address'}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--surface-solid)] border border-[var(--border)] text-xs font-mono text-[var(--foreground)] placeholder-[var(--muted)]/40 focus:border-[var(--border-focus)] focus:outline-none"
-                  />
-                  <p className="text-[10px] font-mono text-[var(--muted)]">
-                    {toToken === 'NXL'
-                      ? 'The server distributor vault will disburse verified $NXL on-chain to this XRPL address.'
-                      : `The server hot wallet will disburse ${receiveAmount} ${toToken} to this address once deposit is confirmed.`}
-                  </p>
+                  {swapMode === 'same_chain' ? (
+                    <>
+                      <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)]">
+                        <span className="flex items-center gap-1.5 text-[var(--foreground)] font-semibold">
+                          <Zap className="w-3.5 h-3.5 text-[var(--gold)]" />
+                          <span>Payout Destination (Same-Chain {fromToken === 'XRP' || toToken === 'XRP' ? 'XRPL' : 'Stellar'}):</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsWalletModalOpen(true)}
+                          className="text-[10px] text-[var(--gold)] hover:underline cursor-pointer"
+                        >
+                          Select Wallet
+                        </button>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-[var(--surface-solid)] border border-[var(--border)] flex items-center justify-between">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                          <span className="text-xs font-mono text-[var(--gold-bright)] font-semibold truncate max-w-[260px]">
+                            {destinationAddress || (user?.walletAddress || 'No wallet connected')}
+                          </span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[9.5px] font-mono text-[var(--gold-bright)] font-bold shrink-0">
+                          SAME LEDGER
+                        </span>
+                      </div>
+
+                      <p className="text-[10.5px] font-mono text-[var(--muted)]">
+                        {toToken === 'NXL'
+                          ? `Both tokens settle on ${fromToken === 'XRP' || destinationAddress.startsWith('r') ? 'XRPL Testnet' : 'Stellar Testnet'}. $NXL tokens will disburse directly to your connected wallet.`
+                          : `Direct same-ledger swap. Payout will disburse directly to your connected wallet address.`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      {/* Cross-chain target network selector */}
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="flex items-center gap-1.5 text-[var(--foreground)] font-semibold">
+                          <Globe className="w-3.5 h-3.5 text-[var(--gold)]" />
+                          <span>Destination Ledger:</span>
+                        </span>
+                        <div className="flex items-center gap-1 bg-[var(--surface-solid)] p-0.5 rounded-lg border border-[var(--border)]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetChain('XRPL');
+                              const xrplAddr = user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : '');
+                              if (xrplAddr) setDestinationAddress(xrplAddr);
+                            }}
+                            className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                              targetChain === 'XRPL' ? 'bg-[var(--gold)] text-black' : 'text-[var(--muted)] hover:text-white'
+                            }`}
+                          >
+                            XRPL Testnet
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetChain('STELLAR');
+                              const stellarAddr = user?.stellarAddress || (user?.walletAddress?.startsWith('G') ? user.walletAddress : '');
+                              if (stellarAddr) setDestinationAddress(stellarAddr);
+                            }}
+                            className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                              targetChain === 'STELLAR' ? 'bg-[var(--gold)] text-black' : 'text-[var(--muted)] hover:text-white'
+                            }`}
+                          >
+                            Stellar Testnet
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)] pt-1">
+                        <span>Recipient {targetChain} Address:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (targetChain === 'XRPL') {
+                              const addr = user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : '');
+                              if (addr) setDestinationAddress(addr);
+                            } else {
+                              const addr = user?.stellarAddress || (user?.walletAddress?.startsWith('G') ? user.walletAddress : '');
+                              if (addr) setDestinationAddress(addr);
+                            }
+                          }}
+                          className="text-[10px] text-[var(--gold)] hover:underline cursor-pointer"
+                        >
+                          Use Connected {targetChain} Wallet
+                        </button>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={destinationAddress}
+                        onChange={(e) => setDestinationAddress(e.target.value)}
+                        placeholder={targetChain === 'STELLAR' ? 'Enter Stellar G... destination' : 'Enter XRPL r... destination'}
+                        className="w-full px-3 py-2 rounded-xl bg-[var(--surface-solid)] border border-[var(--border)] text-xs font-mono text-[var(--foreground)] placeholder-[var(--muted)]/40 focus:border-[var(--border-focus)] focus:outline-none"
+                      />
+
+                      <p className="text-[10px] font-mono text-[var(--muted)]">
+                        Cross-Chain Bridge: Ingress deposit is verified in the server vault, and {receiveAmount} {toToken} is disbursed across ledgers to this {targetChain} address.
+                      </p>
+                    </>
+                  )}
 
                   {/* XRPL Trustline Status indicator for NXL */}
                   {toToken === 'NXL' && destinationAddress.startsWith('r') && (
@@ -1062,7 +1240,7 @@ export default function SwapPage() {
                         <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono flex items-center justify-between">
                           <span className="flex items-center gap-1.5 font-bold">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>$NXL Trustline Active (Limit: {Number(trustlineStatus.limit).toLocaleString()})</span>
+                            <span>XRPL $NXL Trustline Active (Balance: {trustlineStatus.balance} NXL)</span>
                           </span>
                           <span className="text-[9.5px] text-[var(--muted)]">Issuer: {trustlineStatus.issuer.slice(0, 6)}...</span>
                         </div>
@@ -1105,6 +1283,53 @@ export default function SwapPage() {
                               {trustlineActionMsg.text}
                             </p>
                           )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Stellar Trustline Status indicator for NXL */}
+                  {toToken === 'NXL' && destinationAddress.startsWith('G') && (
+                    <div className="pt-1">
+                      {checkingStellarTrustline ? (
+                        <div className="p-2 rounded-lg nexus-glass-surface border border-[var(--border)] text-[11px] font-mono text-[var(--muted)] flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full border-2 border-[var(--gold)] border-t-transparent animate-spin" />
+                          <span>Checking Stellar Trustline status...</span>
+                        </div>
+                      ) : stellarTrustlineStatus?.hasTrustline ? (
+                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Stellar $NXL Trustline Active (Balance: {stellarTrustlineStatus.balance} NXL)</span>
+                          </span>
+                          <span className="text-[9.5px] text-[var(--muted)]">Issuer: {stellarTrustlineStatus.issuer.slice(0, 6)}...</span>
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 font-bold text-amber-400">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span>Stellar Trustline Required</span>
+                            </span>
+                            <span className="text-[10px] text-[var(--muted)]">Issuer: {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}...</span>
+                          </div>
+                          <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
+                            Stellar protocol requires account ({destinationAddress.slice(0, 8)}...) to add a Trustline to Issuer {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}... for asset &quot;NXL&quot; before receiving tokens.
+                          </p>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setCheckingStellarTrustline(true);
+                                const updated = await checkStellarTrustline(destinationAddress);
+                                setStellarTrustlineStatus(updated);
+                                setCheckingStellarTrustline(false);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-xs hover:text-[var(--gold)] transition-colors cursor-pointer"
+                            >
+                              Re-check Status
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1157,13 +1382,17 @@ export default function SwapPage() {
                 </span>
               </div>
 
-              {/* Review Cross-Chain Swap CTA Button */}
+              {/* Review Swap CTA Button */}
               <button
                 type="button"
                 onClick={handleOpenReview}
                 className="w-full py-4 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[var(--gold)]/20 active:scale-[0.99] cursor-pointer mt-2"
               >
-                <span>Review Cross-Chain Swap</span>
+                <span>
+                  {swapMode === 'same_chain'
+                    ? `Review Same-Chain Swap (${fromToken} → ${toToken})`
+                    : `Review Cross-Chain Bridge (${fromToken} → ${toToken})`}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
@@ -1347,7 +1576,9 @@ export default function SwapPage() {
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
               <div className="flex items-center gap-2">
                 <Server className="w-5 h-5 text-[var(--gold)]" />
-                <h3 className="text-lg font-bold text-[var(--foreground)]">Cross-Chain Escrow Swap</h3>
+                <h3 className="text-lg font-bold text-[var(--foreground)]">
+                  {swapMode === 'same_chain' ? 'Same-Chain Escrow Swap' : 'Cross-Chain Liquidity Bridge'}
+                </h3>
               </div>
               <button
                 type="button"
@@ -1554,17 +1785,46 @@ export default function SwapPage() {
                   </div>
                 )}
 
+                {toToken === 'NXL' && destinationAddress.startsWith('G') && !stellarTrustlineStatus?.hasTrustline && (
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-400">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Stellar Trustline Required Before Deposit</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                      Stellar account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> has not established a Trustline to Issuer <strong className="text-[var(--gold)]">{STELLAR_NR_ISSUER_PUBLIC}</strong> for asset code &quot;NXL&quot;. Add the trustline in Freighter or LOBSTR before depositing.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setCheckingStellarTrustline(true);
+                        const updated = await checkStellarTrustline(destinationAddress);
+                        setStellarTrustlineStatus(updated);
+                        setCheckingStellarTrustline(false);
+                      }}
+                      className="w-full py-2.5 rounded-lg bg-[var(--gold)] text-black font-bold text-xs hover:bg-[var(--gold-bright)] transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                    >
+                      Re-check Stellar Trustline
+                    </button>
+                  </div>
+                )}
+
                 <button
                   type="button"
-                  disabled={toToken === 'NXL' && destinationAddress.startsWith('r') && !trustlineStatus?.hasTrustline}
+                  disabled={
+                    (toToken === 'NXL' && destinationAddress.startsWith('r') && !trustlineStatus?.hasTrustline) ||
+                    (toToken === 'NXL' && destinationAddress.startsWith('G') && !stellarTrustlineStatus?.hasTrustline)
+                  }
                   onClick={handleExecuteCrossChainSwap}
                   className={`w-full py-4 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg ${
-                    toToken === 'NXL' && destinationAddress.startsWith('r') && !trustlineStatus?.hasTrustline
+                    (toToken === 'NXL' && destinationAddress.startsWith('r') && !trustlineStatus?.hasTrustline) ||
+                    (toToken === 'NXL' && destinationAddress.startsWith('G') && !stellarTrustlineStatus?.hasTrustline)
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
                       : 'bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black shadow-[var(--gold)]/20 cursor-pointer'
                   }`}
                 >
-                  {toToken === 'NXL' && destinationAddress.startsWith('r') && !trustlineStatus?.hasTrustline
+                  {(toToken === 'NXL' && destinationAddress.startsWith('r') && !trustlineStatus?.hasTrustline) ||
+                  (toToken === 'NXL' && destinationAddress.startsWith('G') && !stellarTrustlineStatus?.hasTrustline)
                     ? 'Trustline Required Above Before Depositing'
                     : fromToken === 'USD' || fromToken === 'NXL'
                     ? `Execute Instant ${fromToken} → ${toToken} Swap`

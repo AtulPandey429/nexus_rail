@@ -288,6 +288,24 @@ swapRouter.post('/stellar/submit-xdr', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/swap/stellar/trustline-status
+ * Checks live Stellar on-chain trustline status for NXL asset
+ */
+swapRouter.get('/stellar/trustline-status', async (req: Request, res: Response) => {
+  try {
+    const address = String(req.query.address || '').trim();
+    const assetCode = String(req.query.assetCode || 'NXL').trim();
+    if (!address) {
+      return res.status(400).json({ success: false, error: 'address query parameter is required' });
+    }
+    const status = await DualRailTokenService.checkStellarTrustline(address, assetCode);
+    return res.json({ success: true, ...status });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to check Stellar trustline' });
+  }
+});
+
+/**
  * GET /api/v1/swap/xrpl/trustline-status
  * Checks live XRPL on-chain trustline status for NXL issued currency
  */
