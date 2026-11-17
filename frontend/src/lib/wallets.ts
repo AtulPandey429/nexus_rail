@@ -687,6 +687,13 @@ export async function setFreighterTrustline(params: {
 
   const { accountAddress, assetCode = 'NXL' } = params;
 
+  // 0. Ensure website is authorized and connected in Varial / Freighter extension
+  try {
+    await requestFreighterAccess();
+  } catch (e) {
+    console.warn('requestFreighterAccess prompt warning:', e);
+  }
+
   // 1. Prepare unsigned transaction XDR from authoritative backend Horizon instance
   const prepRes = await fetch('/api/v1/swap/stellar/prepare-trustline-xdr', {
     method: 'POST',
