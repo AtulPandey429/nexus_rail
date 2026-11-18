@@ -99,6 +99,10 @@ export interface MongoOrderDoc {
   quote_ticket?: any;
   slippage_percent?: number;
   underpaid_cents?: number;
+  sender_wallet_address?: string;
+  delivered_crypto_amount?: number;
+  refund_tx_hash?: string;
+  topup_reference?: string;
   nr_discount_cents?: number;
   paid_nr_micro?: number;
   nr_spot_rate_usd?: number;
@@ -106,6 +110,31 @@ export interface MongoOrderDoc {
   portfolio_credited_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface MongoSwapOrderDoc {
+  _id?: any;
+  swapId: string;
+  user_id?: string;
+  fromAsset: 'XRP' | 'XLM' | 'NXL' | 'USD';
+  toAsset: 'XLM' | 'XRP' | 'NXL' | 'USD';
+  payAmount: number;
+  receiveAmount: number;
+  exchangeRate: number;
+  userSourceAddress?: string;
+  userDestinationAddress: string;
+  platformDepositAddress: string;
+  paymentIdentifierType: 'destination_tag' | 'memo_text' | 'internal_ledger';
+  paymentIdentifier: string | number;
+  status: 'PENDING_DEPOSIT' | 'DEPOSIT_CONFIRMED' | 'PAYOUT_PROCESSING' | 'COMPLETED' | 'FAILED';
+  depositTxHash?: string;
+  payoutTxHash?: string;
+  depositExplorerUrl?: string;
+  payoutExplorerUrl?: string;
+  journalEntry?: string;
+  createdAt: string;
+  expiresAt: string;
+  updatedAt: string;
 }
 
 export interface MongoUserHoldingDoc {
@@ -525,6 +554,11 @@ export class MongoService {
       await db.collection('platform_chain_logs').createIndex({ action: 1 });
       await db.collection('platform_chain_logs').createIndex({ tx_hash: 1 }, { unique: true, sparse: true });
       await db.collection('platform_amm_pools').createIndex({ chain: 1, symbol: 1 }, { unique: true });
+
+      // 17. Module 6: Persistent Cross-Chain Swaps
+      await db.collection('swaps').createIndex({ swapId: 1 }, { unique: true });
+      await db.collection('swaps').createIndex({ user_id: 1, createdAt: -1 });
+      await db.collection('swaps').createIndex({ createdAt: -1 });
 
       console.log('✅ [MongoDB Atlas] Primary Collections & TTL Indexes Initialized');
     } catch (err: any) {

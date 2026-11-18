@@ -12,9 +12,11 @@ import {
 import { Client, Wallet, isValidClassicAddress } from 'xrpl';
 import { env } from '../config/env.js';
 import { getFxQuote } from './market.js';
+import { MongoService, MongoSwapOrderDoc } from './mongo.js';
 
 export interface SwapOrder {
   swapId: string;
+  userId?: string;
   fromAsset: 'XRP' | 'XLM';
   toAsset: 'XLM' | 'XRP';
   payAmount: number;
@@ -33,9 +35,10 @@ export interface SwapOrder {
   journalEntry?: string;
   createdAt: string;
   expiresAt: string;
+  updatedAt?: string;
 }
 
-// In-memory swap order storage with Map (fallback / cache)
+// Fast write-through cache backed by MongoDB `swaps` collection
 const SWAP_ORDERS = new Map<string, SwapOrder>();
 
 export class CrossChainSwapService {
@@ -68,6 +71,7 @@ export class CrossChainSwapService {
    * Creates a verified cross-chain swap order with real platform deposit credentials
    */
   static async createSwapOrder(params: {
+    userId?: string;
     fromAsset: 'XRP' | 'XLM';
     toAsset: 'XLM' | 'XRP';
     amount: number;
@@ -75,7 +79,7 @@ export class CrossChainSwapService {
     userSourceAddress?: string;
     slippageTolerance?: number;
   }): Promise<SwapOrder> {
-    const { fromAsset, toAsset, amount, userDestinationAddress, userSourceAddress } = params;
+    const { userId, fromAsset, toAsset, amount, userDestinationAddress, userSourceAddress } = params;
 
     if (amount <= 0 || isNaN(amount)) {
       throw new Error('Invalid swap amount. Amount must be greater than zero.');
@@ -125,6 +129,7 @@ export class CrossChainSwapService {
 
     const order: SwapOrder = {
       swapId,
+      userId,
       fromAsset,
       toAsset,
       payAmount: amount,
@@ -138,17 +143,144 @@ export class CrossChainSwapService {
       status: 'PENDING_DEPOSIT',
       createdAt,
       expiresAt,
+      updatedAt: createdAt,
     };
 
-    SWAP_ORDERS.set(swapId, order);
+    await this.saveSwapOrder(order);
     return order;
   }
 
   /**
-   * Retrieves an existing swap order
+   * Write-through save into RAM cache + MongoDB `swaps` collection
    */
-  static getSwapOrder(swapId: string): SwapOrder | undefined {
-    return SWAP_ORDERS.get(swapId);
+  private static async saveSwapOrder(order: SwapOrder): Promise<void> {
+    const now = new Date().toISOString();
+    order.updatedAt = now;
+    SWAP_ORDERS.set(order.swapId, order);
+
+    try {
+      const col = await MongoService.getCollection<MongoSwapOrderDoc>('swaps');
+      const doc: MongoSwapOrderDoc = {
+        swapId: order.swapId,
+        user_id: order.userId,
+        fromAsset: order.fromAsset,
+        toAsset: order.toAsset,
+        payAmount: order.payAmount,
+        receiveAmount: order.receiveAmount,
+        exchangeRate: order.exchangeRate,
+        userSourceAddress: order.userSourceAddress,
+        userDestinationAddress: order.userDestinationAddress,
+        platformDepositAddress: order.platformDepositAddress,
+        paymentIdentifierType: order.paymentIdentifierType,
+        paymentIdentifier: order.paymentIdentifier,
+        status: order.status,
+        depositTxHash: order.depositTxHash,
+        payoutTxHash: order.payoutTxHash,
+        depositExplorerUrl: order.depositExplorerUrl,
+        payoutExplorerUrl: order.payoutExplorerUrl,
+        journalEntry: order.journalEntry,
+        createdAt: order.createdAt,
+        expiresAt: order.expiresAt,
+        updatedAt: now,
+      };
+      await col.updateOne({ swapId: order.swapId }, { $set: doc }, { upsert: true });
+    } catch (err: any) {
+      console.warn('⚠️ [CrossChainSwap] MongoDB persistence fallback to cache:', err?.message);
+    }
+  }
+
+  private static mapDocToSwapOrder(doc: MongoSwapOrderDoc): SwapOrder {
+    return {
+      swapId: doc.swapId,
+      userId: doc.user_id,
+      fromAsset: doc.fromAsset as 'XRP' | 'XLM',
+      toAsset: doc.toAsset as 'XLM' | 'XRP',
+      payAmount: doc.payAmount,
+      receiveAmount: doc.receiveAmount,
+      exchangeRate: doc.exchangeRate,
+      userSourceAddress: doc.userSourceAddress,
+      userDestinationAddress: doc.userDestinationAddress,
+      platformDepositAddress: doc.platformDepositAddress,
+      paymentIdentifierType: doc.paymentIdentifierType as 'destination_tag' | 'memo_text',
+      paymentIdentifier: doc.paymentIdentifier,
+      status: doc.status,
+      depositTxHash: doc.depositTxHash,
+      payoutTxHash: doc.payoutTxHash,
+      depositExplorerUrl: doc.depositExplorerUrl,
+      payoutExplorerUrl: doc.payoutExplorerUrl,
+      journalEntry: doc.journalEntry,
+      createdAt: doc.createdAt,
+      expiresAt: doc.expiresAt,
+      updatedAt: doc.updatedAt,
+    };
+  }
+
+  /**
+   * Clears in-memory cache (used for persistence verification & tests)
+   */
+  static clearMemoryCache(): void {
+    SWAP_ORDERS.clear();
+  }
+
+  /**
+   * Retrieves an existing swap order (cache-first, then MongoDB fallback)
+   */
+  static async getSwapOrder(swapId: string): Promise<SwapOrder | undefined> {
+    const cached = SWAP_ORDERS.get(swapId);
+    if (cached) return cached;
+
+    try {
+      const col = await MongoService.getCollection<MongoSwapOrderDoc>('swaps');
+      const doc = await col.findOne({ swapId });
+      if (doc) {
+        const order = this.mapDocToSwapOrder(doc);
+        SWAP_ORDERS.set(swapId, order);
+        return order;
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [CrossChainSwap] MongoDB lookup warning:', err?.message);
+    }
+    return undefined;
+  }
+
+  /**
+   * Lists persisted cross-chain swaps for a specific user or wallet address
+   */
+  static async getUserSwaps(params: { userId?: string; address?: string; limit?: number }): Promise<SwapOrder[]> {
+    const limit = Math.min(Math.max(params.limit || 25, 1), 100);
+    try {
+      const col = await MongoService.getCollection<MongoSwapOrderDoc>('swaps');
+      const filters: any[] = [];
+      if (params.userId) filters.push({ user_id: params.userId });
+      if (params.address) {
+        filters.push({ userDestinationAddress: params.address });
+        filters.push({ userSourceAddress: params.address });
+      }
+      const query = filters.length > 0 ? { $or: filters } : {};
+      const docs = await col.find(query).sort({ createdAt: -1 }).limit(limit).toArray();
+      return docs.map((d) => this.mapDocToSwapOrder(d));
+    } catch {
+      return Array.from(SWAP_ORDERS.values())
+        .filter((s) =>
+          (params.userId && s.userId === params.userId) ||
+          (params.address && (s.userDestinationAddress === params.address || s.userSourceAddress === params.address))
+        )
+        .slice(0, limit);
+    }
+  }
+
+  /**
+   * Lists recent swaps for Admin console
+   */
+  static async getRecentSwaps(limit = 50): Promise<SwapOrder[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), 200);
+    try {
+      const col = await MongoService.getCollection<MongoSwapOrderDoc>('swaps');
+      const docs = await col.find({}).sort({ createdAt: -1 }).limit(safeLimit).toArray();
+      return docs.map((d) => this.mapDocToSwapOrder(d));
+    } catch {
+      return Array.from(SWAP_ORDERS.values()).slice(0, safeLimit);
+    }
   }
 
   /**
@@ -163,7 +295,7 @@ export class CrossChainSwapService {
     userSourceSecret?: string;
   }): Promise<SwapOrder> {
     const { swapId, depositTxHash, userSourceSecret } = params;
-    const order = SWAP_ORDERS.get(swapId);
+    const order = await this.getSwapOrder(swapId);
 
     if (!order) {
       throw new Error(`Swap order "${swapId}" not found or expired.`);
@@ -238,7 +370,7 @@ export class CrossChainSwapService {
     order.status = 'COMPLETED';
     order.journalEntry = `JE-SWAP-${Date.now().toString().slice(-4)}`;
 
-    SWAP_ORDERS.set(swapId, order);
+    await this.saveSwapOrder(order);
     return order;
   }
 

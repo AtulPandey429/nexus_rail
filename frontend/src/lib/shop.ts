@@ -895,3 +895,24 @@ export async function issueCommodityToken(assetCode: 'nGOLD' | 'nSILVER', amount
     explorerUrl: String(explorerUrl),
   };
 }
+
+export async function resolveUnderpaidOrderApi(
+  orderId: string,
+  mode: 'TOPUP_USD' | 'TOPUP_NXL' | 'REFUND_ONCHAIN' | 'REFUND_WALLET'
+): Promise<{ orderStatus: 'PAID' | 'REFUNDED'; message: string; refundTxHash?: string }> {
+  const { token } = readSession();
+  if (!token) throw new Error('Please sign in first.');
+  const res = await fetch(`/api/v1/checkout/orders/${encodeURIComponent(orderId)}/resolve-underpaid`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ mode }),
+  });
+  const payload = await readJson(res);
+  if (!res.ok || !payload?.success) {
+    throw new Error(errorMessage(payload, 'Could not complete order resolution.'));
+  }
+  return payload.data;
+}

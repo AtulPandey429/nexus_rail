@@ -18,7 +18,7 @@ import {
   TrendingDown,
   RefreshCw,
 } from 'lucide-react';
-import { fetchOrders } from '@/lib/shop';
+import { fetchOrders, resolveUnderpaidOrderApi } from '@/lib/shop';
 import { NexusLogo } from '@/components/ui/NexusLogo';
 import type { DbPortfolioEvent } from '@/types';
 
@@ -31,7 +31,10 @@ interface OrderItem {
   token: string;
   totalUsd: number;
   cryptoAmount: string;
-  status: 'PAID' | 'AWAITING PAYMENT' | 'EXPIRED';
+  status: 'PAID' | 'AWAITING PAYMENT' | 'UNDERPAID' | 'REFUNDED' | 'EXPIRED';
+  underpaidCents?: number;
+  slippagePercent?: number;
+  refundTxHash?: string;
   dateUtc: string;
   txHash: string;
   ledgerSequence: string;
@@ -52,16 +55,29 @@ function ActivityContent() {
   const [selectedOrderId, setSelectedOrderId] = useState<string>(highlightId);
   const [viewMode, setViewMode] = useState<'orders' | 'portfolio'>('orders');
   const [portfolioEvents, setPortfolioEvents] = useState<DbPortfolioEvent[]>([]);
+  const [resolvingMode, setResolvingMode] = useState<string | null>(null);
+  const [resolutionNotice, setResolutionNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
-  useEffect(() => {
-    fetchOrders()
+  const loadOrders = () => {
+    return fetchOrders()
       .then((live) => {
         if (live && live.length > 0) {
           const mapped: OrderItem[] = live.map((o: any, idx: number) => {
-            const isPaid = (o.status || '').toUpperCase() === 'PAID';
+            const rawStatus = String(o.status || '').toUpperCase();
+            const isPaid = rawStatus === 'PAID';
             const isStellar = (o.payment_rail || o.rail || '').toLowerCase().includes('stellar');
             const token = isStellar ? 'XLM' : 'XRP';
             const total = (o.total_cents || 0) / 100;
+            const normalizedStatus: OrderItem['status'] =
+              rawStatus === 'PAID'
+                ? 'PAID'
+                : rawStatus === 'UNDERPAID'
+                ? 'UNDERPAID'
+                : rawStatus === 'REFUNDED'
+                ? 'REFUNDED'
+                : rawStatus === 'EXPIRED' || rawStatus === 'CANCELLED'
+                ? 'EXPIRED'
+                : 'AWAITING PAYMENT';
             return {
               id: o.id || `ord_${idx}`,
               orderNumber: o.order_number || `#NR${String(idx + 1).padStart(7, '0')}`,
@@ -71,7 +87,10 @@ function ActivityContent() {
               token,
               totalUsd: total,
               cryptoAmount: isStellar ? `${(total * 10).toFixed(2)} XLM` : `${(total * 2).toFixed(2)} XRP`,
-              status: isPaid ? 'PAID' : (o.status || 'AWAITING PAYMENT'),
+              status: normalizedStatus,
+              underpaidCents: Number(o.underpaid_cents || 0),
+              slippagePercent: typeof o.slippage_percent === 'number' ? o.slippage_percent : undefined,
+              refundTxHash: o.refund_tx_hash,
               dateUtc: o.created_at ? new Date(o.created_at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
               txHash: o.tx_hash || 'pending',
               ledgerSequence: o.ledger_seq ? String(o.ledger_seq) : isPaid ? 'confirmed' : 'unposted',
@@ -95,6 +114,27 @@ function ActivityContent() {
       .finally(() => {
         setLoadingOrders(false);
       });
+  };
+
+  const handleResolveUnderpaid = async (
+    orderId: string,
+    mode: 'TOPUP_USD' | 'TOPUP_NXL' | 'REFUND_ONCHAIN'
+  ) => {
+    setResolvingMode(mode);
+    setResolutionNotice(null);
+    try {
+      const result = await resolveUnderpaidOrderApi(orderId, mode);
+      setResolutionNotice({ type: 'ok', text: result.message });
+      await loadOrders();
+    } catch (err: any) {
+      setResolutionNotice({ type: 'err', text: err?.message || 'Action failed. Please try again.' });
+    } finally {
+      setResolvingMode(null);
+    }
+  };
+
+  useEffect(() => {
+    loadOrders();
 
     // Fetch portfolio events
     const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
@@ -459,6 +499,16 @@ function ActivityContent() {
                             AWAITING PAYMENT
                           </span>
                         )}
+                        {ord.status === 'UNDERPAID' && (
+                          <span className="px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-400/40 text-orange-300 text-[10px] font-semibold">
+                            ACTION NEEDED (SHORTFALL)
+                          </span>
+                        )}
+                        {ord.status === 'REFUNDED' && (
+                          <span className="px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-400/30 text-sky-300 text-[10px] font-semibold">
+                            REFUNDED
+                          </span>
+                        )}
                         {ord.status === 'EXPIRED' && (
                           <span className="px-2 py-0.5 rounded-full bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--muted)] text-[10px]">
                             EXPIRED
@@ -559,10 +609,66 @@ function ActivityContent() {
                     </div>
 
                     <div className="p-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1">
-                      <span className="text-[10px] text-[var(--muted)] uppercase block">Consensus Status</span>
-                      <p className="font-bold text-emerald-400">Validated</p>
+                      <span className="text-[10px] text-[var(--muted)] uppercase block">Order Status</span>
+                      <p className={`font-bold ${selectedOrder.status === 'UNDERPAID' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {selectedOrder.status === 'UNDERPAID' ? 'Shortfall Pending' : selectedOrder.status}
+                      </p>
                     </div>
                   </div>
+
+                  {selectedOrder.status === 'UNDERPAID' && (
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-400/30 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-amber-300">
+                            Shortfall of ${((selectedOrder.underpaidCents || 0) / 100).toFixed(2)} USD due to price change
+                          </p>
+                          <p className="text-[11px] text-[var(--muted)]">
+                            Pay the small remaining difference from your balance to complete this order, or claim an instant refund.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={resolvingMode !== null}
+                          onClick={() => handleResolveUnderpaid(selectedOrder.id, 'TOPUP_USD')}
+                          className="px-3 py-1.5 rounded-xl bg-[var(--gold)] text-black font-bold text-[11px] cursor-pointer disabled:opacity-50"
+                        >
+                          {resolvingMode === 'TOPUP_USD' ? 'Paying...' : 'Pay from USD Balance'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={resolvingMode !== null}
+                          onClick={() => handleResolveUnderpaid(selectedOrder.id, 'TOPUP_NXL')}
+                          className="px-3 py-1.5 rounded-xl bg-[var(--card)] border border-[var(--gold)]/40 text-[var(--gold)] font-bold text-[11px] cursor-pointer disabled:opacity-50"
+                        >
+                          {resolvingMode === 'TOPUP_NXL' ? 'Paying...' : 'Pay with $NXL'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={resolvingMode !== null}
+                          onClick={() => handleResolveUnderpaid(selectedOrder.id, 'REFUND_ONCHAIN')}
+                          className="px-3 py-1.5 rounded-xl bg-rose-500/15 border border-rose-400/40 text-rose-300 font-bold text-[11px] cursor-pointer disabled:opacity-50"
+                        >
+                          {resolvingMode === 'REFUND_ONCHAIN' ? 'Refunding...' : 'Claim Instant Refund'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {resolutionNotice && (
+                    <div
+                      className={`p-3 rounded-xl text-[11px] border ${
+                        resolutionNotice.type === 'ok'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                      }`}
+                    >
+                      {resolutionNotice.text}
+                    </div>
+                  )}
 
                   <Link
                     href={`/receipt?id=${selectedOrder.orderNumber.replace('#', '')}`}

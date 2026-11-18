@@ -8,6 +8,7 @@ import { getFxQuote } from '../services/market.js';
 import { stellarProvider } from '../services/crypto/index.js';
 import { NrTokenService } from '../services/nrTokenService.js';
 import { verifyToken } from '../services/jwt.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 
 export const swapRouter = Router();
@@ -130,6 +131,7 @@ swapRouter.post('/initiate', async (req: Request, res: Response) => {
     }
 
     const order = await CrossChainSwapService.createSwapOrder({
+      userId,
       fromAsset,
       toAsset,
       amount,
@@ -240,7 +242,7 @@ swapRouter.post('/stellar/prepare-xdr', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'swapId and sourcePublicKey are required' });
     }
 
-    const order = CrossChainSwapService.getSwapOrder(swapId) || NrTokenService.getNrSwapOrder(swapId);
+    const order = (await CrossChainSwapService.getSwapOrder(swapId)) || NrTokenService.getNrSwapOrder(swapId);
     if (!order) {
       return res.status(404).json({ success: false, error: 'Swap order not found or expired' });
     }
@@ -496,9 +498,26 @@ swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/swap/history/me
+ * Returns persistent MongoDB cross-chain swaps for the signed-in user
+ */
+swapRouter.get('/history/me', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
+    const swaps = await CrossChainSwapService.getUserSwaps({
+      userId: req.user!.id,
+      address: req.user!.walletAddress,
+      limit,
+    });
+    return res.json({ success: true, count: swaps.length, data: swaps });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Could not load your swap history' });
+  }
+});
+
+/**
  * GET /api/v1/swap/history
- * Returns real on-chain cross-chain bridge logs and swap orders for the authenticated user
- * or specified destination/source address. ZERO mock data.
+ * Returns real on-chain cross-chain bridge logs and persisted swap orders. ZERO mock data.
  */
 swapRouter.get('/history', async (req: Request, res: Response) => {
   try {
@@ -524,25 +543,60 @@ swapRouter.get('/history', async (req: Request, res: Response) => {
       ];
     }
 
-    const logs = await logsCol.find(query).sort({ created_at: -1 }).limit(limit).toArray();
+    const [logs, savedSwaps] = await Promise.all([
+      logsCol.find(query).sort({ created_at: -1 }).limit(limit).toArray(),
+      CrossChainSwapService.getUserSwaps({ userId, address: address || undefined, limit }),
+    ]);
 
-    // Map logs to user-friendly swap history items
-    const formatted = logs.map((l: any) => ({
-      id: l.id,
-      swapId: l.reference_id,
-      chain: l.chain,
-      action: l.action,
-      amount: l.amount_primary || '',
-      destinationAddress: l.details?.destinationAddress || l.operator_id,
-      txHash: l.tx_hash,
-      ledgerSeq: l.ledger_seq,
-      explorerUrl: l.explorer_url,
-      status: l.status || 'SUCCESS',
-      createdAt: l.created_at,
-      details: l.details || {},
-    }));
+    const seenSwapIds = new Set<string>();
+    const formatted = logs.map((l: any) => {
+      if (l.reference_id) seenSwapIds.add(String(l.reference_id));
+      return {
+        id: l.id,
+        swapId: l.reference_id,
+        chain: l.chain,
+        action: l.action,
+        amount: l.amount_primary || '',
+        destinationAddress: l.details?.destinationAddress || l.operator_id,
+        txHash: l.tx_hash,
+        ledgerSeq: l.ledger_seq,
+        explorerUrl: l.explorer_url,
+        status: l.status || 'SUCCESS',
+        createdAt: l.created_at,
+        details: l.details || {},
+      };
+    });
 
-    return res.json({ success: true, count: formatted.length, data: formatted });
+    // Merge persistent MongoDB swaps not already in platform_chain_logs
+    for (const s of savedSwaps) {
+      if (seenSwapIds.has(s.swapId)) continue;
+      formatted.push({
+        id: s.swapId,
+        swapId: s.swapId,
+        chain: s.toAsset === 'XLM' ? 'STELLAR' : 'XRPL',
+        action: 'CROSS_CHAIN_SWAP',
+        amount: `${s.payAmount} ${s.fromAsset} -> ${s.receiveAmount} ${s.toAsset}`,
+        destinationAddress: s.userDestinationAddress,
+        txHash: s.payoutTxHash || s.depositTxHash || '',
+        ledgerSeq: undefined,
+        explorerUrl: s.payoutExplorerUrl || s.depositExplorerUrl || '',
+        status: s.status,
+        createdAt: s.createdAt,
+        details: {
+          fromAsset: s.fromAsset,
+          toAsset: s.toAsset,
+          payAmount: s.payAmount,
+          receiveAmount: s.receiveAmount,
+          depositTxHash: s.depositTxHash,
+          payoutTxHash: s.payoutTxHash,
+        },
+      });
+    }
+
+    formatted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const sliced = formatted.slice(0, limit);
+
+    return res.json({ success: true, count: sliced.length, data: sliced });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to fetch swap history' });
   }
@@ -552,9 +606,9 @@ swapRouter.get('/history', async (req: Request, res: Response) => {
  * GET /api/v1/swap/:swapId
  * Fetches current swap status and on-chain transaction references
  */
-swapRouter.get('/:swapId', (req: Request, res: Response) => {
+swapRouter.get('/:swapId', async (req: Request, res: Response) => {
   const swapId = String(req.params.swapId);
-  const order = CrossChainSwapService.getSwapOrder(swapId);
+  const order = await CrossChainSwapService.getSwapOrder(swapId);
 
   if (!order) {
     return res.status(404).json({ success: false, error: 'Swap order not found' });

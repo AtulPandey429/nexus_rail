@@ -9,6 +9,7 @@ import { settlementEmitter } from '../services/settlementEvents.js';
 import { RatesService } from '../services/rates.js';
 import { NrTokenService } from '../services/nrTokenService.js';
 import { PortfolioService } from '../services/portfolioService.js';
+import { resolveUnderpaidOrder, type UnderpaidResolutionMode } from '../services/underpaidOrderService.js';
 
 export const checkoutRouter = Router();
 
@@ -270,6 +271,8 @@ checkoutRouter.post('/:chain/verify-payment', requireAuth, async (req: Authentic
                 payment_rail: provider.assetSymbol,
                 slippage_percent: slippage.slippagePercent,
                 underpaid_cents: underpaidCents,
+                sender_wallet_address: verification.sourceAddress,
+                delivered_crypto_amount: verification.amountDelivered,
                 updated_at: new Date().toISOString(),
               },
             }
@@ -459,5 +462,37 @@ checkoutRouter.get('/orders/:orderId/ipfs-receipt', requireAuth, async (req: Aut
     res.json({ success: true, receipt: { orderId: order.id, ipfsHash: receipt.ipfsCid, gatewayUrl: receipt.gatewayUrl } });
   } catch (error: any) {
     res.status(502).json({ success: false, error: error.message || 'Could not pin receipt' });
+  }
+});
+
+// Resolve UNDERPAID slippage order: POST /api/v1/checkout/orders/:orderId/resolve-underpaid
+checkoutRouter.post('/orders/:orderId/resolve-underpaid', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const rawMode = String(req.body?.mode || '').toUpperCase().trim() as UnderpaidResolutionMode;
+  const allowedModes: UnderpaidResolutionMode[] = ['TOPUP_USD', 'TOPUP_NXL', 'REFUND_ONCHAIN', 'REFUND_WALLET'];
+
+  if (!allowedModes.includes(rawMode)) {
+    return res.status(400).json({
+      success: false,
+      error: `Please choose a valid option: ${allowedModes.join(', ')}`,
+    });
+  }
+
+  try {
+    const result = await resolveUnderpaidOrder({
+      orderId,
+      userId: req.user!.id,
+      mode: rawMode,
+      isAdmin: req.user?.role === 'admin',
+    });
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    const msg = error?.message || 'Could not resolve underpaid order';
+    const status = msg.includes('not found')
+      ? 404
+      : msg.includes('Insufficient')
+      ? 402
+      : 400;
+    return res.status(status).json({ success: false, error: msg });
   }
 });

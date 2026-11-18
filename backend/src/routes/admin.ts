@@ -16,6 +16,8 @@ import { SorobanService } from '../services/soroban.js';
 import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
 import { DualRailTokenService } from '../services/dualRailTokenService.js';
 import { AdminAnalyticsService } from '../services/adminAnalyticsService.js';
+import { CrossChainSwapService } from '../services/crossChainSwapService.js';
+import { resolveUnderpaidOrder, type UnderpaidResolutionMode } from '../services/underpaidOrderService.js';
 import { env } from '../config/env.js';
 import { z } from 'zod';
 
@@ -68,6 +70,7 @@ const PatchProductSchema = z.object({
 const transitions: Record<string, string[]> = {
   PENDING: ['PAID', 'FAILED', 'CANCELLED'],
   PAID: ['FULFILLING', 'FAILED'],
+  UNDERPAID: ['PAID', 'REFUNDED'],
   FULFILLING: ['FULFILLED', 'FAILED'],
   FULFILLED: [],
   FAILED: [],
@@ -198,6 +201,9 @@ adminRouter.get('/orders', async (req: AuthenticatedRequest, res: Response) => {
               buyerName: { $arrayElemAt: ['$buyer.name', 0] },
               rail: '$payment_rail',
               txHash: '$tx_hash',
+              underpaidCents: '$underpaid_cents',
+              slippagePercent: '$slippage_percent',
+              refundTxHash: '$refund_tx_hash',
               items: 1,
             },
           },
@@ -242,6 +248,41 @@ adminRouter.patch('/orders/:id', async (req: AuthenticatedRequest, res: Response
     res.json({ success: true, status: 'success', data: { order: updated } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin: List persistent cross-chain swaps from MongoDB
+adminRouter.get('/swaps', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    const swaps = await CrossChainSwapService.getRecentSwaps(limit);
+    res.json({ success: true, status: 'success', data: { swaps, total: swaps.length } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load swaps' });
+  }
+});
+
+// Admin: Resolve a stuck UNDERPAID order (force settle or refund)
+adminRouter.post('/orders/:id/resolve-underpaid', async (req: AuthenticatedRequest, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const mode = String(req.body?.mode || '').toUpperCase().trim() as UnderpaidResolutionMode;
+  const allowed: UnderpaidResolutionMode[] = ['TOPUP_USD', 'TOPUP_NXL', 'REFUND_ONCHAIN', 'REFUND_WALLET'];
+
+  if (!allowed.includes(mode)) {
+    return res.status(400).json({ success: false, error: `Invalid resolution mode. Use: ${allowed.join(', ')}` });
+  }
+
+  try {
+    const result = await resolveUnderpaidOrder({
+      orderId: id,
+      userId: req.user!.id,
+      mode,
+      isAdmin: true,
+    });
+    await AdminAnalyticsService.invalidateCache();
+    res.json({ success: true, status: 'success', data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message || 'Could not resolve order' });
   }
 });
 
