@@ -5,6 +5,9 @@ import { ProductService } from '../services/products.js';
 import { NrTokenService } from '../services/nrTokenService.js';
 import { RedisCacheService } from '../services/redis.js';
 import { PortfolioService } from '../services/portfolioService.js';
+import { TreasuryService } from '../services/treasuryService.js';
+import { SorobanService } from '../services/soroban.js';
+import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
 import { z } from 'zod';
 
 export const adminRouter = Router();
@@ -63,10 +66,13 @@ adminRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) => {
     const productsCol = await MongoService.getCollection('products');
     const usersCol = await MongoService.getCollection('users');
 
-    const [orders, productsCount, usersCount] = await Promise.all([
+    const [orders, productsCount, usersCount, treasury, nrPool, contractMeta] = await Promise.all([
       ordersCol.find().toArray(),
       productsCol.countDocuments(),
       usersCol.countDocuments(),
+      TreasuryService.getTreasurySummary().catch(() => null),
+      NrTokenService.getPoolStats().catch(() => null),
+      SorobanService.getContractMetadata().catch(() => null),
     ]);
 
     const paid = orders.filter((row) => ['PAID', 'FULFILLING', 'FULFILLED'].includes(row.status));
@@ -80,6 +86,10 @@ adminRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) => {
         totalOrdersCount: orders.length,
         productsCount,
         usersCount,
+        treasury,
+        nrPool,
+        contract: contractMeta?.contract,
+        rpcHealth: contractMeta?.rpcHealth,
       },
     });
   } catch (error: any) {
@@ -224,5 +234,92 @@ adminRouter.get('/portfolios', async (_req: AuthenticatedRequest, res: Response)
     res.json({ success: true, data: auc });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || 'Failed to aggregate platform AUC' });
+  }
+});
+
+// ============================================================================
+// Module 4: Platform Treasury & Owner Profit Endpoints
+// ============================================================================
+
+adminRouter.get('/treasury/summary', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const summary = await TreasuryService.getTreasurySummary();
+    res.json({ success: true, data: summary });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load treasury summary' });
+  }
+});
+
+adminRouter.get('/treasury/entries', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const sourceType = req.query.sourceType ? (String(req.query.sourceType) as any) : undefined;
+    const data = await TreasuryService.getRecentEntries(limit, offset, sourceType);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load treasury entries' });
+  }
+});
+
+adminRouter.get('/treasury/config', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const config = await TreasuryService.getConfig();
+    res.json({ success: true, data: config });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load treasury config' });
+  }
+});
+
+adminRouter.patch('/treasury/config', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const updated = await TreasuryService.updateConfig(req.body, req.user?.id);
+    res.json({ success: true, data: updated });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message || 'Failed to update treasury config' });
+  }
+});
+
+// ============================================================================
+// Module 4: Stellar Protocol 22 Smart Contract & On-Chain Endpoints
+// ============================================================================
+
+adminRouter.get('/contracts/nexus-vault', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const meta = await SorobanService.getContractMetadata();
+    res.json({ success: true, data: meta });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to inspect smart contract' });
+  }
+});
+
+adminRouter.post('/contracts/nexus-vault/upgrade', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { newWasmHash, notes } = req.body || {};
+    if (!newWasmHash || typeof newWasmHash !== 'string' || newWasmHash.length < 32) {
+      return res.status(400).json({ success: false, error: 'Valid newWasmHash (min 32 chars) is required' });
+    }
+
+    const current = await SorobanService.getContractMetadata();
+    const updated = await SorobanService.recordContractUpgrade(
+      current.contract.contract_id,
+      newWasmHash,
+      req.user!.id,
+      `tx_upgrade_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
+      notes
+    );
+
+    res.json({ success: true, data: updated });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message || 'Contract upgrade failed' });
+  }
+});
+
+adminRouter.get('/tokens/nr', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const token = await StellarTokenIssuerService.getOnChainTokenDetails();
+    res.json({ success: true, data: token });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch on-chain token details' });
   }
 });
