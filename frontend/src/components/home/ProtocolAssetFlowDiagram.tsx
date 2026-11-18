@@ -1,290 +1,334 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
   ArrowUpRight,
+  Check,
+  Code2,
   Coins,
+  Crown,
   Flame,
-  Layers,
+  Lock,
   Pause,
   Play,
-  Repeat,
-  ShieldCheck,
-  ShoppingBag,
+  Shield,
   Sparkles,
+  Wallet,
+  Zap,
 } from 'lucide-react';
 import { fetchLiveSorobanSwapPool } from '@/lib/soroban';
 
 type FlowMode = 'all' | 'checkout' | 'swap' | 'bridge' | 'supply';
+type NodeKey = 'wallet' | 'vault' | 'token' | 'swap' | 'treasury' | 'buyback' | 'burn' | 'xrpl';
+type NodeTheme = 'cyan' | 'gold' | 'emerald' | 'rose' | 'indigo';
 
-interface FlowTab {
-  id: FlowMode;
-  label: string;
-  shortLabel: string;
-  icon: React.ComponentType<{ className?: string }>;
-  summary: string;
-  steps: Array<{ num: string; title: string; detail: string; accent: string }>;
+interface WireDef {
+  id: string;
+  from: string;
+  to: string;
+  nodes: NodeKey[];
+  flows: FlowMode[];
+  color: string;
+  pill: string;
+  pillBg: string;
+  pillBorder: string;
+  pillText: string;
+  t: number;
+  dy: number;
+  dir: 'h' | 'v' | 'h-wide';
+  speed: number;
 }
 
-const FLOW_TABS: FlowTab[] = [
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface BezierCurve {
+  p0: Point;
+  p1: Point;
+  p2: Point;
+  p3: Point;
+}
+
+interface WireGeometry {
+  wire: WireDef;
+  bezier: BezierCurve;
+  d: string;
+  pillPos: Point;
+}
+
+const WIRES: WireDef[] = [
   {
-    id: 'all',
-    label: 'End-to-End Flow',
-    shortLabel: 'All Flows',
-    icon: Layers,
-    summary:
-      'Every user action routes through audited Stellar Soroban smart contracts — separating token balances ($NXL SAC), checkout & mint/burn (NexusVault), and AMM swaps & bridge escrow (NexusSwap).',
-    steps: [
-      {
-        num: '01',
-        title: 'User Signs in Wallet',
-        detail: 'Freighter or GemWallet signs a single Soroban XDR with strict amount & slippage guards.',
-        accent: 'text-sky-300',
-      },
-      {
-        num: '02',
-        title: 'Smart Contract Routing',
-        detail: 'Checkout & Mint/Burn hit NexusVault; XLM↔NXL swaps & XRPL locks hit NexusSwap.',
-        accent: 'text-[#E6C666]',
-      },
-      {
-        num: '03',
-        title: '$NXL SAC Token Ledger',
-        detail: 'Official Stellar Asset Contract moves balances, enforces 2M hard cap mints & permanent burns.',
-        accent: 'text-emerald-300',
-      },
-      {
-        num: '04',
-        title: 'Atomic Finality & Payout',
-        detail: '50/50 fees split on-chain, swapped tokens return to user, or XRPL settles cross-chain XRP.',
-        accent: 'text-violet-300',
-      },
-    ],
+    id: 'w-xlm',
+    from: 'p-wallet-1',
+    to: 'p-vault-l',
+    nodes: ['wallet', 'vault'],
+    flows: ['all', 'checkout'],
+    color: '#38bdf8',
+    pill: 'XLM',
+    pillBg: '#081829',
+    pillBorder: 'rgba(56,189,248,0.55)',
+    pillText: '#7dd3fc',
+    t: 0.48,
+    dy: -11,
+    dir: 'h',
+    speed: 0.0048,
   },
   {
-    id: 'checkout',
-    label: 'Checkout (50/50 Split)',
-    shortLabel: 'Checkout',
-    icon: ShoppingBag,
-    summary:
-      'One Freighter signature runs NexusVault::settle_order — atomically routing 99.5% to Owner Treasury, 0.5% to the $NXL Buyback Reserve, locking order_ref against replays, and awarding 2% $NXL cashback.',
-    steps: [
-      {
-        num: '01',
-        title: 'User Pays XLM / $NXL',
-        detail: 'Frontend requests unsigned XDR from /checkout/soroban/prepare and signs in Freighter.',
-        accent: 'text-sky-300',
-      },
-      {
-        num: '02',
-        title: 'NexusVault::settle_order',
-        detail: 'Verifies pause flag, checks order_ref has never been settled, and computes checked 1% fee.',
-        accent: 'text-[#E6C666]',
-      },
-      {
-        num: '03',
-        title: 'Atomic 50/50 Split',
-        detail: 'Principal + 50% fee goes to Owner Treasury; 50% fee routes to $NXL Buyback Reserve.',
-        accent: 'text-emerald-300',
-      },
-      {
-        num: '04',
-        title: '2% $NXL Cashback',
-        detail: 'Order marks PAID on-chain & awards idempotent 2% $NXL loyalty cashback to user.',
-        accent: 'text-amber-300',
-      },
-    ],
+    id: 'w-nxl-cashback',
+    from: 'p-token-l',
+    to: 'p-wallet-2',
+    nodes: ['wallet', 'token', 'vault'],
+    flows: ['all', 'checkout', 'supply'],
+    color: '#34d399',
+    pill: '+2% $NXL',
+    pillBg: '#062019',
+    pillBorder: 'rgba(52,211,153,0.55)',
+    pillText: '#6ee7b7',
+    t: 0.5,
+    dy: 0,
+    dir: 'h',
+    speed: 0.0045,
   },
   {
-    id: 'swap',
-    label: 'AMM Swap (XLM ↔ NXL)',
-    shortLabel: 'AMM Swap',
-    icon: Repeat,
-    summary:
-      'On-chain constant-product pool (x · y = k) holds live XLM & $NXL liquidity. Every swap enforces min_amount_out slippage protection + deadline and splits the 0.50% fee 50/50 between Owner and Pool.',
-    steps: [
-      {
-        num: '01',
-        title: 'Live On-Chain Quote',
-        detail: 'NexusSwap::quote_swap simulates exact output and sets your min_amount_out slippage floor.',
-        accent: 'text-sky-300',
-      },
-      {
-        num: '02',
-        title: 'NexusSwap::swap_exact_in',
-        detail: 'User XLM/NXL enters the pool; contract validates deadline timestamp & k invariant.',
-        accent: 'text-[#E6C666]',
-      },
-      {
-        num: '03',
-        title: '0.50% Fee Split',
-        detail: '0.25% routes instantly to Owner Treasury; 0.25% stays in pool to deepen liquidity.',
-        accent: 'text-emerald-300',
-      },
-      {
-        num: '04',
-        title: 'Instant Output Return',
-        detail: 'Swapped $NXL or XLM transfers directly from NexusSwap back into the user wallet.',
-        accent: 'text-cyan-300',
-      },
-    ],
+    id: 'w-swap-in',
+    from: 'p-wallet-3',
+    to: 'p-swap-lt',
+    nodes: ['wallet', 'swap'],
+    flows: ['all', 'swap', 'bridge'],
+    color: '#fbbf24',
+    pill: 'XLM / NXL',
+    pillBg: '#221807',
+    pillBorder: 'rgba(251,191,36,0.55)',
+    pillText: '#fde68a',
+    t: 0.48,
+    dy: -9,
+    dir: 'h',
+    speed: 0.0049,
   },
   {
-    id: 'bridge',
-    label: 'Cross-Chain Bridge (→ XRP)',
-    shortLabel: 'Bridge',
-    icon: ShieldCheck,
-    summary:
-      'Trustless Stellar → XRPL settlement: XLM locks inside NexusSwap Escrow (with 15-min self-refund guarantee), while $NXL burns permanently via NexusVault::burn_for_bridge before XRPL pays out XRP.',
-    steps: [
-      {
-        num: '01',
-        title: 'Lock or Burn on Stellar',
-        detail: 'XLM locks in NexusSwap::lock_bridge_escrow; $NXL burns via NexusVault::burn_for_bridge.',
-        accent: 'text-sky-300',
-      },
-      {
-        num: '02',
-        title: 'On-Chain Proof Emitted',
-        detail: 'Soroban emits immutable esc_lock / brg_out event containing target XRPL r... address.',
-        accent: 'text-[#E6C666]',
-      },
-      {
-        num: '03',
-        title: 'XRPL Payout Executed',
-        detail: 'Dual-rail relayer sends verified XRP payment to user destination on XRPL Testnet.',
-        accent: 'text-blue-300',
-      },
-      {
-        num: '04',
-        title: 'Escrow Release / Safety',
-        detail: 'Relayer submits XRPL tx hash to release escrow — if timeout occurs, user self-refunds 100%.',
-        accent: 'text-emerald-300',
-      },
-    ],
+    id: 'w-swap-out',
+    from: 'p-swap-lb',
+    to: 'p-wallet-4',
+    nodes: ['wallet', 'swap'],
+    flows: ['all', 'swap'],
+    color: '#22d3ee',
+    pill: 'Swapped Out',
+    pillBg: '#071D26',
+    pillBorder: 'rgba(34,211,238,0.55)',
+    pillText: '#67e8f9',
+    t: 0.5,
+    dy: 12,
+    dir: 'h',
+    speed: 0.0046,
   },
   {
-    id: 'supply',
-    label: 'Mint & Buyback Burn',
-    shortLabel: 'Mint / Burn',
-    icon: Flame,
-    summary:
-      'NexusVault is the authorized on-chain Admin of the $NXL Stellar Asset Contract (SAC). It enforces a strict 2,000,000 NXL hard cap on mints and permanently destroys supply on buyback-and-burn.',
-    steps: [
-      {
-        num: '01',
-        title: 'Admin / Relayer Trigger',
-        detail: 'Authorized role initiates mint (cashback/bridge) or buyback burn from Treasury.',
-        accent: 'text-[#E6C666]',
-      },
-      {
-        num: '02',
-        title: 'Supply Cap & Replay Guard',
-        detail: 'NexusVault checks circulating + amount <= 2,000,000 NXL and blocks duplicate ref_id.',
-        accent: 'text-sky-300',
-      },
-      {
-        num: '03',
-        title: '$NXL SAC Mint / Burn',
-        detail: 'SEP-41 SAC either mints tokens to recipient or permanently destroys balance on ledger.',
-        accent: 'text-rose-300',
-      },
-      {
-        num: '04',
-        title: 'Live On-Chain Telemetry',
-        detail: 'TotalNxlMinted, TotalNxlBurned & Circulating Supply update live on Stellar Expert & Admin.',
-        accent: 'text-emerald-300',
-      },
-    ],
+    id: 'w-mint-vert',
+    from: 'p-vault-b',
+    to: 'p-token-t',
+    nodes: ['vault', 'token'],
+    flows: ['all', 'checkout', 'supply', 'bridge'],
+    color: '#34d399',
+    pill: 'Mint / Burn',
+    pillBg: '#062019',
+    pillBorder: 'rgba(52,211,153,0.55)',
+    pillText: '#6ee7b7',
+    t: 0.5,
+    dy: 0,
+    dir: 'v',
+    speed: 0.0062,
+  },
+  {
+    id: 'w-swap-vert',
+    from: 'p-swap-t',
+    to: 'p-token-b',
+    nodes: ['swap', 'token'],
+    flows: ['all', 'swap'],
+    color: '#34d399',
+    pill: '',
+    pillBg: '#062019',
+    pillBorder: 'rgba(52,211,153,0.5)',
+    pillText: '#6ee7b7',
+    t: 0.5,
+    dy: 0,
+    dir: 'v',
+    speed: 0.006,
+  },
+  {
+    id: 'w-995',
+    from: 'p-vault-rt',
+    to: 'p-treasury-t',
+    nodes: ['vault', 'treasury'],
+    flows: ['all', 'checkout'],
+    color: '#fbbf24',
+    pill: '99.5%',
+    pillBg: '#221807',
+    pillBorder: 'rgba(251,191,36,0.55)',
+    pillText: '#fde68a',
+    t: 0.52,
+    dy: -10,
+    dir: 'h',
+    speed: 0.0052,
+  },
+  {
+    id: 'w-05',
+    from: 'p-vault-rb',
+    to: 'p-buyback',
+    nodes: ['vault', 'buyback'],
+    flows: ['all', 'checkout'],
+    color: '#38bdf8',
+    pill: '0.5%',
+    pillBg: '#081829',
+    pillBorder: 'rgba(56,189,248,0.55)',
+    pillText: '#7dd3fc',
+    t: 0.46,
+    dy: -7,
+    dir: 'h',
+    speed: 0.005,
+  },
+  {
+    id: 'w-025',
+    from: 'p-swap-rt',
+    to: 'p-treasury-b',
+    nodes: ['swap', 'treasury'],
+    flows: ['all', 'swap'],
+    color: '#f59e0b',
+    pill: '0.25%',
+    pillBg: '#221807',
+    pillBorder: 'rgba(245,158,11,0.55)',
+    pillText: '#fcd34d',
+    t: 0.58,
+    dy: 0,
+    dir: 'h-wide',
+    speed: 0.0044,
+  },
+  {
+    id: 'w-burn',
+    from: 'p-token-r',
+    to: 'p-burn',
+    nodes: ['token', 'burn', 'vault'],
+    flows: ['all', 'supply', 'bridge'],
+    color: '#fb7185',
+    pill: 'BURN',
+    pillBg: '#260A13',
+    pillBorder: 'rgba(251,113,133,0.55)',
+    pillText: '#fda4af',
+    t: 0.54,
+    dy: 6,
+    dir: 'h',
+    speed: 0.0053,
+  },
+  {
+    id: 'w-xrp',
+    from: 'p-swap-rb',
+    to: 'p-xrpl',
+    nodes: ['swap', 'xrpl'],
+    flows: ['all', 'bridge'],
+    color: '#818cf8',
+    pill: 'XRP',
+    pillBg: '#10122E',
+    pillBorder: 'rgba(129,140,248,0.55)',
+    pillText: '#a5b4fc',
+    t: 0.5,
+    dy: 9,
+    dir: 'h',
+    speed: 0.005,
   },
 ];
 
 const CONTRACTS = {
   vault: {
-    id: 'CBTDO4EKCQNUZRYSNK6LXB7AOQUNCY7FOV6AYDICSAH7CY6N57CQRJVB',
     short: 'CBTDO…RJVB',
     url: 'https://stellar.expert/explorer/testnet/contract/CBTDO4EKCQNUZRYSNK6LXB7AOQUNCY7FOV6AYDICSAH7CY6N57CQRJVB',
   },
   swap: {
-    id: 'CCJBRAJ5JUQPMIMGHDZKGRNXRZVJU5KBU7PMNJK235ORSXUSSHCPQYAM',
     short: 'CCJBR…QYAM',
     url: 'https://stellar.expert/explorer/testnet/contract/CCJBRAJ5JUQPMIMGHDZKGRNXRZVJU5KBU7PMNJK235ORSXUSSHCPQYAM',
   },
   nxlSac: {
-    id: 'CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC',
     short: 'CDGPJ…7LPC',
     url: 'https://stellar.expert/explorer/testnet/contract/CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC',
   },
 };
 
-function MovingToken({
-  pathId,
-  label,
-  fill,
-  textColor = '#05070B',
-  dur = '3.6s',
-  begin = '0s',
-  active,
-  playing,
-}: {
-  pathId: string;
-  label: string;
-  fill: string;
-  textColor?: string;
-  dur?: string;
-  begin?: string;
-  active: boolean;
-  playing: boolean;
-}) {
-  if (!active) return null;
-  const width = Math.max(36, label.length * 7 + 14);
-  return (
-    <g opacity={playing ? 1 : 0.85}>
-      {playing && (
-        <animateMotion dur={dur} begin={begin} repeatCount="indefinite" rotate="0">
-          <mpath href={`#${pathId}`} />
-        </animateMotion>
-      )}
-      <rect
-        x={-width / 2}
-        y={-11}
-        width={width}
-        height={22}
-        rx={11}
-        fill={fill}
-        stroke="#0A0E16"
-        strokeWidth="2"
-      />
-      <text
-        x="0"
-        y="3.5"
-        textAnchor="middle"
-        fill={textColor}
-        fontSize="9.5"
-        fontWeight="800"
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-      >
-        {label}
-      </text>
-    </g>
-  );
+const FLOW_FILTERS: Array<{ id: FlowMode; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'checkout', label: 'Checkout' },
+  { id: 'swap', label: 'Swap' },
+  { id: 'bridge', label: 'Bridge' },
+  { id: 'supply', label: 'Mint / Burn' },
+];
+
+const FLOW_CAPTIONS: Record<FlowMode, string> = {
+  all: 'Every transaction moves through audited Stellar Soroban contracts: NexusVault (50/50 split + mint/burn), $NXL SAC (2M cap ledger), and NexusSwap (AMM + 15m bridge escrow).',
+  checkout: 'User signs 1 Freighter XDR -> NexusVault::settle_order splits 99.5% to Treasury + 0.5% to Buyback Pool and awards +2% $NXL cashback.',
+  swap: 'User swaps XLM ↔ $NXL directly on NexusSwap (x·y=k) with slippage guard — 0.25% goes to Treasury, 0.25% compounds in pool, output returns instantly.',
+  bridge: 'XLM locks in NexusSwap Escrow (15m self-refund safe) or $NXL burns permanently via NexusVault before XRPL pays out XRP.',
+  supply: 'NexusVault acts as $NXL SAC Admin — enforcing the 2,000,000 $NXL hard cap on mints and permanently destroying tokens on buyback-and-burn.',
+};
+
+function makeBezier(p0: Point, p3: Point, dir: WireDef['dir']): BezierCurve {
+  if (dir === 'v') {
+    const dy = p3.y - p0.y;
+    return {
+      p0,
+      p1: { x: p0.x, y: p0.y + dy * 0.5 },
+      p2: { x: p3.x, y: p3.y - dy * 0.5 },
+      p3,
+    };
+  }
+  const dx = p3.x - p0.x;
+  const k = dir === 'h-wide' ? 0.58 : 0.48;
+  return {
+    p0,
+    p1: { x: p0.x + dx * k, y: p0.y },
+    p2: { x: p3.x - dx * k, y: p3.y },
+    p3,
+  };
+}
+
+function evalBezier(b: BezierCurve, t: number): Point {
+  const u = 1 - t;
+  return {
+    x: u * u * u * b.p0.x + 3 * u * u * t * b.p1.x + 3 * u * t * t * b.p2.x + t * t * t * b.p3.x,
+    y: u * u * u * b.p0.y + 3 * u * u * t * b.p1.y + 3 * u * t * t * b.p2.y + t * t * t * b.p3.y,
+  };
 }
 
 export function ProtocolAssetFlowDiagram() {
-  const [mode, setMode] = useState<FlowMode>('all');
-  const [playing, setPlaying] = useState(true);
-  const [poolStats, setPoolStats] = useState<{
-    reserveXlm: number;
-    reserveNxl: number;
-    totalSwaps: number;
-  }>({
-    reserveXlm: 2000,
-    reserveNxl: 2000,
-    totalSwaps: 0,
-  });
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const pulsesGroupRef = useRef<SVGGElement | null>(null);
 
+  const [activeFlow, setActiveFlow] = useState<FlowMode>('all');
+  const [hoveredNode, setHoveredNode] = useState<NodeKey | null>(null);
+  const [playing, setPlaying] = useState(true);
+  const [simulating, setSimulating] = useState(false);
+  const [geometries, setGeometries] = useState<WireGeometry[]>([]);
+  const [poolStats, setPoolStats] = useState({ reserveXlm: 2000, reserveNxl: 2000, totalSwaps: 0 });
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    addr: string;
+    formula: string;
+  }>({ visible: false, x: 0, y: 0, addr: '', formula: '' });
+
+  // Refs for 60fps requestAnimationFrame circular ball loop (no React re-renders per frame)
+  const activeFlowRef = useRef<FlowMode>(activeFlow);
+  const hoveredNodeRef = useRef<NodeKey | null>(hoveredNode);
+  const playingRef = useRef<boolean>(playing);
+  const speedMultRef = useRef<number>(1);
+  const geometriesRef = useRef<WireGeometry[]>([]);
+
+  activeFlowRef.current = activeFlow;
+  hoveredNodeRef.current = hoveredNode;
+  playingRef.current = playing;
+  geometriesRef.current = geometries;
+
+  // Fetch live on-chain NexusSwap pool reserves
   useEffect(() => {
     fetchLiveSorobanSwapPool()
       .then((pool) => {
@@ -299,644 +343,656 @@ export function ProtocolAssetFlowDiagram() {
       .catch(() => {});
   }, []);
 
-  const activeTab = FLOW_TABS.find((t) => t.id === mode) || FLOW_TABS[0];
+  const isWireActive = useCallback((w: WireDef, flow: FlowMode, hover: NodeKey | null) => {
+    if (hover) return w.nodes.includes(hover);
+    return w.flows.includes(flow);
+  }, []);
 
-  // Active route flags
-  const isCheckout = mode === 'all' || mode === 'checkout';
-  const isSwap = mode === 'all' || mode === 'swap';
-  const isBridge = mode === 'all' || mode === 'bridge';
-  const isSupply = mode === 'all' || mode === 'supply';
+  // Measure DOM port anchor coordinates relative to stage
+  const measureWires = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const sRect = stage.getBoundingClientRect();
+    if (sRect.width === 0) return;
 
-  // Node emphasis helpers
-  const nodeOpacity = (highlighted: boolean) => (highlighted ? 1 : 0.3);
-  const pathOpacity = (highlighted: boolean) => (highlighted ? 0.92 : 0.14);
+    const next: WireGeometry[] = [];
+    for (const wire of WIRES) {
+      const elFrom = stage.querySelector<HTMLElement>(`[data-port="${wire.from}"]`);
+      const elTo = stage.querySelector<HTMLElement>(`[data-port="${wire.to}"]`);
+      if (!elFrom || !elTo) continue;
+
+      const r0 = elFrom.getBoundingClientRect();
+      const r3 = elTo.getBoundingClientRect();
+      if (r0.width === 0 || r3.width === 0) continue;
+
+      const p0: Point = {
+        x: r0.left - sRect.left + r0.width / 2,
+        y: r0.top - sRect.top + r0.height / 2,
+      };
+      const p3: Point = {
+        x: r3.left - sRect.left + r3.width / 2,
+        y: r3.top - sRect.top + r3.height / 2,
+      };
+      const bezier = makeBezier(p0, p3, wire.dir);
+      const d = `M ${bezier.p0.x.toFixed(1)} ${bezier.p0.y.toFixed(1)} C ${bezier.p1.x.toFixed(1)} ${bezier.p1.y.toFixed(1)}, ${bezier.p2.x.toFixed(1)} ${bezier.p2.y.toFixed(1)}, ${bezier.p3.x.toFixed(1)} ${bezier.p3.y.toFixed(1)}`;
+      const pillPos = evalBezier(bezier, wire.t);
+      next.push({ wire, bezier, d, pillPos });
+    }
+    setGeometries(next);
+  }, []);
+
+  useEffect(() => {
+    measureWires();
+    const timer = setTimeout(measureWires, 120);
+    const stage = stageRef.current;
+    let observer: ResizeObserver | null = null;
+    if (stage && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => measureWires());
+      observer.observe(stage);
+    }
+    window.addEventListener('resize', measureWires);
+    return () => {
+      clearTimeout(timer);
+      observer?.disconnect();
+      window.removeEventListener('resize', measureWires);
+    };
+  }, [measureWires]);
+
+  // 60fps glowing circular asset balls moving along every Bezier curve
+  useEffect(() => {
+    const group = pulsesGroupRef.current;
+    if (!group || geometries.length === 0) return;
+
+    while (group.firstChild) group.removeChild(group.firstChild);
+
+    type BallParticle = {
+      geom: WireGeometry;
+      t: number;
+      speed: number;
+      outer: SVGCircleElement;
+      core: SVGCircleElement;
+    };
+
+    const particles: BallParticle[] = [];
+
+    geometries.forEach((geom) => {
+      // 2 circular glowing asset balls per wire path
+      [0, 0.5].forEach((offset, idx) => {
+        const outer = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        outer.setAttribute('r', '7');
+        outer.setAttribute('fill', geom.wire.color);
+        outer.setAttribute('fill-opacity', '0.26');
+
+        const core = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        core.setAttribute('r', '3.8');
+        core.setAttribute('fill', '#ffffff');
+        core.setAttribute('stroke', geom.wire.color);
+        core.setAttribute('stroke-width', '2.2');
+
+        group.appendChild(outer);
+        group.appendChild(core);
+
+        particles.push({
+          geom,
+          t: (offset + idx * 0.05) % 1,
+          speed: geom.wire.speed,
+          outer,
+          core,
+        });
+      });
+    });
+
+    let rafId = 0;
+    const tick = () => {
+      const flow = activeFlowRef.current;
+      const hover = hoveredNodeRef.current;
+      const isPlaying = playingRef.current;
+      const mult = speedMultRef.current;
+
+      for (const p of particles) {
+        const active = isWireActive(p.geom.wire, flow, hover);
+        const opacity = active ? '1' : '0.07';
+        p.outer.style.opacity = opacity;
+        p.core.style.opacity = opacity;
+
+        if (isPlaying) {
+          p.t += p.speed * mult;
+          if (p.t > 1) p.t -= 1;
+        }
+
+        const pos = evalBezier(p.geom.bezier, p.t);
+        const xStr = pos.x.toFixed(1);
+        const yStr = pos.y.toFixed(1);
+        p.outer.setAttribute('cx', xStr);
+        p.outer.setAttribute('cy', yStr);
+        p.outer.setAttribute('r', mult > 1 ? '9.5' : '7');
+
+        p.core.setAttribute('cx', xStr);
+        p.core.setAttribute('cy', yStr);
+        p.core.setAttribute('r', mult > 1 ? '4.8' : '3.8');
+      }
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [geometries, isWireActive]);
+
+  // Burst simulation pulse (3.8x circular ball velocity)
+  const simTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSimulate = () => {
+    if (simTimerRef.current) clearTimeout(simTimerRef.current);
+    setPlaying(true);
+    setSimulating(true);
+    speedMultRef.current = 3.8;
+    simTimerRef.current = setTimeout(() => {
+      speedMultRef.current = 1;
+      setSimulating(false);
+    }, 2200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (simTimerRef.current) clearTimeout(simTimerRef.current);
+    };
+  }, []);
+
+  // Compute highlighted nodes set
+  const activeNodes = new Set<NodeKey>();
+  WIRES.forEach((w) => {
+    if (isWireActive(w, activeFlow, hoveredNode)) {
+      w.nodes.forEach((n) => activeNodes.add(n));
+    }
+  });
+  if (hoveredNode) activeNodes.add(hoveredNode);
+
+  const getNodeClasses = (key: NodeKey, theme: NodeTheme) => {
+    const base =
+      'relative z-20 rounded-xl border backdrop-blur-md transition-all duration-300 cursor-pointer bg-gradient-to-br from-[#11182A]/95 to-[#090D18]/98 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.06)] hover:-translate-y-0.5';
+
+    if (activeFlow === 'all' && !hoveredNode) {
+      return `${base} border-slate-400/20 hover:border-slate-300/40`;
+    }
+    if (!activeNodes.has(key)) {
+      return `${base} border-slate-700/30 opacity-20 grayscale-[50%]`;
+    }
+    const ringMap: Record<NodeTheme, string> = {
+      cyan: 'border-sky-400/70 shadow-[0_0_24px_-4px_rgba(56,189,248,0.32)]',
+      gold: 'border-amber-400/70 shadow-[0_0_24px_-4px_rgba(251,191,36,0.32)]',
+      emerald: 'border-emerald-400/70 shadow-[0_0_24px_-4px_rgba(52,211,153,0.32)]',
+      rose: 'border-rose-400/70 shadow-[0_0_24px_-4px_rgba(251,113,133,0.32)]',
+      indigo: 'border-indigo-400/70 shadow-[0_0_24px_-4px_rgba(129,140,248,0.32)]',
+    };
+    return `${base} ${ringMap[theme]}`;
+  };
+
+  const handleNodeEnter = (key: NodeKey, addr: string, formula: string, e: React.MouseEvent) => {
+    setHoveredNode(key);
+    setTooltip({ visible: true, x: e.clientX, y: e.clientY, addr, formula });
+  };
+
+  const handleNodeMove = (e: React.MouseEvent) => {
+    setTooltip((prev) => (prev.visible ? { ...prev, x: e.clientX, y: e.clientY } : prev));
+  };
+
+  const handleNodeLeave = () => {
+    setHoveredNode(null);
+    setTooltip((prev) => ({ ...prev, visible: false }));
+  };
+
+  const poolDisplay = `${Math.round(poolStats.reserveXlm).toLocaleString()} XLM / ${Math.round(poolStats.reserveNxl).toLocaleString()} $NXL`;
 
   return (
-    <div className="rounded-3xl border border-white/[0.08] bg-[#080B11] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
-      {/* Header Bar */}
-      <div className="border-b border-white/[0.07] px-5 py-5 sm:px-7 sm:py-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-[#0B0F17]">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.14em] text-[#E6C666]">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Live On-Chain Asset Architecture</span>
-          </div>
-          <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            How assets move across NexusRail smart contracts
-          </h3>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
-            {activeTab.summary}
-          </p>
+    <div className="w-full max-w-[1040px] mx-auto rounded-2xl border border-slate-800/90 bg-[#090D18]/90 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.65)] overflow-hidden">
+      {/* Keyframes for animated wire dashes */}
+      <style jsx>{`
+        @keyframes nexusFlowDash {
+          to {
+            stroke-dashoffset: -36;
+          }
+        }
+        .nexus-wire-dash {
+          stroke-dasharray: 5 7;
+          animation: nexusFlowDash 1.15s linear infinite;
+          transition: opacity 0.28s ease;
+        }
+        .nexus-wire-dash.paused {
+          animation-play-state: paused;
+        }
+      `}</style>
+
+      {/* COMPACT TOP CONTROL BAR */}
+      <div className="px-4 py-3 sm:px-5 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2.5 bg-[#07090E]/85">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs sm:text-sm font-bold tracking-tight text-white">NEXUS v2.0</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-400 border border-slate-700/70">
+            SOROBAN ↔ XRPL
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 self-start lg:self-center">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800">
+            {FLOW_FILTERS.map((f) => {
+              const selected = activeFlow === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setActiveFlow(f.id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition-all cursor-pointer border ${
+                    selected
+                      ? 'font-semibold bg-sky-500/20 text-sky-300 border-sky-400/40'
+                      : 'font-medium text-slate-400 hover:text-white border-transparent'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+
           <button
             type="button"
             onClick={() => setPlaying((p) => !p)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] px-3 py-2 text-xs font-medium text-slate-200 transition-colors cursor-pointer"
+            aria-label={playing ? 'Pause asset motion' : 'Play asset motion'}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-colors cursor-pointer"
           >
-            {playing ? <Pause className="w-3.5 h-3.5 text-[#E6C666]" /> : <Play className="w-3.5 h-3.5 text-emerald-400" />}
-            <span>{playing ? 'Pause Motion' : 'Play Motion'}</span>
+            {playing ? <Pause className="w-3 h-3 text-amber-300" /> : <Play className="w-3 h-3 text-emerald-400" />}
+            <span className="hidden sm:inline">{playing ? 'Pause' : 'Play'}</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleSimulate}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold text-white shadow-md active:scale-95 transition-all cursor-pointer ${
+              simulating
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-amber-500/25'
+                : 'bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 shadow-sky-500/20'
+            }`}
+          >
+            <Zap className="w-3 h-3 fill-current" />
+            <span>{simulating ? 'Pulsing…' : 'Simulate'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* COMPACT INTERACTIVE DIAGRAM STAGE */}
+      <div
+        ref={stageRef}
+        className="relative px-4 sm:px-6 py-5 md:h-[515px] flex flex-col justify-between"
+        style={{
+          backgroundColor: '#07090E',
+          backgroundImage:
+            'radial-gradient(circle at 22% 30%, rgba(56, 189, 248, 0.08) 0%, transparent 45%), radial-gradient(circle at 78% 70%, rgba(251, 191, 36, 0.06) 0%, transparent 45%), radial-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px)',
+          backgroundSize: '100% 100%, 100% 100%, 20px 20px',
+        }}
+      >
+        {/* Column Micro Headers */}
+        <div className="hidden md:grid grid-cols-12 gap-8 text-[10px] font-mono font-semibold tracking-widest uppercase text-slate-500 mb-2 px-1">
+          <div className="col-span-3">01 · USER</div>
+          <div className="col-span-5 text-amber-400/80">02 · SOROBAN CONTRACTS</div>
+          <div className="col-span-4">03 · DESTINATIONS</div>
+        </div>
+
+        {/* Dynamic SVG Bezier Wire + Glowing Circular Asset Ball Layer */}
+        <svg className="hidden md:block absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible">
+          <defs>
+            <filter id="nexusBallGlow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="2.6" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          {/* Base + Animated Dash Tracks */}
+          <g>
+            {geometries.map(({ wire, d }) => {
+              const on = isWireActive(wire, activeFlow, hoveredNode);
+              return (
+                <React.Fragment key={wire.id}>
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={wire.color}
+                    strokeWidth={1.6}
+                    strokeOpacity={on ? 0.24 : 0.04}
+                  />
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={wire.color}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    className={`nexus-wire-dash ${playing ? '' : 'paused'}`}
+                    style={{ opacity: on ? 0.92 : 0.09 }}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </g>
+
+          {/* 60fps Circular Glowing Asset Balls (mutated via RAF ref) */}
+          <g ref={pulsesGroupRef} filter="url(#nexusBallGlow)" />
+        </svg>
+
+        {/* Micro Floating Pill Badges on Wires */}
+        <div className="hidden md:block absolute inset-0 pointer-events-none z-20">
+          {geometries.map(({ wire, pillPos }) => {
+            if (!wire.pill) return null;
+            const on = isWireActive(wire, activeFlow, hoveredNode);
+            return (
+              <div
+                key={`pill-${wire.id}`}
+                className="absolute -translate-x-1/2 -translate-y-1/2 px-2 py-[2px] rounded-full font-mono text-[9.5px] font-bold tracking-[0.02em] whitespace-nowrap shadow-[0_3px_10px_rgba(0,0,0,0.75)] transition-opacity duration-300"
+                style={{
+                  left: `${pillPos.x}px`,
+                  top: `${pillPos.y + wire.dy}px`,
+                  background: wire.pillBg,
+                  border: `1px solid ${wire.pillBorder}`,
+                  color: wire.pillText,
+                  opacity: on ? 1 : 0.14,
+                }}
+              >
+                {wire.pill}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 3-COLUMN GLASS NODE GRID */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-10 items-center relative z-20">
+          {/* COLUMN 1: USER */}
+          <div className="md:col-span-3 flex flex-col justify-center">
+            <div
+              onMouseEnter={(e) =>
+                handleNodeEnter('wallet', 'FREIGHTER / GEMWALLET', 'Non-custodial 1-Click Soroban XDR Auth', e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('wallet', 'cyan')} p-3.5`}
+            >
+              <span data-port="p-wallet-1" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-sky-400 -right-1 top-[20%] z-30" />
+              <span data-port="p-wallet-2" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-emerald-400 -right-1 top-[44%] z-30" />
+              <span data-port="p-wallet-3" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-amber-400 -right-1 top-[66%] z-30" />
+              <span data-port="p-wallet-4" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-cyan-400 -right-1 top-[86%] z-30" />
+
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-mono font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                  <Lock className="w-2.5 h-2.5" />
+                  XDR
+                </span>
+              </div>
+
+              <div className="text-sm font-bold text-white leading-tight">Freighter / Gem</div>
+              <p className="text-[11px] text-slate-400 mt-0.5">1-Click Wallet Sign</p>
+
+              <div className="flex flex-wrap gap-1 mt-2.5">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                  XLM
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  $NXL
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  XRP
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* COLUMN 2: SOROBAN CONTRACTS */}
+          <div className="md:col-span-5 flex flex-col justify-between gap-3.5 h-full py-1">
+            {/* Top: NexusVault v2.0 */}
+            <a
+              href={CONTRACTS.vault.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onMouseEnter={(e) =>
+                handleNodeEnter('vault', `NEXUSVAULT · ${CONTRACTS.vault.short}`, '99.5% Treasury · 0.5% Pool · Mint/Burn Cap', e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('vault', 'gold')} p-3 block`}
+            >
+              <span data-port="p-vault-l" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-sky-400 -left-1 top-1/2 -translate-y-1/2 z-30" />
+              <span data-port="p-vault-rt" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-amber-400 -right-1 top-[32%] z-30" />
+              <span data-port="p-vault-rb" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-sky-400 -right-1 top-[70%] z-30" />
+              <span data-port="p-vault-b" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-emerald-400 left-1/2 -bottom-1 -translate-x-1/2 z-30" />
+
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white leading-tight flex items-center gap-1.5">
+                      <span>NexusVault v2.0</span>
+                      <ArrowUpRight className="w-3 h-3 text-slate-500" />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        VAULT
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-mono text-slate-300 bg-slate-800/90 border border-slate-700/70">
+                        <Code2 className="w-2.5 h-2.5 text-amber-400" />
+                        settle_order
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">{CONTRACTS.vault.short}</span>
+              </div>
+            </a>
+
+            {/* Middle: $NXL Ledger (Built-in SAC) */}
+            <a
+              href={CONTRACTS.nxlSac.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onMouseEnter={(e) =>
+                handleNodeEnter('token', `$NXL SAC · ${CONTRACTS.nxlSac.short}`, 'SEP-41 Token Ledger · Hard Cap 2,000,000 $NXL', e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('token', 'emerald')} p-3 block`}
+            >
+              <span data-port="p-token-l" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-emerald-400 -left-1 top-1/2 -translate-y-1/2 z-30" />
+              <span data-port="p-token-t" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-emerald-400 left-1/2 -top-1 -translate-x-1/2 z-30" />
+              <span data-port="p-token-b" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-emerald-400 left-1/2 -bottom-1 -translate-x-1/2 z-30" />
+              <span data-port="p-token-r" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-rose-400 -right-1 top-1/2 -translate-y-1/2 z-30" />
+
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white leading-tight flex items-center gap-1.5">
+                      <span>$NXL Ledger</span>
+                      <ArrowUpRight className="w-3 h-3 text-slate-500" />
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        SAC · 2M CAP
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">{CONTRACTS.nxlSac.short}</span>
+              </div>
+            </a>
+
+            {/* Bottom: NexusSwap v2.0 */}
+            <a
+              href={CONTRACTS.swap.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onMouseEnter={(e) =>
+                handleNodeEnter('swap', `NEXUSSWAP · ${CONTRACTS.swap.short}`, `x·y=k (${poolDisplay}) + 15m Escrow`, e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('swap', 'cyan')} p-3 block`}
+            >
+              <span data-port="p-swap-lt" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-amber-400 -left-1 top-[32%] z-30" />
+              <span data-port="p-swap-lb" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-cyan-400 -left-1 top-[72%] z-30" />
+              <span data-port="p-swap-t" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-emerald-400 left-1/2 -top-1 -translate-x-1/2 z-30" />
+              <span data-port="p-swap-rt" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-amber-400 -right-1 top-[32%] z-30" />
+              <span data-port="p-swap-rb" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-indigo-400 -right-1 top-[70%] z-30" />
+
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400 shrink-0">
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white leading-tight flex items-center gap-1.5">
+                      <span>NexusSwap v2.0</span>
+                      <ArrowUpRight className="w-3 h-3 text-slate-500" />
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                        AMM · {Math.round(poolStats.reserveXlm / 1000)}K:{Math.round(poolStats.reserveNxl / 1000)}K
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">{CONTRACTS.swap.short}</span>
+              </div>
+            </a>
+          </div>
+
+          {/* COLUMN 3: DESTINATIONS */}
+          <div className="md:col-span-4 flex flex-col justify-between gap-2.5 h-full py-0.5">
+            {/* Dest 1: Treasury */}
+            <div
+              onMouseEnter={(e) =>
+                handleNodeEnter('treasury', 'OWNER TREASURY', '99.5% Order Split + 0.25% AMM Swap Fee', e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('treasury', 'gold')} px-3 py-2.5 flex items-center justify-between gap-2`}
+            >
+              <span data-port="p-treasury-t" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-amber-400 -left-1 top-[32%] z-30" />
+              <span data-port="p-treasury-b" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-amber-400 -left-1 top-[72%] z-30" />
+
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <Crown className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-white">Treasury</span>
+              </div>
+              <span className="text-[10.5px] font-mono font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
+                99.5% + 0.25%
+              </span>
+            </div>
+
+            {/* Dest 2: Buyback Pool */}
+            <div
+              onMouseEnter={(e) =>
+                handleNodeEnter('buyback', 'BUYBACK RESERVE', '0.5% Checkout Fee -> $NXL Liquidity Backing', e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('buyback', 'cyan')} px-3 py-2.5 flex items-center justify-between gap-2`}
+            >
+              <span data-port="p-buyback" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-sky-400 -left-1 top-1/2 -translate-y-1/2 z-30" />
+
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400 shrink-0">
+                  <Shield className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-white">Buyback Pool</span>
+              </div>
+              <span className="text-[10.5px] font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/25">
+                0.5% Fee
+              </span>
+            </div>
+
+            {/* Dest 3: Burned */}
+            <div
+              onMouseEnter={(e) =>
+                handleNodeEnter('burn', 'DEFLATIONARY BURN', 'SEP-41 SAC::burn Permanent Supply Reduction', e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('burn', 'rose')} px-3 py-2.5 flex items-center justify-between gap-2`}
+            >
+              <span data-port="p-burn" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-rose-400 -left-1 top-1/2 -translate-y-1/2 z-30" />
+
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-400/30 flex items-center justify-center text-rose-400 shrink-0">
+                  <Flame className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-white">Burned</span>
+              </div>
+              <span className="text-[10.5px] font-mono font-bold text-rose-300 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25">
+                −$NXL
+              </span>
+            </div>
+
+            {/* Dest 4: XRPL Wallet */}
+            <div
+              onMouseEnter={(e) =>
+                handleNodeEnter('xrpl', 'XRPL TESTNET LEDGER', 'Atomic XRP Settlement · 15m Self-Refund Escrow', e)
+              }
+              onMouseMove={handleNodeMove}
+              onMouseLeave={handleNodeLeave}
+              className={`${getNodeClasses('xrpl', 'indigo')} px-3 py-2.5 flex items-center justify-between gap-2`}
+            >
+              <span data-port="p-xrpl" className="hidden md:block w-[7px] h-[7px] rounded-full absolute bg-[#07090E] border-2 border-indigo-400 -left-1 top-1/2 -translate-y-1/2 z-30" />
+
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center text-indigo-400 shrink-0">
+                  <Check className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-white">XRPL Wallet</span>
+              </div>
+              <span className="text-[10.5px] font-mono font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/25">
+                XRP · 15m Lock
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* COMPACT LIVE STATUS & DESCRIPTION FOOTER */}
+      <div className="px-4 py-3 sm:px-5 border-t border-slate-800/80 bg-[#07090E]/90 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+        <p className="text-[11px] text-slate-400 leading-relaxed max-w-2xl">
+          {FLOW_CAPTIONS[activeFlow]}
+        </p>
+        <div className="flex items-center gap-3 shrink-0 text-[11px] font-mono">
+          <span className="text-emerald-300 font-semibold">{poolDisplay}</span>
           <Link
             href="/swap"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#D4AF37] hover:bg-[#e5c158] px-3.5 py-2 text-xs font-semibold text-black transition-colors"
+            className="inline-flex items-center gap-1 text-amber-300 hover:text-amber-200 font-semibold transition-colors"
           >
-            <span>Try Live Swap</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>Try Live</span>
+            <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
       </div>
 
-      {/* Mode Selector Pills */}
-      <div className="border-b border-white/[0.06] px-4 py-3 sm:px-7 bg-[#090D14] flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {FLOW_TABS.map((tab) => {
-          const Icon = tab.icon;
-          const selected = mode === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setMode(tab.id)}
-              className={`shrink-0 inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all cursor-pointer border ${
-                selected
-                  ? 'border-[#D4AF37]/50 bg-[#D4AF37]/15 text-[#F4D984] shadow-sm'
-                  : 'border-white/[0.06] bg-white/[0.02] text-slate-400 hover:text-slate-200 hover:border-white/15'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{tab.shortLabel}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Interactive Animated SVG Canvas */}
-      <div
-        className="relative px-3 py-5 sm:px-6 sm:py-7 overflow-x-auto"
-        style={{
-          backgroundImage: 'radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px)',
-          backgroundSize: '22px 22px',
-        }}
-      >
-        <div className="min-w-[820px] max-w-[1120px] mx-auto">
-          <svg
-            viewBox="0 0 1080 500"
-            className="w-full h-auto block select-none"
-            role="img"
-            aria-label="Animated end-to-end NexusRail Soroban smart contract asset movement diagram"
-          >
-            <defs>
-              {/* Soft Glows */}
-              <filter id="glowGold" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-
-              {/* Animated Routes (Bezier Paths) */}
-              {/* 1. User -> NexusVault (Checkout / Burn-for-Bridge) */}
-              <path id="path-user-vault" d="M 216 205 C 285 205, 305 108, 395 108" />
-
-              {/* 2. User -> NexusSwap (AMM Swap / Bridge Escrow) */}
-              <path id="path-user-swap" d="M 216 270 C 285 270, 305 390, 395 390" />
-
-              {/* 3. NexusSwap -> User (Swapped Output Token Return) */}
-              <path id="path-swap-user" d="M 395 418 C 300 418, 280 296, 216 296" />
-
-              {/* 4. NexusVault -> Owner Treasury (99% Principal + 50% Fee) */}
-              <path id="path-vault-treasury" d="M 665 82 C 745 82, 765 72, 845 72" />
-
-              {/* 5. NexusVault -> $NXL Reserve (50% Buyback Fee) */}
-              <path id="path-vault-reserve" d="M 665 118 C 745 118, 765 190, 845 190" />
-
-              {/* 6. NexusVault <-> $NXL Token SAC (Mint / Burn Control) */}
-              <path id="path-vault-sac" d="M 515 162 L 515 218" />
-              <path id="path-sac-vault" d="M 545 218 L 545 162" />
-
-              {/* 7. $NXL Token SAC -> User (2% Cashback / Mint to User) */}
-              <path id="path-sac-user" d="M 410 250 C 330 250, 290 245, 216 245" />
-
-              {/* 8. $NXL Token SAC -> Burned Supply (Permanent Burn) */}
-              <path id="path-sac-burn" d="M 650 254 C 740 254, 765 304, 845 304" />
-
-              {/* 9. NexusSwap -> Owner Treasury (0.25% AMM Owner Fee) */}
-              <path id="path-swap-treasury" d="M 665 352 C 758 352, 770 96, 845 96" />
-
-              {/* 10. NexusSwap -> XRPL Ledger (Bridge Escrow -> XRP Payout) */}
-              <path id="path-swap-xrpl" d="M 665 408 C 745 408, 765 424, 845 424" />
-
-              {/* 11. NexusSwap <-> $NXL SAC (Pool Token Transfers) */}
-              <path id="path-swap-sac" d="M 530 338 L 530 294" />
-            </defs>
-
-            {/* Column Stage Labels */}
-            <text x="118" y="24" textAnchor="middle" fill="#64748B" fontSize="10" fontWeight="700" letterSpacing="1.6">
-              1. USER LAYER
-            </text>
-            <text x="530" y="24" textAnchor="middle" fill="#E6C666" fontSize="10" fontWeight="700" letterSpacing="1.6">
-              2. STELLAR SOROBAN CONTRACTS (LIVE TESTNET)
-            </text>
-            <text x="952" y="24" textAnchor="middle" fill="#64748B" fontSize="10" fontWeight="700" letterSpacing="1.6">
-              3. FINAL DESTINATIONS
-            </text>
-
-            {/* ===============================================================
-                CONNECTOR PIPES (Rendered beneath nodes & moving tokens)
-               =============================================================== */}
-
-            {/* Checkout / Burn: User -> NexusVault */}
-            <use
-              href="#path-user-vault"
-              fill="none"
-              stroke="#38BDF8"
-              strokeWidth={isCheckout || isBridge ? 2.5 : 1.5}
-              strokeDasharray="6 6"
-              opacity={pathOpacity(isCheckout || isBridge)}
-            />
-
-            {/* Swap / Escrow: User -> NexusSwap */}
-            <use
-              href="#path-user-swap"
-              fill="none"
-              stroke="#22D3EE"
-              strokeWidth={isSwap || isBridge ? 2.5 : 1.5}
-              strokeDasharray="6 6"
-              opacity={pathOpacity(isSwap || isBridge)}
-            />
-
-            {/* Swap Output: NexusSwap -> User */}
-            <use
-              href="#path-swap-user"
-              fill="none"
-              stroke="#E6C666"
-              strokeWidth={isSwap ? 2.5 : 1.5}
-              strokeDasharray="6 6"
-              opacity={pathOpacity(isSwap)}
-            />
-
-            {/* Checkout Split: NexusVault -> Treasury */}
-            <use
-              href="#path-vault-treasury"
-              fill="none"
-              stroke="#E6C666"
-              strokeWidth={isCheckout ? 2.5 : 1.5}
-              strokeDasharray="6 6"
-              opacity={pathOpacity(isCheckout)}
-            />
-
-            {/* Checkout Split: NexusVault -> Reserve */}
-            <use
-              href="#path-vault-reserve"
-              fill="none"
-              stroke="#38BDF8"
-              strokeWidth={isCheckout ? 2.5 : 1.5}
-              strokeDasharray="6 6"
-              opacity={pathOpacity(isCheckout)}
-            />
-
-            {/* Mint / Burn Control: NexusVault <-> NXL SAC */}
-            <use
-              href="#path-vault-sac"
-              fill="none"
-              stroke="#F43F5E"
-              strokeWidth={isSupply || isBridge ? 2.5 : 1.5}
-              strokeDasharray="4 4"
-              opacity={pathOpacity(isSupply || isBridge)}
-            />
-            <use
-              href="#path-sac-vault"
-              fill="none"
-              stroke="#34D399"
-              strokeWidth={isSupply || isCheckout ? 2.5 : 1.5}
-              strokeDasharray="4 4"
-              opacity={pathOpacity(isSupply || isCheckout)}
-            />
-
-            {/* Cashback / Mint: NXL SAC -> User */}
-            <use
-              href="#path-sac-user"
-              fill="none"
-              stroke="#34D399"
-              strokeWidth={isCheckout || isSupply ? 2.5 : 1.5}
-              strokeDasharray="6 6"
-              opacity={pathOpacity(isCheckout || isSupply)}
-            />
-
-            {/* Permanent Burn: NXL SAC -> Burned Supply */}
-            <use
-              href="#path-sac-burn"
-              fill="none"
-              stroke="#FB7185"
-              strokeWidth={isSupply || isBridge ? 2.5 : 1.5}
-              strokeDasharray="5 5"
-              opacity={pathOpacity(isSupply || isBridge)}
-            />
-
-            {/* Swap Fee: NexusSwap -> Treasury */}
-            <use
-              href="#path-swap-treasury"
-              fill="none"
-              stroke="#D4AF37"
-              strokeWidth={isSwap ? 2 : 1.25}
-              strokeDasharray="5 5"
-              opacity={pathOpacity(isSwap)}
-            />
-
-            {/* Bridge Payout: NexusSwap -> XRPL */}
-            <use
-              href="#path-swap-xrpl"
-              fill="none"
-              stroke="#60A5FA"
-              strokeWidth={isBridge ? 2.5 : 1.5}
-              strokeDasharray="6 6"
-              opacity={pathOpacity(isBridge)}
-            />
-
-            {/* Pool Token Sync: NexusSwap -> NXL SAC */}
-            <use
-              href="#path-swap-sac"
-              fill="none"
-              stroke="#34D399"
-              strokeWidth={isSwap ? 2 : 1.25}
-              strokeDasharray="4 4"
-              opacity={pathOpacity(isSwap)}
-            />
-
-            {/* ===============================================================
-                NODE 1: USER WALLET (LEFT)
-               =============================================================== */}
-            <g opacity={nodeOpacity(true)}>
-              <rect
-                x="20"
-                y="175"
-                width="196"
-                height="152"
-                rx="18"
-                fill="#0F1520"
-                stroke="#38BDF8"
-                strokeOpacity="0.45"
-                strokeWidth="1.5"
-              />
-              <rect x="34" y="191" width="74" height="20" rx="10" fill="#0EA5E9" fillOpacity="0.16" />
-              <text x="71" y="204.5" textAnchor="middle" fill="#7DD3FC" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                USER WALLET
-              </text>
-              <text x="34" y="232" fill="#FFFFFF" fontSize="15" fontWeight="700">
-                Freighter / Gem
-              </text>
-              <text x="34" y="252" fill="#94A3B8" fontSize="11">
-                Signs 1-click Soroban XDR
-              </text>
-              <line x1="34" y1="268" x2="202" y2="268" stroke="#1E293B" strokeWidth="1" />
-              <text x="34" y="288" fill="#E2E8F0" fontSize="10.5" fontFamily="monospace">
-                Holds: XLM · NXL · XRP
-              </text>
-              <text x="34" y="308" fill="#34D399" fontSize="10" fontFamily="monospace">
-                Non-custodial auth
-              </text>
-            </g>
-
-            {/* ===============================================================
-                NODE 2: NEXUS VAULT CONTRACT (CENTER TOP)
-               =============================================================== */}
-            <g opacity={nodeOpacity(isCheckout || isSupply || isBridge)}>
-              <rect
-                x="395"
-                y="46"
-                width="270"
-                height="116"
-                rx="18"
-                fill="#111622"
-                stroke="#D4AF37"
-                strokeOpacity={isCheckout || isSupply ? 0.85 : 0.35}
-                strokeWidth="1.75"
-              />
-              <rect x="411" y="60" width="110" height="20" rx="10" fill="#D4AF37" fillOpacity="0.18" />
-              <text x="466" y="73.5" textAnchor="middle" fill="#F4D984" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                CONTRACT #1 · VAULT
-              </text>
-              <text x="649" y="73.5" textAnchor="end" fill="#94A3B8" fontSize="9.5" fontFamily="monospace">
-                {CONTRACTS.vault.short}
-              </text>
-              <text x="411" y="101" fill="#FFFFFF" fontSize="15.5" fontWeight="700">
-                NexusVault v2.0
-              </text>
-              <text x="411" y="120" fill="#94A3B8" fontSize="11">
-                Checkout 50/50 Split · Refunds · RBAC
-              </text>
-              <text x="411" y="142" fill="#E6C666" fontSize="10" fontFamily="monospace">
-                settle_order · mint_nxl · burn_for_bridge
-              </text>
-            </g>
-
-            {/* ===============================================================
-                NODE 3: $NXL TOKEN SAC (CENTER MIDDLE — BUILT-IN TOKEN LAYER)
-               =============================================================== */}
-            <g opacity={nodeOpacity(true)}>
-              <rect
-                x="410"
-                y="218"
-                width="240"
-                height="76"
-                rx="16"
-                fill="#0D1917"
-                stroke="#34D399"
-                strokeOpacity="0.65"
-                strokeWidth="1.5"
-              />
-              <text x="426" y="238" fill="#6EE7B7" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                BUILT-IN SEP-41 TOKEN SAC · {CONTRACTS.nxlSac.short}
-              </text>
-              <text x="426" y="259" fill="#FFFFFF" fontSize="14.5" fontWeight="700">
-                $NXL Token Ledger
-              </text>
-              <text x="426" y="278" fill="#A7F3D0" fontSize="10" fontFamily="monospace">
-                Hard Cap: 2,000,000 NXL · Admin: NexusVault
-              </text>
-            </g>
-
-            {/* ===============================================================
-                NODE 4: NEXUS SWAP CONTRACT (CENTER BOTTOM)
-               =============================================================== */}
-            <g opacity={nodeOpacity(isSwap || isBridge)}>
-              <rect
-                x="395"
-                y="338"
-                width="270"
-                height="122"
-                rx="18"
-                fill="#0F1724"
-                stroke="#22D3EE"
-                strokeOpacity={isSwap || isBridge ? 0.85 : 0.35}
-                strokeWidth="1.75"
-              />
-              <rect x="411" y="352" width="114" height="20" rx="10" fill="#22D3EE" fillOpacity="0.16" />
-              <text x="468" y="365.5" textAnchor="middle" fill="#67E8F9" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                CONTRACT #2 · AMM
-              </text>
-              <text x="649" y="365.5" textAnchor="end" fill="#94A3B8" fontSize="9.5" fontFamily="monospace">
-                {CONTRACTS.swap.short}
-              </text>
-              <text x="411" y="393" fill="#FFFFFF" fontSize="15.5" fontWeight="700">
-                NexusSwap &amp; Escrow v2.0
-              </text>
-              <text x="411" y="413" fill="#67E8F9" fontSize="11" fontFamily="monospace">
-                Live Pool: {poolStats.reserveXlm.toLocaleString()} XLM / {poolStats.reserveNxl.toLocaleString()} NXL
-              </text>
-              <text x="411" y="436" fill="#94A3B8" fontSize="10" fontFamily="monospace">
-                swap_exact_in (x·y=k) · lock_bridge_escrow
-              </text>
-            </g>
-
-            {/* ===============================================================
-                RIGHT DESTINATIONS (4 OUTCOME CARDS)
-               =============================================================== */}
-
-            {/* Dest 1: Owner Treasury */}
-            <g opacity={nodeOpacity(isCheckout || isSwap)}>
-              <rect
-                x="845"
-                y="42"
-                width="215"
-                height="82"
-                rx="14"
-                fill="#111520"
-                stroke="#D4AF37"
-                strokeOpacity="0.5"
-                strokeWidth="1.4"
-              />
-              <text x="860" y="64" fill="#F4D984" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                OWNER TREASURY
-              </text>
-              <text x="860" y="84" fill="#FFFFFF" fontSize="13.5" fontWeight="700">
-                99% Principal + 50% Fee
-              </text>
-              <text x="860" y="105" fill="#94A3B8" fontSize="10" fontFamily="monospace">
-                + 0.25% AMM Swap Revenue
-              </text>
-            </g>
-
-            {/* Dest 2: $NXL Buyback Reserve */}
-            <g opacity={nodeOpacity(isCheckout)}>
-              <rect
-                x="845"
-                y="150"
-                width="215"
-                height="82"
-                rx="14"
-                fill="#0F1622"
-                stroke="#38BDF8"
-                strokeOpacity="0.5"
-                strokeWidth="1.4"
-              />
-              <text x="860" y="172" fill="#7DD3FC" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                $NXL RESERVE VAULT
-              </text>
-              <text x="860" y="192" fill="#FFFFFF" fontSize="13.5" fontWeight="700">
-                50% Fee Buyback Pool
-              </text>
-              <text x="860" y="213" fill="#94A3B8" fontSize="10" fontFamily="monospace">
-                Strengthens $NXL Backing
-              </text>
-            </g>
-
-            {/* Dest 3: Permanent Burned Supply */}
-            <g opacity={nodeOpacity(isSupply || isBridge)}>
-              <rect
-                x="845"
-                y="262"
-                width="215"
-                height="82"
-                rx="14"
-                fill="#1B1015"
-                stroke="#FB7185"
-                strokeOpacity="0.55"
-                strokeWidth="1.4"
-              />
-              <text x="860" y="284" fill="#FDA4AF" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                DEFLATIONARY BURN
-              </text>
-              <text x="860" y="304" fill="#FFFFFF" fontSize="13.5" fontWeight="700">
-                Destroyed On-Chain
-              </text>
-              <text x="860" y="325" fill="#FDA4AF" fontSize="10" fontFamily="monospace">
-                Removes $NXL from Supply
-              </text>
-            </g>
-
-            {/* Dest 4: XRPL Cross-Chain Payout */}
-            <g opacity={nodeOpacity(isBridge)}>
-              <rect
-                x="845"
-                y="376"
-                width="215"
-                height="86"
-                rx="14"
-                fill="#0D1729"
-                stroke="#60A5FA"
-                strokeOpacity="0.6"
-                strokeWidth="1.4"
-              />
-              <text x="860" y="398" fill="#93C5FD" fontSize="9.5" fontWeight="700" fontFamily="monospace">
-                XRPL TESTNET LEDGER
-              </text>
-              <text x="860" y="418" fill="#FFFFFF" fontSize="13.5" fontWeight="700">
-                User Receives XRP
-              </text>
-              <text x="860" y="439" fill="#93C5FD" fontSize="10" fontFamily="monospace">
-                15m Self-Refund Escrow Safe
-              </text>
-            </g>
-
-            {/* ===============================================================
-                ANIMATED MOVING ASSET TOKENS (60fps SMIL animateMotion)
-               =============================================================== */}
-            <MovingToken
-              pathId="path-user-vault"
-              label={mode === 'bridge' ? 'NXL' : 'XLM'}
-              fill="#38BDF8"
-              dur="3.2s"
-              active={isCheckout || isBridge}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-vault-treasury"
-              label="99.5%"
-              fill="#E6C666"
-              dur="2.8s"
-              begin="0.6s"
-              active={isCheckout}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-vault-reserve"
-              label="0.5%"
-              fill="#38BDF8"
-              dur="3.0s"
-              begin="0.8s"
-              active={isCheckout}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-user-swap"
-              label="XLM"
-              fill="#22D3EE"
-              dur="3.2s"
-              begin="0.2s"
-              active={isSwap || isBridge}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-swap-user"
-              label="NXL"
-              fill="#E6C666"
-              dur="3.4s"
-              begin="1.4s"
-              active={isSwap}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-swap-treasury"
-              label="0.25%"
-              fill="#D4AF37"
-              dur="4.2s"
-              begin="1.1s"
-              active={isSwap}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-sac-user"
-              label={mode === 'supply' ? 'MINT' : '+2% NXL'}
-              fill="#34D399"
-              dur="3.4s"
-              begin="1.2s"
-              active={isCheckout || isSupply}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-sac-burn"
-              label="BURN"
-              fill="#FB7185"
-              textColor="#FFFFFF"
-              dur="3.1s"
-              begin="0.9s"
-              active={isSupply || isBridge}
-              playing={playing}
-            />
-            <MovingToken
-              pathId="path-swap-xrpl"
-              label="XRP"
-              fill="#60A5FA"
-              dur="3.0s"
-              begin="1.0s"
-              active={isBridge}
-              playing={playing}
-            />
-          </svg>
-        </div>
-      </div>
-
-      {/* Step-by-Step Guide Strip (Responsive for Mobile + Desktop) */}
-      <div className="border-t border-white/[0.06] bg-[#0B0F17] px-5 py-5 sm:px-7">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {activeTab.steps.map((step) => (
-            <div
-              key={step.num}
-              className="rounded-xl border border-white/[0.06] bg-[#080B11] p-3.5 space-y-1.5"
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-mono font-bold ${step.accent}`}>STEP {step.num}</span>
-                <Sparkles className="w-3 h-3 text-slate-600" />
-              </div>
-              <p className="text-xs font-semibold text-white">{step.title}</p>
-              <p className="text-[11px] text-slate-400 leading-relaxed">{step.detail}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Live Contract Explorer Strip */}
-      <div className="border-t border-white/[0.06] bg-[#070A0F] px-5 py-3.5 sm:px-7 flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-slate-400">
-          <span className="inline-flex items-center gap-1.5 text-emerald-300 font-semibold">
-            <Coins className="w-3.5 h-3.5" />
-            Live Pool: {poolStats.reserveXlm.toLocaleString()} XLM / {poolStats.reserveNxl.toLocaleString()} NXL (1:1)
-          </span>
-          <a
-            href={CONTRACTS.vault.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 hover:text-[#F4D984] transition-colors"
-          >
-            NexusVault ({CONTRACTS.vault.short}) <ArrowUpRight className="w-3 h-3" />
-          </a>
-          <a
-            href={CONTRACTS.swap.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 hover:text-cyan-300 transition-colors"
-          >
-            NexusSwap ({CONTRACTS.swap.short}) <ArrowUpRight className="w-3 h-3" />
-          </a>
-          <a
-            href={CONTRACTS.nxlSac.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 hover:text-emerald-300 transition-colors"
-          >
-            $NXL SAC ({CONTRACTS.nxlSac.short}) <ArrowUpRight className="w-3 h-3" />
-          </a>
-        </div>
-        <Link
-          href="/store"
-          className="text-[#E6C666] hover:text-[#F4D984] inline-flex items-center gap-1 font-semibold"
+      {/* FLOATING MICRO HOVER TOOLTIP */}
+      {tooltip.visible && (
+        <div
+          className="fixed pointer-events-none z-50 rounded-lg px-2.5 py-1.5 text-[11px] font-mono bg-[#090D18]/95 backdrop-blur-md border border-sky-400/40 shadow-[0_10px_25px_rgba(0,0,0,0.8)]"
+          style={{
+            left: `${Math.min(tooltip.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 240)}px`,
+            top: `${Math.min(tooltip.y + 14, (typeof window !== 'undefined' ? window.innerHeight : 800) - 64)}px`,
+          }}
         >
-          Test Atomic Checkout <ArrowRight className="w-3 h-3" />
-        </Link>
-      </div>
+          <div className="font-bold text-sky-300">{tooltip.addr}</div>
+          <div className="text-slate-300 text-[10px] mt-0.5">{tooltip.formula}</div>
+        </div>
+      )}
     </div>
   );
 }
