@@ -1,16 +1,19 @@
 import { Router, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { ProductService } from '../services/products.js';
-import { AIRouterService } from '../services/ai/aiRouter.js';
+import { AIRouterService, type AgentChatMessage } from '../services/ai/aiRouter.js';
 import { ProposalLockManager } from '../agent/proposalLock.js';
+import { AgentToolRegistry } from '../agent/toolRegistry.js';
 import { walletService } from '../services/wallet.js';
-import { MongoAuditLogger, MongoService, MongoOrderDoc } from '../services/mongo.js';
+import { MongoAuditLogger, MongoService, MongoOrderDoc, MongoUserHoldingDoc, MongoPortfolioEventDoc } from '../services/mongo.js';
 import { getFxQuote } from '../services/market.js';
 import { OrderSequenceService } from '../services/orderSequence.js';
 import { settlementEmitter } from '../services/settlementEvents.js';
 import { stellarProvider, xrplProvider } from '../services/crypto/index.js';
 import { NrTokenService, NR_MICRO_SCALE } from '../services/nrTokenService.js';
 import { PortfolioService } from '../services/portfolioService.js';
+import { CouponService } from '../services/couponService.js';
+import { TreasuryService } from '../services/treasuryService.js';
 import type { DbProduct } from '../types/index.js';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -476,26 +479,154 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
     }
 
     // =========================================================================
-    // Standard Assistant Chat Flow
+    // INTENT 4B: Discount Coupon Bargain (Module 5 + Module 7)
     // =========================================================================
-    let aiReply = 'I am your NexusRail Autonomous Commerce Agent. You can ask me to "Add order for 2 NXL tokens", "Show my orders", "Pay for order #...", or "Show my balance".';
+    if (lower.includes('coupon') || lower.includes('discount') || lower.includes('promo') || lower.includes('bargain')) {
+      const coupon = await CouponService.issueAgentBargainCoupon(userId);
+      const reply = `Here is your verified AI Assistant promo code: **${coupon.code}** (${coupon.discountPercent}% off orders $10+).\n\nApply **${coupon.code}** on the /cart page before checkout — you'll also earn automatic 2% $NXL cashback when paid!`;
+      MongoAuditLogger.logAgentTrace({
+        userId,
+        sessionId: `sess_${userId}`,
+        prompt: message,
+        response: reply,
+        toolsInvoked: ['negotiate_discount_coupon'],
+        latencyMs: 25,
+      }).catch(console.error);
+      return res.json({ success: true, reply, coupon });
+    }
+
+    // =========================================================================
+    // INTENT 4C: Conversational Swap Proposal (e.g. "Swap 20 XLM to NXL")
+    // =========================================================================
+    const swapMatch = lower.match(/\bswap\s+(\d+(?:\.\d+)?)\s*(usd|xlm|xrp|nxl|nr)\s*(?:to|for|into|->)\s*(usd|xlm|xrp|nxl|nr)\b/i);
+    if (swapMatch) {
+      const amount = Number(swapMatch[1]);
+      const normalize = (s: string) => (s.toUpperCase() === 'NR' ? 'NXL' : s.toUpperCase()) as 'USD' | 'XLM' | 'XRP' | 'NXL';
+      const fromAsset = normalize(swapMatch[2]);
+      const toAsset = normalize(swapMatch[3]);
+      try {
+        const swapRes = await AgentToolRegistry.createSwapProposal({ userId, fromAsset, toAsset, amount });
+        const reply = `Swap proposal ready: **${amount} ${fromAsset} -> ${swapRes.quote.receiveAmount.toFixed(4)} ${toAsset}** (Price impact ${swapRes.quote.priceImpactPercent.toFixed(2)}%).\n\nPlease review and click **Approve Swap** below to execute (lock expires in 5 minutes).`;
+        MongoAuditLogger.logAgentTrace({
+          userId,
+          sessionId: `sess_${userId}`,
+          prompt: message,
+          response: reply,
+          toolsInvoked: ['propose_token_swap'],
+          latencyMs: 40,
+        }).catch(console.error);
+        return res.json({ success: true, reply, proposal: swapRes.proposal });
+      } catch (swapErr: any) {
+        return res.json({ success: true, reply: `Could not quote swap: ${swapErr.message}` });
+      }
+    }
+
+    // =========================================================================
+    // INTENT 4D: Custom AI Smart Basket Builder (e.g. "Build $100 low-risk basket")
+    // =========================================================================
+    if (lower.includes('basket') && (lower.includes('build') || lower.includes('create') || lower.includes('custom') || lower.includes('invest'))) {
+      const budgetMatch = lower.match(/\$?\s*(\d+(?:\.\d+)?)/);
+      const budgetUsd = budgetMatch ? Number(budgetMatch[1]) : 100;
+      const riskProfile: 'conservative' | 'balanced' | 'growth' =
+        lower.includes('low') || lower.includes('safe') || lower.includes('conservative')
+          ? 'conservative'
+          : lower.includes('high') || lower.includes('growth') || lower.includes('aggressive')
+          ? 'growth'
+          : 'balanced';
+
+      try {
+        const basketRes = await AgentToolRegistry.createCustomBasketProposal({ userId, budgetUsd, riskProfile });
+        const reply = `I built a **${riskProfile}** Smart Basket for **$${budgetUsd.toFixed(2)} USD**:\n• ${basketRes.summary}\n\nClick **Approve & Invest** below to confirm (plus earn 2% $NXL cashback).`;
+        MongoAuditLogger.logAgentTrace({
+          userId,
+          sessionId: `sess_${userId}`,
+          prompt: message,
+          response: reply,
+          toolsInvoked: ['propose_custom_ai_basket'],
+          latencyMs: 65,
+        }).catch(console.error);
+        return res.json({ success: true, reply, proposal: basketRes.proposal });
+      } catch (bErr: any) {
+        return res.json({ success: true, reply: `Could not build basket: ${bErr.message}` });
+      }
+    }
+
+    // =========================================================================
+    // Standard Assistant Chat Flow (Groq Native Tool Calling + Safe Fallback)
+    // =========================================================================
+    let aiReply = 'I am your NexusRail Autonomous Commerce Agent. You can ask me to "Swap 20 XLM to NXL", "Build $100 low-risk basket", "Get a discount code", "Show my orders", or "Show my balance".';
     let latencyMs = 120;
+    let modelUsed: string | undefined;
+    const toolsInvoked: string[] = [];
+    let generatedProposal: any = undefined;
 
     try {
-      const aiRes = await AIRouterService.chatCompletion([
+      const conversation: AgentChatMessage[] = [
         {
           role: 'system',
           content:
-            'You are the NexusRail commerce assistant. Help users manage multi-chain orders, query live token holdings on Stellar and XRPL, and execute non-custodial proposals.',
+            'You are the NexusRail AI Commerce Assistant. Use the provided tools to look up live catalog products, portfolio balances, market rates, token swaps, custom AI baskets, and discount coupons. Keep replies concise and helpful.',
         },
         { role: 'user', content: message },
-      ]);
-      aiReply = aiRes.reply;
-      latencyMs = aiRes.latencyMs;
+      ];
+
+      const tools = AgentToolRegistry.getToolDefinitions();
+      const firstPass = await AIRouterService.chatWithTools({ messages: conversation, tools });
+      latencyMs = firstPass.latencyMs;
+      modelUsed = firstPass.modelUsed;
+
+      if (firstPass.toolCalls.length > 0) {
+        conversation.push({
+          role: 'assistant',
+          content: firstPass.content,
+          tool_calls: firstPass.toolCalls,
+        });
+
+        for (const call of firstPass.toolCalls.slice(0, 3)) {
+          const toolName = call.function.name;
+          toolsInvoked.push(toolName);
+          let parsedArgs: Record<string, any> = {};
+          try {
+            parsedArgs = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+          } catch {
+            parsedArgs = {};
+          }
+
+          try {
+            const toolOut: any = await AgentToolRegistry.executeTool(toolName, parsedArgs, userId);
+            if (toolOut?.proposal && !generatedProposal) {
+              generatedProposal = toolOut.proposal;
+            }
+            conversation.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: JSON.stringify(toolOut.result ?? toolOut),
+            });
+          } catch (toolErr: any) {
+            conversation.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: JSON.stringify({ error: toolErr?.message || 'Tool execution failed' }),
+            });
+          }
+        }
+
+        const secondPass = await AIRouterService.chatWithTools({
+          messages: conversation,
+          tools,
+          toolChoice: 'none',
+        });
+        latencyMs += secondPass.latencyMs;
+        if (secondPass.content) {
+          aiReply = secondPass.content;
+        }
+      } else if (firstPass.content) {
+        aiReply = firstPass.content;
+      }
     } catch {
       if (lower.includes('catalog') || lower.includes('product')) {
         const catalog = await ProductService.getActiveProducts();
-        aiReply = `Available in catalog: ${catalog.map((p) => `${p.title} ($${(p.price_cents / 100).toFixed(2)})`).join(', ')}`;
+        aiReply = `Available in catalog: ${catalog.slice(0, 8).map((p) => `${p.title} ($${(p.price_cents / 100).toFixed(2)})`).join(', ')}`;
       }
     }
 
@@ -505,12 +636,17 @@ agentRouter.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Re
       sessionId: `sess_${userId}`,
       prompt: message,
       response: aiReply,
+      toolsInvoked: toolsInvoked.length > 0 ? toolsInvoked : undefined,
+      modelUsed,
       latencyMs,
     }).catch(console.error);
 
     return res.json({
       success: true,
       reply: aiReply,
+      proposal: generatedProposal,
+      toolsInvoked,
+      modelUsed,
       latencyMs,
     });
   } catch (error: any) {
@@ -672,6 +808,143 @@ agentRouter.post('/confirm', requireAuth, async (req: AuthenticatedRequest, res:
           } catch {}
 
           successMessage = `Payment of $${(priceCents / 100).toFixed(2)} USD for Order ${existingOrder.order_number} authorized and settled!`;
+        } else if (action === 'SWAP_ASSETS') {
+          const fromAsset = String(payload.fromAsset || 'USD').toUpperCase() as 'USD' | 'XLM' | 'XRP' | 'NXL';
+          const toAsset = String(payload.toAsset || 'NXL').toUpperCase() as 'USD' | 'XLM' | 'XRP' | 'NXL';
+          const amount = Number(payload.amount || 0);
+
+          const { order: swapOrder } = await NrTokenService.executeNrSwap({
+            userId,
+            fromAsset,
+            toAsset,
+            amount,
+          });
+          executedTxHash = swapOrder.payoutTxHash || swapOrder.journalEntry || executedTxHash;
+          successMessage = `Swapped ${swapOrder.payAmount} ${swapOrder.fromAsset} -> ${swapOrder.receiveAmount.toFixed(4)} ${swapOrder.toAsset} successfully!`;
+        } else if (action === 'CREATE_CUSTOM_BASKET') {
+          const priceCents = Number(payload.priceCents || 0);
+          const title = String(payload.title || 'AI Custom Basket');
+          const allocations = Array.isArray(payload.allocations) ? (payload.allocations as any[]) : [];
+
+          if (!Number.isFinite(priceCents) || priceCents < 1000 || priceCents > MAX_TRANSACTION_LIMIT_CENTS) {
+            throw new Error(`Custom basket amount must be between $10 and $${MAX_TRANSACTION_LIMIT_CENTS / 100}.`);
+          }
+
+          const userBalance = await walletService.getBalance(userId);
+          const canDebitInternal = (userBalance.USD || 0) >= priceCents;
+          const status: 'PAID' | 'PENDING' = canDebitInternal ? 'PAID' : 'PENDING';
+
+          if (canDebitInternal) {
+            await walletService.debitBalance(userId, priceCents, 'USD', proposal.id, session);
+          }
+
+          const orderId = crypto.randomUUID();
+          const orderNumber = await OrderSequenceService.getNextOrderNumber();
+          const now = new Date().toISOString();
+
+          executedOrder = {
+            id: orderId,
+            user_id: userId,
+            order_number: orderNumber,
+            total_cents: priceCents,
+            items: [
+              {
+                sku: 'AI-CUSTOM-BASKET',
+                title,
+                qty: 1,
+                unit_price_cents: priceCents,
+              },
+            ],
+            payment_rail: 'INTERNAL_USD',
+            status,
+            tx_hash: status === 'PAID' ? executedTxHash : undefined,
+            created_at: now,
+            updated_at: now,
+          };
+
+          const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+          await ordersCol.insertOne(executedOrder as any, { session });
+
+          if (status === 'PAID') {
+            // Credit decomposed custom allocations directly into user_holdings
+            const holdingsCol = await MongoService.getCollection<MongoUserHoldingDoc>('user_holdings');
+            const eventsCol = await MongoService.getCollection<MongoPortfolioEventDoc>('portfolio_events');
+
+            for (const alloc of allocations) {
+              const deltaQty = Number(alloc.unitQty || 0);
+              const deltaCostCents = Number(alloc.valueCents || 0);
+              if (deltaQty <= 0) continue;
+
+              const existing = await holdingsCol.findOne(
+                { user_id: userId, symbol: alloc.symbol },
+                { session }
+              );
+              const unitPriceCents = Math.max(1, Math.round(deltaCostCents / deltaQty));
+
+              if (existing) {
+                const newQty = Number((existing.quantity + deltaQty).toFixed(6));
+                const newCost = existing.total_cost_cents + deltaCostCents;
+                await holdingsCol.updateOne(
+                  { _id: existing._id },
+                  {
+                    $set: {
+                      quantity: newQty,
+                      total_cost_cents: newCost,
+                      avg_buy_price_cents: Math.round(newCost / Math.max(0.000001, newQty)),
+                      updated_at: now,
+                    },
+                  },
+                  { session }
+                );
+              } else {
+                await holdingsCol.insertOne(
+                  {
+                    id: `hld_${crypto.randomUUID()}`,
+                    user_id: userId,
+                    symbol: alloc.symbol,
+                    label: alloc.label || alloc.symbol,
+                    quantity: deltaQty,
+                    total_cost_cents: deltaCostCents,
+                    avg_buy_price_cents: unitPriceCents,
+                    realized_pnl_cents: 0,
+                    updated_at: now,
+                  },
+                  { session }
+                );
+              }
+
+              await eventsCol.insertOne(
+                {
+                  id: `pevt_${crypto.randomUUID()}`,
+                  user_id: userId,
+                  type: 'ACQUIRE_ORDER',
+                  symbol: alloc.symbol,
+                  quantity_delta: deltaQty,
+                  unit_price_cents: unitPriceCents,
+                  total_usd_cents: deltaCostCents,
+                  fee_cents: 0,
+                  reference_id: orderNumber,
+                  created_at: now,
+                },
+                { session }
+              );
+            }
+
+            // Award automatic 2% $NXL cashback & record 0.25% AI execution fee in Treasury
+            await CouponService.awardOrderCashback(executedOrder).catch(() => {});
+            const aiFeeCents = Math.max(1, Math.round(priceCents * 0.0025));
+            await TreasuryService.recordRevenueEvent({
+              sourceType: 'AI_EXECUTION',
+              referenceId: orderNumber,
+              grossCents: priceCents,
+              feeCents: aiFeeCents,
+              rail: 'INTERNAL',
+            }).catch(() => {});
+
+            successMessage = `Custom AI Basket ${orderNumber} ($${(priceCents / 100).toFixed(2)}) purchased and credited to your live portfolio!`;
+          } else {
+            successMessage = `Custom AI Basket ${orderNumber} created as PENDING (add USD balance to settle instantly).`;
+          }
         } else {
           throw new Error(`Unsupported proposal action: ${action}`);
         }

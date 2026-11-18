@@ -1,11 +1,11 @@
 import crypto from 'crypto';
 import type { ClientSession } from 'mongodb';
-import { MongoService, MongoProposalDoc } from '../services/mongo.js';
+import { MongoService, MongoProposalDoc, type ProposalAction } from '../services/mongo.js';
 
 export class ProposalLockManager {
   static async createProposal(
     userId: string,
-    action: 'PURCHASE_ORDER' | 'DEPOSIT_FUNDS' | 'PAY_ORDER',
+    action: ProposalAction,
     payload: Record<string, unknown>
   ) {
     const proposalId = `prop_${crypto.randomBytes(8).toString('hex')}`;

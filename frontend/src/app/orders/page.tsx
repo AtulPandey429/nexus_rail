@@ -26,62 +26,35 @@ const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-CABLES': '/products/rail-cables.png',
 };
 
-const INITIAL_MOCK_ORDERS = [
-  {
-    id: '#NR8K2P9X',
-    orderNumber: '#NR8K2P9X',
-    totalCents: 20002,
-    rail: 'STELLAR',
-    token: 'XLM',
-    status: 'PAID',
-    createdAt: '2026-10-18T14:32:24Z',
-    txHash: '8fa2b109c91d4e02aaef06aa74b18086343e6f7df6f4a32570e361d2ed4ecf0946',
-    ledgerSequence: '5,284,901',
-    items: [
-      { sku: 'RAIL-ONE', title: 'Rail One', description: 'Graphite · Dual-Rail Processor', qty: 1, unit_price_cents: 12900 },
-      { sku: 'RELAY-MAT', title: 'Relay Desk Mat', description: 'Charcoal · 80 × 40 cm', qty: 1, unit_price_cents: 3900 },
-      { sku: 'NEXUS-TEE', title: 'Nexus Tee', description: 'Washed Black · Size M', qty: 1, unit_price_cents: 3200 },
-    ],
-  },
-  {
-    id: '#NR3M7V9Q',
-    orderNumber: '#NR3M7V9Q',
-    totalCents: 5801,
-    rail: 'XRPL',
-    token: 'XRP',
-    status: 'PAID',
-    createdAt: '2026-10-17T09:41:10Z',
-    txHash: '2F84AE95420138AC529524584288424AE01488204928A4081024881024881024',
-    ledgerSequence: '5,280,119',
-    items: [
-      { sku: 'NODE-STAND', title: 'Node Stand', description: 'Anodized aluminum', qty: 1, unit_price_cents: 5800 },
-    ],
-  },
-  {
-    id: '#NR9W2F4L',
-    orderNumber: '#NR9W2F4L',
-    totalCents: 3200,
-    rail: 'STELLAR',
-    token: 'XLM',
-    status: 'PAID',
-    createdAt: '2026-10-15T11:06:00Z',
-    txHash: '19ef47b38c201d4a991823101831821038102381203812038120381023810238',
-    ledgerSequence: '5,269,440',
-    items: [
-      { sku: 'NEXUS-TEE', title: 'Nexus Tee', description: 'Washed Black · Size M', qty: 1, unit_price_cents: 3200 },
-    ],
-  },
-];
+const SETTLED_STATUSES = ['PAID', 'FULFILLING', 'FULFILLED'];
+
+type RailFilter = 'ALL' | 'STELLAR' | 'XRPL' | 'OTHER';
+
+function matchesRailFilter(rail: string, filter: RailFilter) {
+  const value = rail.toUpperCase();
+  if (filter === 'ALL') return true;
+  if (filter === 'STELLAR') return /STELLAR|XLM|USDC/.test(value);
+  if (filter === 'XRPL') return /XRPL|XRP|RLUSD/.test(value);
+  return !/STELLAR|XLM|USDC|XRPL|XRP|RLUSD/.test(value);
+}
+
+function explorerUrlForRail(rail: string, txHash?: string) {
+  if (!txHash) return '';
+  const value = rail.toUpperCase();
+  if (/XRPL|XRP|RLUSD/.test(value)) return `https://testnet.xrpl.org/transactions/${txHash}`;
+  if (/STELLAR|XLM|USDC/.test(value)) return `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+  return '';
+}
 
 function OrdersListContent() {
   const searchParams = useSearchParams();
   const highlightOrderId = searchParams.get('orderId');
 
-  const [orders, setOrders] = useState<any[]>(INITIAL_MOCK_ORDERS);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterRail, setFilterRail] = useState<'ALL' | 'STELLAR' | 'XRPL'>('ALL');
+  const [filterRail, setFilterRail] = useState<RailFilter>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,17 +67,9 @@ function OrdersListContent() {
   useEffect(() => {
     fetchOrders()
       .then((apiRows) => {
-        if (Array.isArray(apiRows) && apiRows.length > 0) {
-          const combined = [...apiRows];
-          for (const m of INITIAL_MOCK_ORDERS) {
-            if (!combined.some((c) => (c.orderNumber || c.id) === m.orderNumber)) {
-              combined.push(m);
-            }
-          }
-          setOrders(combined);
-        }
+        setOrders(Array.isArray(apiRows) ? apiRows : []);
       })
-      .catch(() => {})
+      .catch(() => setOrders([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -120,15 +85,25 @@ function OrdersListContent() {
     const num = (o.orderNumber || o.id || '').toLowerCase();
     const rail = (o.rail || o.payment_rail || '').toUpperCase();
     const matchesSearch = !debouncedSearch || num.includes(debouncedSearch);
-    const matchesRail = filterRail === 'ALL' || rail.includes(filterRail);
-    return matchesSearch && matchesRail;
+    return matchesSearch && matchesRailFilter(rail, filterRail);
   });
 
-  const totalSpentCents = orders.reduce((sum, o) => sum + (o.totalCents || o.total_cents || 0), 0);
-  const totalItemsCount = orders.reduce((sum, o) => {
+  const settledOrders = orders.filter((o) => SETTLED_STATUSES.includes(String(o.status || '').toUpperCase()));
+  const totalSpentCents = settledOrders.reduce((sum, o) => sum + (o.totalCents || o.total_cents || 0), 0);
+  const totalItemsCount = settledOrders.reduce((sum, o) => {
     const its = o.items || [];
     return sum + its.reduce((iSum: number, it: any) => iSum + (it.qty || 1), 0);
   }, 0);
+  const railsPresent = Array.from(
+    new Set(
+      orders.map((o) => {
+        const rail = String(o.rail || o.payment_rail || '').toUpperCase();
+        if (/XRPL|XRP|RLUSD/.test(rail)) return 'XRPL';
+        if (/STELLAR|XLM|USDC/.test(rail)) return 'STELLAR';
+        return rail || 'OTHER';
+      })
+    )
+  );
 
   return (
     <div className="min-h-screen py-8 sm:py-12 px-4 sm:px-6 lg:px-8 font-sans antialiased selection:bg-[var(--gold)]/30">
@@ -144,7 +119,7 @@ function OrdersListContent() {
               Your Orders
             </h1>
             <p className="text-xs sm:text-sm text-[var(--muted)] mt-1 font-normal">
-              Review verified on-chain purchases, inspect cryptographic hashes, and open official receipts.
+              Track each order, check its settlement status, and open the receipt.
             </p>
           </div>
 
@@ -164,10 +139,10 @@ function OrdersListContent() {
               TOTAL ORDERS PLACED
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--gold-bright)] tracking-tight">
-              0{orders.length}
+              {String(orders.length).padStart(2, '0')}
             </p>
             <p className="text-[11px] font-mono text-[var(--muted)]">
-              {totalItemsCount} verified items purchased
+              {totalItemsCount} item{totalItemsCount === 1 ? '' : 's'} in settled orders
             </p>
           </div>
 
@@ -180,7 +155,9 @@ function OrdersListContent() {
             </p>
             <p className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>100% On-Chain Settled</span>
+              <span>
+                {settledOrders.length} of {orders.length} order{orders.length === 1 ? '' : 's'} settled
+              </span>
             </p>
           </div>
 
@@ -188,16 +165,22 @@ function OrdersListContent() {
             <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
               SETTLEMENT NETWORKS
             </p>
-            <div className="flex gap-2 pt-1">
-              <span className="px-2 py-0.5 rounded-lg bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] text-[10px] font-mono font-bold">
-                STELLAR
-              </span>
-              <span className="px-2 py-0.5 rounded-lg bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] text-[10px] font-mono font-bold">
-                XRPL
-              </span>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {railsPresent.length > 0 ? (
+                railsPresent.map((rail) => (
+                  <span
+                    key={rail}
+                    className="px-2 py-0.5 rounded-lg bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] text-[10px] font-mono font-bold"
+                  >
+                    {rail}
+                  </span>
+                ))
+              ) : (
+                <span className="text-[11px] font-mono text-[var(--muted)]">No settlements yet</span>
+              )}
             </div>
             <p className="text-[10px] font-mono text-[var(--muted)] pt-1">
-              Dual-Rail Ledger Consensus
+              {railsPresent.length > 1 ? 'Dual-rail ledger' : 'Single-rail ledger'}
             </p>
           </div>
         </div>
@@ -205,7 +188,7 @@ function OrdersListContent() {
         {/* Filter & Search Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs font-mono">
-            {(['ALL', 'STELLAR', 'XRPL'] as const).map((r) => (
+            {(['ALL', 'STELLAR', 'XRPL', 'OTHER'] as const).map((r) => (
               <button
                 key={r}
                 type="button"
@@ -216,7 +199,7 @@ function OrdersListContent() {
                     : 'text-[var(--muted)] hover:text-[var(--foreground)] nexus-glass-surface'
                 }`}
               >
-                {r === 'ALL' ? 'All Rails' : `${r} Only`}
+                {r === 'ALL' ? 'All rails' : r === 'OTHER' ? 'Card / wallet' : r}
               </button>
             ))}
           </div>
@@ -235,20 +218,54 @@ function OrdersListContent() {
 
         {/* Order Cards Stack with Frosted Glass & Human-Readable IDs */}
         <div className="space-y-5">
-          {filteredOrders.map((order) => {
-            const orderNum = order.orderNumber || order.id || '#NR8K2P9X';
-            const totalUsd = ((order.totalCents || order.total_cents || 20000) / 100).toFixed(2);
-            const rail = (order.rail || order.payment_rail || 'STELLAR').toUpperCase();
-            const items = order.items && order.items.length > 0 ? order.items : [
-              { sku: 'RAIL-ONE', title: 'Rail One', qty: 1, unit_price_cents: 12900 },
-              { sku: 'RELAY-MAT', title: 'Relay Desk Mat', qty: 1, unit_price_cents: 3900 },
-              { sku: 'NEXUS-TEE', title: 'Nexus Tee', qty: 1, unit_price_cents: 3200 },
-            ];
+          {loading && orders.length === 0 && (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="rounded-2xl nexus-glass-card p-5 sm:p-6 space-y-4">
+                  <div className="h-4 w-40 rounded bg-white/10 animate-pulse" />
+                  <div className="h-10 w-full rounded-xl bg-white/5 animate-pulse" />
+                  <div className="h-3 w-56 rounded bg-white/10 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          )}
 
-            const txHash = order.txHash || order.tx_hash || '8fa2b109c91d4e02aaef06aa74b18086343e6f7df6f4a32570e361d2ed4ecf0946';
-            const explorerUrl = rail.includes('STELLAR')
-              ? `https://stellar.expert/explorer/testnet/tx/${txHash}`
-              : `https://testnet.xrpl.org/transactions/${txHash}`;
+          {!loading && filteredOrders.length === 0 && (
+            <div className="rounded-2xl nexus-glass-card border border-dashed border-[var(--border)] p-10 text-center space-y-3">
+              <ShoppingBag className="w-9 h-9 mx-auto text-[var(--muted)] opacity-50" />
+              <h2 className="text-base font-semibold text-[var(--foreground)]">
+                {orders.length === 0 ? 'No orders yet' : 'No orders match this filter'}
+              </h2>
+              <p className="text-xs text-[var(--muted)] max-w-md mx-auto">
+                {orders.length === 0
+                  ? 'Place your first order from the store and it will appear here with its receipt and explorer proof.'
+                  : 'Try a different rail filter or clear the search field.'}
+              </p>
+              <Link
+                href="/store"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs font-mono transition-colors"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Browse the store</span>
+              </Link>
+            </div>
+          )}
+
+          {filteredOrders.map((order) => {
+            const orderNum = order.orderNumber || order.id || '—';
+            const totalUsd = ((order.totalCents || order.total_cents || 0) / 100).toFixed(2);
+            const rail = (order.rail || order.payment_rail || 'UNKNOWN').toUpperCase();
+            const status = String(order.status || 'PENDING').toUpperCase();
+            const isSettled = SETTLED_STATUSES.includes(status);
+            const items = Array.isArray(order.items) ? order.items : [];
+
+            const txHash = order.txHash || order.tx_hash || '';
+            const explorerUrl = explorerUrlForRail(rail, txHash);
+            const statusTone = isSettled
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+              : status === 'PENDING' || status === 'UNDERPAID'
+                ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                : 'bg-rose-500/15 border-rose-500/30 text-rose-300';
 
             return (
               <div
@@ -276,13 +293,13 @@ function OrdersListContent() {
                       )}
                     </button>
 
-                    <span className="px-2.5 py-0.5 rounded-full bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[var(--gold)] font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                      <span>{order.status || 'PAID'}</span>
+                    <span className={`px-2.5 py-0.5 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${statusTone}`}>
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>{status}</span>
                     </span>
 
                     <span className="text-xs font-mono text-[var(--muted)]">
-                      {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '18 Oct 2026'}
+                      {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}
                     </span>
                   </div>
 
@@ -297,29 +314,33 @@ function OrdersListContent() {
                 {/* Line Items Grid with Thumbnails */}
                 <div className="space-y-3 pt-1">
                   {items.map((item: any, idx: number) => {
-                    const sku = item.sku || 'RAIL-ONE';
-                    const imgUrl = PRODUCT_IMAGE_MAP[sku] || '/products/rail-one.png';
-                    const price = ((item.unit_price_cents || item.priceCents || item.price_cents || 12900) / 100).toFixed(2);
+                    const sku = item.sku || '—';
+                    const imgUrl = PRODUCT_IMAGE_MAP[sku];
+                    const price = ((item.unit_price_cents || item.priceCents || item.price_cents || 0) / 100).toFixed(2);
                     const qty = item.qty || 1;
 
                     return (
                       <div key={idx} className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-[var(--card)] border border-[var(--border)] overflow-hidden shrink-0 relative shadow-sm">
-                            <Image
-                              src={imgUrl}
-                              alt={item.title || sku}
-                              fill
-                              sizes="40px"
-                              className="object-cover object-center"
-                            />
+                          <div className="w-10 h-10 rounded-xl bg-[var(--card)] border border-[var(--border)] overflow-hidden shrink-0 relative shadow-sm flex items-center justify-center">
+                            {imgUrl ? (
+                              <Image
+                                src={imgUrl}
+                                alt={item.title || sku}
+                                fill
+                                sizes="40px"
+                                className="object-cover object-center"
+                              />
+                            ) : (
+                              <ShoppingBag className="w-4 h-4 text-[var(--muted)]" />
+                            )}
                           </div>
                           <div>
-                            <p className="font-serif italic text-sm text-[var(--foreground)]">
+                            <p className="text-sm font-medium text-[var(--foreground)]">
                               {item.title || sku}
                             </p>
-                            <p className="text-[10px] font-mono text-[var(--muted)]">
-                              Qty: 0{qty} · SKU: {sku}
+                            <p className="text-[11px] font-mono text-[var(--muted)]">
+                              Qty {qty} · SKU {sku}
                             </p>
                           </div>
                         </div>
@@ -336,26 +357,32 @@ function OrdersListContent() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-[var(--border)] text-xs font-mono">
                   <div className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
                     <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
-                    <span>Settled via {rail} Consensus Ledger</span>
+                    <span>
+                      {isSettled ? `Settled on ${rail}` : `Awaiting payment on ${rail}`}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <a
-                      href={explorerUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded-xl nexus-glass-surface hover:border-[var(--gold)]/50 text-[var(--foreground)] flex items-center gap-1.5 transition-colors"
-                    >
-                      <span>Explorer Proof</span>
-                      <ExternalLink className="w-3 h-3 text-[var(--gold)]" />
-                    </a>
+                    {explorerUrl ? (
+                      <a
+                        href={explorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-xl nexus-glass-surface hover:border-[var(--gold)]/50 text-[var(--foreground)] flex items-center gap-1.5 transition-colors"
+                      >
+                        <span>Explorer proof</span>
+                        <ExternalLink className="w-3 h-3 text-[var(--gold)]" />
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-[var(--muted)]">No explorer proof yet</span>
+                    )}
 
                     <Link
                       href={`/receipt?orderId=${encodeURIComponent(orderNum)}`}
                       className="px-3.5 py-1.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                     >
                       <Receipt className="w-3.5 h-3.5" />
-                      <span>View Official Receipt</span>
+                      <span>View receipt</span>
                     </Link>
                   </div>
                 </div>

@@ -30,7 +30,7 @@ const NAV_LINKS = [
   { href: '/', label: 'Explore' },
   { href: '/store', label: 'Store' },
   { href: '/orders', label: 'Orders' },
-  { href: '/app/swap', label: 'Swap' },
+  { href: '/swap', label: 'Swap' },
   { href: '/admin', label: 'Admin', adminOnly: true },
 ];
 
@@ -143,7 +143,7 @@ export function SiteHeader() {
           </Link>
 
           <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[10px] font-mono text-[var(--muted)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span>Dual-Rail Testnet</span>
           </span>
         </div>
@@ -181,7 +181,7 @@ export function SiteHeader() {
           >
             <ShoppingBag className="w-5 h-5 text-[var(--muted)] hover:text-[var(--foreground)]" strokeWidth={2.4} />
             {cartCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-[var(--gold)] text-black text-[10px] font-mono font-bold animate-pulse">
+              <span className="px-1.5 py-0.2 rounded-full bg-[var(--gold)] text-black text-[10px] font-mono font-bold">
                 {cartCount}
               </span>
             )}
@@ -198,7 +198,7 @@ export function SiteHeader() {
                   title="Click to switch or manage Web3 wallets"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--gold)] transition-all cursor-pointer group shadow-sm text-left"
                 >
-                  <span className={`w-2 h-2 rounded-full ${walletNetwork === 'stellar' ? 'bg-[#00E5FF]' : 'bg-[#0081F2]'} animate-pulse shrink-0`} />
+                  <span className={`w-2 h-2 rounded-full ${walletNetwork === 'stellar' ? 'bg-[#00E5FF]' : 'bg-[#0081F2]'} shrink-0`} />
                   <div className="flex flex-col leading-tight">
                     <span className="font-mono text-xs font-bold text-[var(--foreground)] group-hover:text-[var(--gold)] transition-colors">
                       {formattedWalletAddress}
@@ -206,7 +206,7 @@ export function SiteHeader() {
                     <span className="text-[10px] font-mono text-[var(--muted)] flex items-center gap-1">
                       <span>{walletProvider}</span>
                       <span className="opacity-40">·</span>
-                      <span className="uppercase text-[9px] opacity-70">{walletNetwork === 'stellar' ? 'Stellar' : 'XRPL'}</span>
+                      <span className="uppercase text-[10px] opacity-70">{walletNetwork === 'stellar' ? 'Stellar' : 'XRPL'}</span>
                     </span>
                   </div>
                 </button>
@@ -223,7 +223,7 @@ export function SiteHeader() {
                       <span className="font-semibold text-xs text-[var(--foreground)] max-w-[110px] truncate">
                         {user.name || user.email?.split('@')[0] || 'Google User'}
                       </span>
-                      <span className="text-[9px] text-[var(--muted)]">Google Account</span>
+                      <span className="text-[10px] text-[var(--muted)]">Google Account</span>
                     </div>
                   </Link>
 

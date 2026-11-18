@@ -22,27 +22,27 @@ export function SiteFooter() {
               <NexusLogo size={20} glow />
               <span className="font-bold text-[var(--foreground)] tracking-tight lowercase font-mono">nexusrail</span>
             </div>
-            <p className="text-[11px] text-[var(--muted)]">
-              The connected multi-rail crypto commerce engine. Built on Stellar Horizon & XRPL Ledgers.
+            <p className="text-xs text-[var(--muted)]">
+              The connected multi-rail crypto commerce engine, built on Stellar and XRPL.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-6 text-xs font-mono">
             <Link href="/store" className="hover:text-[var(--gold)] transition-colors">Store</Link>
             <Link href="/orders" className="hover:text-[var(--gold)] transition-colors">Orders</Link>
-            <Link href="/app/swap" className="hover:text-[var(--gold)] transition-colors">Swap</Link>
-            <Link href="/app/activity" className="hover:text-[var(--gold)] transition-colors">Activity</Link>
+            <Link href="/swap" className="hover:text-[var(--gold)] transition-colors">Swap</Link>
+            <Link href="/activity" className="hover:text-[var(--gold)] transition-colors">Activity</Link>
             <Link href="/admin" className="hover:text-[var(--gold)] transition-colors">Workspace</Link>
           </div>
         </div>
 
-        <div className="pt-6 border-t border-[var(--border)] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[var(--muted)]">
+        <div className="pt-6 border-t border-[var(--border)] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[var(--muted)]">
           <div>
-            &copy; {new Date().getFullYear()} NexusRail. All rights reserved. Cryptographic ledger verification engine.
+            &copy; {new Date().getFullYear()} NexusRail. All rights reserved.
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[var(--gold)] animate-pulse" />
-            <span className="font-mono text-[var(--foreground)]">Multi-Rail Systems: Active</span>
+            <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
+            <span className="font-mono text-[var(--foreground)]">Multi-rail systems active</span>
           </div>
         </div>
       </div>

@@ -91,6 +91,29 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Headings read better with balanced wrapping; body copy avoids orphans. */
+h1,
+h2,
+h3,
+h4 {
+  text-wrap: balance;
+}
+
+p,
+li {
+  text-wrap: pretty;
+}
+
+/* Horizontal pill rails should scroll without a visible scrollbar. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom subtle scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import {
   Activity,
@@ -15,8 +15,53 @@ import {
 } from 'lucide-react';
 import { Badge, Card, SectionHeader, StatCard, cn } from '@/components/admin/AdminUI';
 
+interface AgentTelemetry {
+  activeModel: string;
+  registeredTools: string[];
+  metrics: {
+    totalConversations: number;
+    avgLatencyMs: number;
+    totalProposals: number;
+    confirmedProposals: number;
+    approvalRatePercent: number;
+  };
+  proposals: Array<{
+    id: string;
+    action: string;
+    status: string;
+    title: string;
+    priceCents: number;
+    createdAt: string;
+  }>;
+  traces: Array<{
+    id: string;
+    prompt: string;
+    toolsInvoked: string[];
+    modelUsed: string;
+    latencyMs: number;
+    createdAt: string;
+  }>;
+}
+
 export function AgentTab() {
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [telemetry, setTelemetry] = useState<AgentTelemetry | null>(null);
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (!token) return;
+    fetch('/api/v1/admin/agent-telemetry', {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.success && json?.data) {
+          setTelemetry(json.data as AgentTelemetry);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const capabilities = [
     {
       icon: Scale,
@@ -85,10 +130,34 @@ export function AgentTab() {
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Scan interval" value="15s" icon={Clock3} tone="gold" hint="Continuous observation cycle" />
-        <StatCard label="Rails monitored" value="2" icon={Radio} tone="cyan" hint="Stellar + XRPL" />
-        <StatCard label="Invariant guard" value="100%" icon={ShieldCheck} tone="emerald" hint="Zero-leakage settlement" />
-        <StatCard label="Execution mode" value="Auto" icon={Zap} tone="violet" hint="Operator override available" />
+        <StatCard
+          label="AI conversations"
+          value={telemetry ? String(telemetry.metrics.totalConversations) : '—'}
+          icon={Activity}
+          tone="gold"
+          hint={telemetry ? `Model: ${telemetry.activeModel}` : 'Live MongoDB traces'}
+        />
+        <StatCard
+          label="Avg latency"
+          value={telemetry ? `${telemetry.metrics.avgLatencyMs}ms` : '—'}
+          icon={Clock3}
+          tone="cyan"
+          hint="Groq tool-calling speed"
+        />
+        <StatCard
+          label="Proposal approval"
+          value={telemetry ? `${telemetry.metrics.approvalRatePercent}%` : '—'}
+          icon={ShieldCheck}
+          tone="emerald"
+          hint={telemetry ? `${telemetry.metrics.confirmedProposals} of ${telemetry.metrics.totalProposals} approved` : 'Human-in-the-loop locks'}
+        />
+        <StatCard
+          label="Registered tools"
+          value={telemetry ? String(telemetry.registeredTools.length) : '6'}
+          icon={Zap}
+          tone="violet"
+          hint="Swaps, baskets, coupons & P&L"
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -148,6 +217,77 @@ export function AgentTab() {
             <Guardrail title="Rail isolation" detail="A degraded chain never blocks the healthy rail." />
             <Guardrail title="Audit trail" detail="Every action is appended to the security log." />
             <Guardrail title="Human override" detail="Treasury and credential actions remain operator-only." />
+          </div>
+        </Card>
+      </div>
+
+      {/* Live AI Proposals & Tool Calls Telemetry (MongoDB) */}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="p-5 sm:p-6">
+          <SectionHeader
+            eyebrow="Proposal locks"
+            title="Recent AI proposals"
+            description="Single-use 5-minute financial approvals from MongoDB."
+            action={<Badge tone="gold">{telemetry?.proposals.length ?? 0} recent</Badge>}
+          />
+          <div className="mt-4 space-y-2">
+            {telemetry && telemetry.proposals.length > 0 ? (
+              telemetry.proposals.slice(0, 6).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-2.5 text-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{p.title}</p>
+                    <p className="font-admin-mono text-[10px] text-admin-faint">
+                      {p.action} · ${(p.priceCents / 100).toFixed(2)}
+                    </p>
+                  </div>
+                  <Badge
+                    tone={
+                      p.status === 'CONFIRMED'
+                        ? 'success'
+                        : p.status === 'REJECTED'
+                        ? 'danger'
+                        : 'warning'
+                    }
+                  >
+                    {p.status}
+                  </Badge>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-admin-muted">No AI proposals recorded yet.</p>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-5 sm:p-6">
+          <SectionHeader
+            eyebrow="Audit traces"
+            title="Recent tool executions"
+            description="Live prompts and Groq tool calls logged to MongoDB."
+            action={<Badge tone="info">{telemetry?.activeModel || 'llama-3.3-70b-versatile'}</Badge>}
+          />
+          <div className="mt-4 space-y-2">
+            {telemetry && telemetry.traces.length > 0 ? (
+              telemetry.traces.slice(0, 6).map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-2.5 text-xs space-y-1"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate font-medium text-slate-200">{t.prompt}</p>
+                    <span className="shrink-0 font-admin-mono text-[10px] text-admin-faint">{t.latencyMs}ms</span>
+                  </div>
+                  <p className="font-admin-mono text-[10px] text-admin-muted">
+                    Tools: {t.toolsInvoked.length > 0 ? t.toolsInvoked.join(', ') : 'direct chat'}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-admin-muted">No AI conversations logged yet.</p>
+            )}
           </div>
         </Card>
       </div>

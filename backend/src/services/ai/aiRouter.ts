@@ -1,8 +1,28 @@
 import { env, requiredEnv } from '../../config/env.js';
 
 export interface AgentChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string | null;
+  tool_call_id?: string;
+  tool_calls?: GroqToolCall[];
+}
+
+export interface GroqToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+export interface GroqToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
 }
 
 // In-memory cache for live discovered Groq models
@@ -64,17 +84,13 @@ export class AIRouterService {
     // 1. Discover live active models dynamically from Groq
     const liveModels = await getLiveGroqModels(apiKey);
 
-    // 2. Build prioritized candidate list:
-    // (Live active chat models first, followed by configured env.GROQ_MODEL and verified fallbacks)
+    // 2. Build prioritized candidate list (2026 production tool-calling models first)
     const candidateModels = Array.from(new Set([
-      ...liveModels,
-      'openai/gpt-oss-120b',
-      'openai/gpt-oss-20b',
-      'qwen/qwen3.8-27b',
       env.GROQ_MODEL,
       'llama-3.3-70b-versatile',
       'llama-3.1-8b-instant',
-    ]));
+      ...liveModels,
+    ].filter(Boolean) as string[]));
 
     let lastError: Error | null = null;
 
@@ -122,5 +138,67 @@ export class AIRouterService {
     }
 
     throw lastError || new Error('All Groq AI models were unavailable');
+  }
+
+  /**
+   * Native Groq Production Tool Calling (`llama-3.3-70b-versatile` / `llama-3.1-8b-instant`)
+   */
+  static async chatWithTools(params: {
+    messages: AgentChatMessage[];
+    tools: GroqToolDefinition[];
+    toolChoice?: 'auto' | 'none';
+  }): Promise<{
+    content: string | null;
+    toolCalls: GroqToolCall[];
+    modelUsed: string;
+    latencyMs: number;
+  }> {
+    const startTime = Date.now();
+    const apiKey = requiredEnv('GROQ_API_KEY');
+    const candidateModels = Array.from(
+      new Set([env.GROQ_MODEL, 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'].filter(Boolean) as string[])
+    );
+
+    let lastError: Error | null = null;
+
+    for (const model of candidateModels) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: params.messages,
+            tools: params.tools,
+            tool_choice: params.toolChoice || 'auto',
+            temperature: 0.2,
+            max_tokens: 500,
+          }),
+        });
+
+        const payload = await res.json().catch(() => null);
+        if (!res.ok) {
+          lastError = new Error(payload?.error?.message || `Groq returned ${res.status}`);
+          continue;
+        }
+
+        const msg = payload?.choices?.[0]?.message;
+        if (msg) {
+          return {
+            content: typeof msg.content === 'string' ? msg.content : null,
+            toolCalls: Array.isArray(msg.tool_calls) ? msg.tool_calls : [],
+            modelUsed: model,
+            latencyMs: Date.now() - startTime,
+          };
+        }
+      } catch (err: any) {
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error('Tool-calling AI models were unavailable');
   }
 }

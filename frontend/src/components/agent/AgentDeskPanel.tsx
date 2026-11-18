@@ -27,7 +27,7 @@ import { readSession, onSessionChange } from '@/lib/shop';
 
 export interface ProposalData {
   proposalId: string;
-  action?: 'PURCHASE_ORDER' | 'PAY_ORDER' | 'DEPOSIT_FUNDS';
+  action?: 'PURCHASE_ORDER' | 'PAY_ORDER' | 'DEPOSIT_FUNDS' | 'SWAP_ASSETS' | 'CREATE_CUSTOM_BASKET';
   title: string;
   sku?: string;
   qty?: number;
@@ -765,7 +765,13 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                               >
                                 <Check className="w-4 h-4" />
                                 <span>
-                                  {m.proposal.action === 'PAY_ORDER' ? 'Approve Payment' : 'Approve Order'}
+                                  {m.proposal.action === 'PAY_ORDER'
+                                    ? 'Approve Payment'
+                                    : m.proposal.action === 'SWAP_ASSETS'
+                                    ? 'Approve Swap'
+                                    : m.proposal.action === 'CREATE_CUSTOM_BASKET'
+                                    ? 'Approve & Invest'
+                                    : 'Approve Order'}
                                 </span>
                               </button>
 
@@ -825,11 +831,25 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"
-              onClick={() => handleSend('Add order for 2 NXL tokens')}
+              onClick={() => handleSend('Swap 20 XLM to NXL')}
               className="px-3 py-1.5 rounded-full bg-[var(--gold)]/15 hover:bg-[var(--gold)]/25 border border-[var(--gold)]/30 text-[11px] font-mono text-[var(--gold)] whitespace-nowrap transition-colors cursor-pointer font-semibold flex items-center gap-1"
             >
               <Sparkles className="w-3 h-3 text-[var(--gold)]" />
-              <span>Add order for 2 NXL tokens</span>
+              <span>Swap 20 XLM to NXL</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSend('Build $100 low-risk basket')}
+              className="px-3 py-1.5 rounded-full bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-[11px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] whitespace-nowrap transition-colors cursor-pointer"
+            >
+              🧺 Build $100 low-risk basket
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSend('Give me a discount coupon')}
+              className="px-3 py-1.5 rounded-full bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-[11px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] whitespace-nowrap transition-colors cursor-pointer"
+            >
+              🎟️ Get discount code
             </button>
             <button
               type="button"

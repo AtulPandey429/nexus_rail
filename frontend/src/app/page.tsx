@@ -90,14 +90,14 @@ export default function HomePage() {
 
               {/* Headline with animated gradient */}
               <div className="space-y-4">
-                <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-[var(--foreground)] leading-[1.08]">
+                <h1 className="text-3xl sm:text-5xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-[var(--foreground)] leading-[1.08] text-balance">
                   Commerce, on <br />
                   <span className="bg-gradient-to-r from-[var(--gold)] via-[var(--gold-bright)] to-[var(--gold)] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-x">
                     better rails.
                   </span>
                 </h1>
-                <p className="text-sm sm:text-base md:text-lg text-[var(--muted)] max-w-xl font-normal leading-relaxed">
-                  One unified storefront. Dual multi-rail settlement across Stellar and XRPL. Real-time rate feeds, cryptographic pre-flight review, and a clean double-entry ledger.
+                <p className="text-sm sm:text-base text-[var(--muted)] max-w-xl font-normal leading-relaxed">
+                  One storefront with dual-rail settlement. Pay in XLM or XRP, follow live rates, and get a receipt backed by a verifiable double-entry ledger.
                 </p>
               </div>
 
@@ -118,35 +118,25 @@ export default function HomePage() {
                 </a>
               </div>
 
-              {/* Built on Testnet Badge */}
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-4 text-xs font-mono text-[var(--muted)]">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
-                  <span className="text-[var(--foreground)] font-bold uppercase tracking-wider">
-                    Enterprise Multi-Rail Protocol. Dual-Ledger Settlement.
-                  </span>
-                </div>
-              </div>
-
               {/* Network Ticker Bar */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono">
+              <div className="flex flex-wrap items-center gap-2 pt-2 text-[11px] font-mono">
                 <div className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] flex items-center gap-2 shadow-sm hover:border-stellar-cyan transition-colors">
-                  <span className="w-2 h-2 rounded-full bg-stellar-cyan animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-stellar-cyan" />
                   <span className="font-bold">Stellar</span>
                   <span className="text-stellar-cyan font-bold">ACTIVE</span>
                 </div>
                 <div className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] flex items-center gap-2 shadow-sm hover:border-xrpl-blue transition-colors">
-                  <span className="w-2 h-2 rounded-full bg-xrpl-blue animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-xrpl-blue" />
                   <span className="font-bold">XRPL</span>
                   <span className="text-xrpl-blue font-bold">ACTIVE</span>
                 </div>
                 <div className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--muted)] opacity-60 flex items-center gap-2">
                   <span>EVM</span>
-                  <span className="text-[9px] uppercase font-bold">STAGING</span>
+                  <span className="text-[10px] uppercase font-bold">STAGING</span>
                 </div>
                 <div className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--muted)] opacity-60 flex items-center gap-2">
                   <span>Solana</span>
-                  <span className="text-[9px] uppercase font-bold">STAGING</span>
+                  <span className="text-[10px] uppercase font-bold">STAGING</span>
                 </div>
               </div>
             </div>
@@ -163,13 +153,13 @@ export default function HomePage() {
                 {/* Node connection visual */}
                 <div className="relative z-10 flex justify-between items-center text-xs font-mono text-[var(--muted)] border-b border-[var(--border)] pb-4">
                   <span className="flex items-center gap-1.5 text-stellar-cyan font-bold">
-                    <Rocket className="w-3.5 h-3.5 animate-bounce" /> Stellar
+                    <Rocket className="w-3.5 h-3.5" /> Stellar
                   </span>
                   <span className="px-2.5 py-1 rounded-md nexus-glass-surface text-[10px] text-[var(--foreground)] font-bold border border-[var(--border)]">
                     XLM / XRP
                   </span>
                   <span className="flex items-center gap-1.5 text-xrpl-blue font-bold">
-                    <Zap className="w-3.5 h-3.5 animate-pulse" /> XRPL
+                    <Zap className="w-3.5 h-3.5" /> XRPL
                   </span>
                 </div>
 
@@ -191,11 +181,11 @@ export default function HomePage() {
                 {/* Floating Order Badge */}
                 <div className="relative z-10 p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center justify-between font-mono text-xs shadow-md">
                   <div>
-                    <span className="text-[10px] text-[var(--muted)] uppercase block">Order ID</span>
+                    <span className="text-[10px] text-[var(--muted)] uppercase block">Sample order</span>
                     <span className="font-bold text-[var(--foreground)]">#NR8K2P9X</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-[var(--muted)] uppercase block">Total Settled</span>
+                    <span className="text-[10px] text-[var(--muted)] uppercase block">Total settled</span>
                     <span className="font-extrabold text-[var(--gold)] text-sm sm:text-base">$200.02 USD</span>
                   </div>
                 </div>
@@ -469,7 +459,7 @@ export default function HomePage() {
               </p>
               <div className="pt-2">
                 <Link
-                  href="/app/activity"
+                  href="/activity"
                   className="text-xs font-mono text-[var(--gold)] hover:text-[var(--gold-bright)] flex items-center gap-1.5 font-bold"
                 >
                   <span>Explore activity and ledger</span>

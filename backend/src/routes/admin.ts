@@ -19,6 +19,7 @@ import { AdminAnalyticsService } from '../services/adminAnalyticsService.js';
 import { CrossChainSwapService } from '../services/crossChainSwapService.js';
 import { resolveUnderpaidOrder, type UnderpaidResolutionMode } from '../services/underpaidOrderService.js';
 import { CouponService } from '../services/couponService.js';
+import { AgentToolRegistry } from '../agent/toolRegistry.js';
 import { env } from '../config/env.js';
 import { z } from 'zod';
 
@@ -317,6 +318,66 @@ adminRouter.post('/coupons', async (req: AuthenticatedRequest, res: Response) =>
     res.json({ success: true, status: 'success', data: { coupon } });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Failed to save coupon' });
+  }
+});
+
+// Admin: Live AI Agent Telemetry (proposals, audit traces, approval rate, registered tools)
+adminRouter.get('/agent-telemetry', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const proposalsCol = await MongoService.getCollection<any>('proposals');
+    const tracesCol = await MongoService.getCollection<any>('agent_audit_traces');
+
+    const [recentProposals, recentTraces, totalConversations, totalProposals, confirmedProposals] = await Promise.all([
+      proposalsCol.find({}).sort({ created_at: -1 }).limit(20).toArray(),
+      tracesCol.find({}).sort({ createdAt: -1 }).limit(20).toArray(),
+      tracesCol.countDocuments(),
+      proposalsCol.countDocuments(),
+      proposalsCol.countDocuments({ status: 'CONFIRMED' }),
+    ]);
+
+    const avgLatencyMs =
+      recentTraces.length > 0
+        ? Math.round(recentTraces.reduce((sum: number, t: any) => sum + (Number(t.latencyMs) || 0), 0) / recentTraces.length)
+        : 0;
+
+    const approvalRatePercent =
+      totalProposals > 0 ? Number(((confirmedProposals / totalProposals) * 100).toFixed(1)) : 0;
+
+    res.json({
+      success: true,
+      status: 'success',
+      data: {
+        activeModel: env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+        registeredTools: AgentToolRegistry.getAllToolNames(),
+        metrics: {
+          totalConversations,
+          avgLatencyMs,
+          totalProposals,
+          confirmedProposals,
+          approvalRatePercent,
+        },
+        proposals: recentProposals.map((p: any) => ({
+          id: p.id,
+          userId: p.user_id,
+          action: p.action,
+          status: p.status,
+          title: p.payload?.title || p.action,
+          priceCents: Number(p.payload?.priceCents || 0),
+          createdAt: p.created_at,
+        })),
+        traces: recentTraces.map((t: any) => ({
+          id: t.id || String(t._id),
+          userId: t.userId,
+          prompt: t.prompt,
+          toolsInvoked: t.toolsInvoked || [],
+          modelUsed: t.modelUsed || env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+          latencyMs: Number(t.latencyMs || 0),
+          createdAt: t.createdAt,
+        })),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load AI telemetry' });
   }
 });
 

@@ -80,8 +80,8 @@ export function OverviewTab({ model }: { model: AdminModel }) {
   const xrplShare = railTotal > 0 ? (xrplVolume / railTotal) * 100 : 0;
   const otherShare = railTotal > 0 ? (otherVolume / railTotal) * 100 : 0;
 
-  const stellarVault = vaultBalances.find((v) => v.chainId.toLowerCase() === 'stellar');
-  const xrplVault = vaultBalances.find((v) => v.chainId.toLowerCase() === 'xrpl');
+  const stellarVault = vaultBalances.find((v) => v.chainId.toLowerCase().startsWith('stellar'));
+  const xrplVault = vaultBalances.find((v) => v.chainId.toLowerCase().startsWith('xrpl'));
   const stellarVaultLabel = stellarVault
     ? `${formatNumber(stellarVault.vaultBalance, 2)} ${stellarVault.assetSymbol}`
     : vaultBalancesLoading

@@ -249,11 +249,18 @@ export interface MongoGuideMessageDoc {
   created_at: string;
 }
 
+export type ProposalAction =
+  | 'PURCHASE_ORDER'
+  | 'DEPOSIT_FUNDS'
+  | 'PAY_ORDER'
+  | 'SWAP_ASSETS'
+  | 'CREATE_CUSTOM_BASKET';
+
 export interface MongoProposalDoc {
   _id?: any;
   id: string;
   user_id: string;
-  action: 'PURCHASE_ORDER' | 'DEPOSIT_FUNDS' | 'PAY_ORDER';
+  action: ProposalAction;
   payload: Record<string, unknown>;
   status: 'PROPOSED' | 'CONFIRMED' | 'REJECTED' | 'EXPIRED';
   expiresAt: Date;
@@ -281,6 +288,7 @@ export interface AgentAuditTrace {
   prompt: string;
   response: string;
   toolsInvoked?: string[];
+  modelUsed?: string;
   latencyMs: number;
   createdAt: string;
 }

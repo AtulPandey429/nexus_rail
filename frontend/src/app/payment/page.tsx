@@ -35,7 +35,7 @@ export default function PaymentPage() {
         >
           {busy ? 'Contacting Stripe…' : 'Continue to Stripe Checkout'}
         </button>
-        <Link href="/app/cart" className="block text-sm text-stellar-cyan">
+        <Link href="/cart" className="block text-sm text-stellar-cyan">
           Back to cart
         </Link>
       </div>
