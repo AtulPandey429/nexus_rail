@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { ArrowLeftRight, Boxes, Layers, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowLeftRight, Boxes, Layers, Plus, RefreshCw, Tag } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -15,9 +15,21 @@ import {
   TableWrap,
   Td,
   Th,
+  inputClassName,
 } from '@/components/admin/AdminUI';
 import { FilterChip, PaginationBar, ProductThumb, RailBadge } from '@/components/admin/AdminBits';
 import { formatMoney, type AdminModel } from '@/components/admin/adminModel';
+
+interface AdminCoupon {
+  code: string;
+  discount_percent: number;
+  min_order_cents: number;
+  requires_nr_holder?: boolean;
+  first_order_only?: boolean;
+  active: boolean;
+  used_count: number;
+  description?: string;
+}
 
 export function CatalogTab({ model }: { model: AdminModel }) {
   const {
@@ -34,6 +46,63 @@ export function CatalogTab({ model }: { model: AdminModel }) {
     CATALOG_PER_PAGE,
     loadAdminProducts,
   } = model;
+
+  const [coupons, setCoupons] = useState<AdminCoupon[]>([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+  const [newCode, setNewCode] = useState('');
+  const [newPercent, setNewPercent] = useState('15');
+  const [savingCoupon, setSavingCoupon] = useState(false);
+  const [couponNotice, setCouponNotice] = useState('');
+
+  const loadCoupons = async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (!token) return;
+    setCouponsLoading(true);
+    try {
+      const res = await fetch('/api/v1/admin/coupons', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.data?.coupons)) {
+        setCoupons(json.data.coupons);
+      }
+    } catch {
+      // keep existing state
+    } finally {
+      setCouponsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCoupons();
+  }, []);
+
+  const saveCoupon = async (payload: { code: string; discountPercent: number; active: boolean }) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (!token) return;
+    setSavingCoupon(true);
+    setCouponNotice('');
+    try {
+      const res = await fetch('/api/v1/admin/coupons', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) throw new Error(json?.error || 'Could not save coupon');
+      setCouponNotice(`Saved promo code ${payload.code.toUpperCase()}.`);
+      setNewCode('');
+      await loadCoupons();
+    } catch (err: any) {
+      setCouponNotice(err?.message || 'Failed to save coupon.');
+    } finally {
+      setSavingCoupon(false);
+    }
+  };
 
   const categories = Array.from(
     new Set(adminProducts.map((product) => String(product.category || '').trim()).filter(Boolean))
@@ -225,6 +294,122 @@ export function CatalogTab({ model }: { model: AdminModel }) {
             itemLabel="SKUs"
           />
         </div>
+      </Card>
+
+      {/* Stripe-Style Smart Coupons Manager (Module 7) */}
+      <Card className="p-5 sm:p-6">
+        <SectionHeader
+          title="Promo codes & discounts"
+          description="Server-validated coupons applied at cart checkout alongside 2% $NXL cashback."
+          action={
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newCode.trim()) return;
+                void saveCoupon({
+                  code: newCode.trim().toUpperCase(),
+                  discountPercent: Number(newPercent) || 10,
+                  active: true,
+                });
+              }}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input
+                value={newCode}
+                onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+                placeholder="NEWCODE20"
+                className={`${inputClassName} h-9 w-36 py-1 font-admin-mono text-xs uppercase`}
+              />
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={newPercent}
+                onChange={(e) => setNewPercent(e.target.value)}
+                className={`${inputClassName} h-9 w-20 py-1 font-admin-mono text-xs`}
+                aria-label="Discount percent"
+              />
+              <Button type="submit" variant="primary" size="sm" icon={Plus} loading={savingCoupon}>
+                Add code
+              </Button>
+            </form>
+          }
+        />
+
+        {couponNotice && (
+          <p className="mt-3 text-xs text-emerald-300">{couponNotice}</p>
+        )}
+
+        <TableWrap className="mt-4">
+          <Table minWidth={680}>
+            <thead>
+              <tr>
+                <Th>Code</Th>
+                <Th align="right">Discount</Th>
+                <Th align="right">Min order</Th>
+                <Th align="right">Redeemed</Th>
+                <Th>Status</Th>
+                <Th align="right">Action</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {couponsLoading && coupons.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-xs text-slate-400">
+                    Loading coupons…
+                  </td>
+                </tr>
+              ) : coupons.length > 0 ? (
+                coupons.map((c) => (
+                  <tr key={c.code} className="transition-colors hover:bg-white/[0.025]">
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        <Tag className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                        <span className="font-admin-mono text-xs font-semibold text-white">{c.code}</span>
+                        {c.requires_nr_holder && <Badge tone="gold">$NXL VIP</Badge>}
+                        {c.first_order_only && <Badge tone="info">First order</Badge>}
+                      </div>
+                    </Td>
+                    <Td align="right">
+                      <span className="font-admin-mono font-medium text-white">{c.discount_percent}%</span>
+                    </Td>
+                    <Td align="right">
+                      <span className="font-admin-mono text-slate-400">${(c.min_order_cents / 100).toFixed(0)}</span>
+                    </Td>
+                    <Td align="right">
+                      <span className="font-admin-mono text-slate-300">{c.used_count}</span>
+                    </Td>
+                    <Td>
+                      <StatusBadge status={c.active ? 'ACTIVE' : 'PAUSED'} />
+                    </Td>
+                    <Td align="right">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={savingCoupon}
+                        onClick={() =>
+                          void saveCoupon({
+                            code: c.code,
+                            discountPercent: c.discount_percent,
+                            active: !c.active,
+                          })
+                        }
+                      >
+                        {c.active ? 'Pause' : 'Enable'}
+                      </Button>
+                    </Td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-xs text-slate-400">
+                    No promo codes configured.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </Table>
+        </TableWrap>
       </Card>
     </div>
   );

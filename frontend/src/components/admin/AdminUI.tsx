@@ -46,7 +46,7 @@ export function Card({
   return (
     <Tag
       className={cn(
-        'rounded-2xl border border-admin-border bg-admin-surface/90 shadow-admin-card',
+        'rounded-xl border border-white/[0.08] bg-[#11141B]',
         className
       )}
     >
@@ -72,13 +72,13 @@ export function SectionHeader({
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)}>
       <div className="min-w-0">
         {eyebrow && (
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-admin-gold/80">
+          <p className="mb-1 text-[11px] font-medium tracking-[0.06em] uppercase text-slate-400">
             {eyebrow}
           </p>
         )}
-        <h2 className="text-[15px] font-semibold tracking-tight text-white">{title}</h2>
+        <h2 className="text-base font-semibold tracking-tight text-white">{title}</h2>
         {description && (
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-admin-muted">{description}</p>
+          <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-slate-400">{description}</p>
         )}
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
@@ -249,7 +249,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] font-medium',
         tones[tone],
         className
       )}
@@ -262,11 +262,14 @@ export function Badge({
 
 export function statusTone(status?: string): BadgeTone {
   const value = (status || '').toUpperCase();
-  if (['PAID', 'FULFILLED', 'SETTLED', 'SUCCESS', 'VERIFIED', 'ACTIVE', 'ONLINE', 'BALANCED', 'COMPLETE'].includes(value)) {
+  if (['PAID', 'FULFILLED', 'SETTLED', 'SUCCESS', 'VERIFIED', 'ACTIVE', 'ONLINE', 'BALANCED', 'COMPLETE', 'COMPLETED', 'CONFIRMED'].includes(value)) {
     return 'success';
   }
-  if (['FULFILLING', 'PENDING', 'PROCESSING', 'DEGRADED', 'SYNCING'].includes(value)) {
+  if (['FULFILLING', 'PENDING', 'PENDING_DEPOSIT', 'PROCESSING', 'PAYOUT_PROCESSING', 'DEGRADED', 'SYNCING', 'UNDERPAID', 'PROPOSED'].includes(value)) {
     return 'warning';
+  }
+  if (['REFUNDED', 'DEPOSIT_CONFIRMED'].includes(value)) {
+    return 'info';
   }
   if (['FAILED', 'REJECTED', 'PAUSED', 'OFFLINE', 'CANCELLED', 'ERROR'].includes(value)) {
     return 'danger';
@@ -275,10 +278,25 @@ export function statusTone(status?: string): BadgeTone {
 }
 
 export function StatusBadge({ status, withDot = true }: { status?: string; withDot?: boolean }) {
-  const label = (status || 'UNKNOWN').toUpperCase();
+  const raw = (status || 'UNKNOWN').toUpperCase();
+  const labelMap: Record<string, string> = {
+    PAID: 'Paid',
+    FULFILLED: 'Fulfilled',
+    FULFILLING: 'Fulfilling',
+    PENDING: 'Pending',
+    PENDING_DEPOSIT: 'Awaiting deposit',
+    UNDERPAID: 'Shortfall',
+    REFUNDED: 'Refunded',
+    COMPLETED: 'Completed',
+    CONFIRMED: 'Confirmed',
+    FAILED: 'Failed',
+    CANCELLED: 'Cancelled',
+    ACTIVE: 'Active',
+    PAUSED: 'Paused',
+  };
   return (
-    <Badge tone={statusTone(label)} dot={withDot}>
-      {label}
+    <Badge tone={statusTone(raw)} dot={withDot}>
+      {labelMap[raw] || raw.charAt(0) + raw.slice(1).toLowerCase().replace(/_/g, ' ')}
     </Badge>
   );
 }
@@ -339,33 +357,21 @@ export function StatCard({
   return (
     <div
       className={cn(
-        'group relative overflow-hidden rounded-2xl border border-admin-border bg-gradient-to-b from-admin-surface to-[#0C1017] p-5 shadow-admin-card transition-colors duration-200 hover:border-white/[0.12]',
+        'rounded-xl border border-white/[0.08] bg-[#11141B] p-4 sm:p-5 transition-colors duration-150 hover:border-white/[0.14]',
         className
       )}
     >
-      <span
-        className={cn(
-          'pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent to-transparent opacity-70',
-          styles.line
-        )}
-        aria-hidden="true"
-      />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-admin-muted">{label}</p>
-          <p
-            className={cn(
-              'mt-3 truncate font-admin-mono text-[25px] font-semibold leading-none tracking-tight admin-tabular sm:text-[27px]',
-              styles.value
-            )}
-          >
+          <p className="text-xs font-medium text-slate-400">{label}</p>
+          <p className="mt-2 truncate font-admin-mono text-2xl font-semibold leading-none tracking-tight text-white tabular-nums">
             {value}
           </p>
         </div>
         {Icon && (
           <span
             className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 group-hover:scale-105',
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
               styles.icon
             )}
             aria-hidden="true"
@@ -375,7 +381,7 @@ export function StatCard({
         )}
       </div>
       {(hint || aside) && (
-        <div className="mt-3.5 flex min-h-[18px] items-center justify-between gap-2 text-[11px] text-admin-muted">
+        <div className="mt-3 flex min-h-[18px] items-center justify-between gap-2 text-xs text-slate-400">
           <div className="min-w-0 truncate">{hint}</div>
           {aside}
         </div>
@@ -497,7 +503,7 @@ export function Td({
   return (
     <td
       className={cn(
-        'border-b border-white/[0.045] px-3 py-3.5 align-middle text-slate-300',
+        'border-b border-white/[0.06] px-3.5 py-3 align-middle text-[13px] text-slate-200 tabular-nums',
         align === 'right' && 'text-right',
         align === 'center' && 'text-center',
         className
