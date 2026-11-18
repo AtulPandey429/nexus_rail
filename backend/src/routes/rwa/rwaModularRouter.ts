@@ -17,7 +17,3 @@ rwaModularRouter.post('/tokens/mint', (_req: Request, res: Response) => {
     error: 'Token issuance is not available. A licensed issuer and custody provider are required.',
   });
 });
-
-rwaModularRouter.get('/perps/quote', (_req: Request, res: Response) => {
-  res.status(501).json({ success: false, error: 'Perpetual quotes are not connected to a provider.' });
-});

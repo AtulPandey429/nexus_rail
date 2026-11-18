@@ -7,7 +7,6 @@ import { usePathname } from 'next/navigation';
 const tabs = [
   { href: '/rwa', label: 'Prices' },
   { href: '/rwa/buy', label: 'Buy gold' },
-  { href: '/rwa/perps', label: 'Price quote' },
 ];
 
 export default function RwaLayout({ children }: { children: React.ReactNode }) {

@@ -28,7 +28,7 @@ export function PluginsShowcase() {
           <Cpu className="w-5 h-5 text-cyber-purple" />
           <span>Phase 5 Architecture: Extension Plugins & Hardening</span>
         </h3>
-        <p className="text-xs text-gray-400 font-mono">Nexus Dual-Rail Perps • Bespoke Neural Asset Engine • WebAuthn Passkeys • B2B API Gateway</p>
+        <p className="text-xs text-gray-400 font-mono">Bespoke Neural Asset Engine • WebAuthn Passkeys • B2B API Gateway</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -68,22 +68,8 @@ export function PluginsShowcase() {
           )}
         </div>
 
-        {/* Nexus Dual-Rail Perps & B2B API Keys */}
+        {/* B2B API Keys */}
         <div className="space-y-4">
-          {/* Nexus Dual-Rail Perps Trader */}
-          <div className="p-4 rounded-2xl bg-gray-900/60 border border-gray-800 space-y-2">
-            <div className="flex justify-between items-center text-xs font-mono text-stellar-cyan">
-              <span className="flex items-center gap-1.5"><Cpu className="w-4 h-4" /> Nexus Dual-Rail Perps Plugin</span>
-              <span className="px-2 py-0.5 rounded bg-stellar-cyan/10 text-[10px] border border-stellar-cyan/30">TESTNET</span>
-            </div>
-            <div className="text-xs text-gray-300 flex justify-between items-center pt-1">
-              <span>Hedge Vault Arbitrage: <strong className="text-white">12.4% APY</strong></span>
-              <button className="px-3 py-1 rounded-lg bg-gray-800 text-xs text-white border border-gray-700 flex items-center gap-1 hover:bg-gray-700">
-                Execute Hedge <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
           {/* B2B Reseller API Key Generator */}
           <div className="p-4 rounded-2xl bg-gray-900/60 border border-gray-800 space-y-3">
             <div className="flex justify-between items-center text-xs font-mono text-cyber-purple">

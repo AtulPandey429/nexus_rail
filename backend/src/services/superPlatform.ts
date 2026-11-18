@@ -1,7 +1,7 @@
 // ============================================================================
 // NexusRail Bespoke Protocol & Multi-Factor Risk Evaluation Service
 // 100% Original Clean-Room Implementation for Ledger Underwriting,
-// Dynamic Fiat Settlements, and Perpetual Commodity Valuation.
+// Dynamic Fiat Settlements and Multi-Factor Ledger Underwriting.
 // ============================================================================
 
 import crypto from 'crypto';
@@ -32,14 +32,6 @@ export interface TronUsdtInvoice {
   tronGridTxExplorer: string;
   status: 'PENDING' | 'CONFIRMED';
   expiresInSeconds: number;
-}
-
-export interface NexusPerpQuote {
-  pair: 'XAU/USD' | 'EUR/USD' | 'BTC/USD';
-  leverage: number; // 1x - 100x
-  indexPrice: number;
-  estimatedFundingRate: number;
-  minMarginUsd: number;
 }
 
 export class NexusProtocolService {
@@ -101,30 +93,6 @@ export class NexusProtocolService {
       tronGridTxExplorer: `https://shasta.tronscan.org/#/address/${depositAddress}`,
       status: 'PENDING',
       expiresInSeconds: 900,
-    };
-  }
-
-  /**
-   * NexusRail Native Perpetual Commodity & FX Index Valuation Engine:
-   * Computes dynamic mark price, index spread, and initial margin requirement.
-   */
-  static getOstiumQuote(pair: 'XAU/USD' | 'EUR/USD' | 'BTC/USD', leverage: number): NexusPerpQuote {
-    const baselineRates: Record<string, number> = {
-      'XAU/USD': 2750.50, // Tokenized Gold / USD
-      'EUR/USD': 1.0850,
-      'BTC/USD': 92400.00,
-    };
-
-    const indexPrice = baselineRates[pair] || 100.00;
-    const clampedLeverage = Math.max(1, Math.min(100, leverage));
-    const minMarginUsd = Number(((indexPrice / clampedLeverage) * 0.1).toFixed(2));
-
-    return {
-      pair,
-      leverage: clampedLeverage,
-      indexPrice,
-      estimatedFundingRate: 0.0001, // 0.01% periodic standard funding
-      minMarginUsd,
     };
   }
 }

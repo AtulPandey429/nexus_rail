@@ -25,8 +25,7 @@ export class AgentToolRegistry {
       case 'get_live_gold_rates':
         return { toolName, success: true, result: await getMetalQuote() };
       case 'mint_gold_tokens':
-      case 'open_perp_position':
-        throw new Error(`${toolName} is not available. No licensed issuer or perpetuals provider is configured.`);
+        throw new Error(`${toolName} is not available. No licensed issuer is configured.`);
       default:
         throw new Error(`Tool '${toolName}' is not registered`);
     }

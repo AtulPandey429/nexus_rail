@@ -19,7 +19,6 @@ import {
 export type ViewType =
   | 'rwa'
   | 'rwa_buy'
-  | 'rwa_perps'
   | 'storefront'
   | 'buyer'
   | 'cart'
@@ -60,7 +59,7 @@ export function Navbar({
   nGoldBalance = 1.25,
   usdBalanceCents = 15000,
 }: NavbarProps) {
-  const isRwaActive = activeView === 'rwa' || activeView === 'rwa_buy' || activeView === 'rwa_perps';
+  const isRwaActive = activeView === 'rwa' || activeView === 'rwa_buy';
   const isCommerceActive = activeView === 'storefront';
   const isBuyerActive = activeView === 'buyer' || activeView === 'cart' || activeView === 'orders' || activeView === 'guide';
   const isAdminActive = activeView === 'admin' || activeView === 'admin_orders';
@@ -208,18 +207,6 @@ export function Navbar({
           >
             <Zap className="w-3 h-3 text-amber-400" />
             <span>Buy Gold Tokens</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('rwa_perps')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
-              activeView === 'rwa_perps'
-                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/60'
-                : 'text-gray-400 hover:text-white border-transparent'
-            }`}
-          >
-            <TrendingUp className="w-3 h-3 text-cyber-purple" />
-            <span>Ostium Perps</span>
           </button>
 
           <div className="h-4 w-[1px] bg-gray-800 mx-1 hidden md:block" />

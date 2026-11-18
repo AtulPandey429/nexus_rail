@@ -895,34 +895,3 @@ export async function issueCommodityToken(assetCode: 'nGOLD' | 'nSILVER', amount
     explorerUrl: String(explorerUrl),
   };
 }
-
-export type PerpQuote = {
-  pair: string;
-  leverage: number;
-  indexPrice: number;
-  sizeUsd: number;
-  marginUsd: number;
-  liquidationPrice: number;
-};
-
-export async function fetchPerpQuote(pair: string, leverage: number, size: string): Promise<PerpQuote> {
-  const params = new URLSearchParams({ pair, leverage: String(leverage), size });
-  const res = await fetch(`/api/v1/rwa-modular/perps/quote?${params.toString()}`, { cache: 'no-store' });
-  const payload = await readJson(res);
-  const data = payload?.data;
-  const indexPrice = num(data?.indexPriceUsd ?? data?.spotPrice ?? data?.entryPriceUsd);
-  const marginUsd = num(data?.marginUsd ?? data?.requiredMarginUsd);
-  const liquidationPrice = num(data?.liquidationPrice ?? data?.liquidationPriceUsd);
-  const sizeUsd = num(data?.sizeUsd) ?? num(Number(size));
-  if (!res.ok || payload?.success !== true || indexPrice == null || marginUsd == null || liquidationPrice == null || sizeUsd == null) {
-    throw new Error(errorMessage(payload, 'Could not load a price quote.'));
-  }
-  return {
-    pair: data.pair || pair,
-    leverage: data.leverage || leverage,
-    indexPrice,
-    sizeUsd,
-    marginUsd,
-    liquidationPrice,
-  };
-}
