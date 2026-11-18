@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Wallet, Zap, Rocket, CheckCircle, RefreshCw, ExternalLink, Copy, Check, AlertCircle, Radio, Clock, ShieldCheck, ShieldAlert, Coins } from 'lucide-react';
 import { StripeCheckoutModal } from './StripeCheckoutModal';
+import { payOrderViaSorobanContract } from '@/lib/soroban';
 
 export type PaymentRailChoice = 'STRIPE' | 'WALLET' | 'XRPL' | 'STELLAR' | 'STELLAR_USDC';
 
@@ -35,6 +36,31 @@ export function MultiRailCheckoutSelector({
   const [isListeningStream, setIsListeningStream] = useState(false);
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState<number | null>(null);
   const [isRefreshingQuote, setIsRefreshingQuote] = useState(false);
+  const [sorobanBusy, setSorobanBusy] = useState(false);
+  const [sorobanError, setSorobanError] = useState<string | null>(null);
+  const [sorobanExplorerUrl, setSorobanExplorerUrl] = useState<string | null>(null);
+
+  const handleSorobanContractPay = async () => {
+    if (!activeOrderId) return;
+    setSorobanBusy(true);
+    setSorobanError(null);
+    setSorobanExplorerUrl(null);
+    try {
+      const amountNum = Number(invoiceData?.amountXlm || invoiceData?.amount || 0);
+      const res = await payOrderViaSorobanContract({
+        orderId: activeOrderId,
+        tokenAsset: 'XLM',
+        amount: amountNum > 0 ? amountNum : undefined,
+      });
+      setSorobanExplorerUrl(res.explorerUrl);
+      setVerificationResult(`Settled atomically on NexusVault contract! Tx: ${res.txHash.slice(0, 12)}…`);
+      onPaymentSuccess?.(res);
+    } catch (err: any) {
+      setSorobanError(err?.message || 'Soroban smart contract settlement failed');
+    } finally {
+      setSorobanBusy(false);
+    }
+  };
 
   // FEAT-02: Cryptographic Quote Ticket Countdown
   useEffect(() => {
@@ -503,7 +529,7 @@ export function MultiRailCheckoutSelector({
                   </div>
                 </div>
               )}
-              <div className="pt-1">
+              <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
                 <a
                   href={`https://stellar.expert/explorer/testnet/account/${invoiceData.destination}`}
                   target="_blank"
@@ -513,7 +539,39 @@ export function MultiRailCheckoutSelector({
                   <ExternalLink className="w-3 h-3" />
                   View Vault on StellarExpert Explorer
                 </a>
+                {sorobanExplorerUrl && (
+                  <a
+                    href={sorobanExplorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-400 hover:underline flex items-center gap-1 text-[11px] font-bold"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View Soroban Tx
+                  </a>
+                )}
               </div>
+
+              {selectedRail === 'STELLAR' && (
+                <div className="pt-2 border-t border-gray-800 space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleSorobanContractPay}
+                    disabled={sorobanBusy}
+                    className="w-full py-2.5 px-3 rounded-lg bg-[#D4AF37] hover:bg-[#e5c158] disabled:opacity-60 text-black font-sans font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>
+                      {sorobanBusy
+                        ? 'Signing & settling via NexusVault…'
+                        : '1-Click Pay via NexusVault Contract (Freighter · 50/50 Split)'}
+                    </span>
+                  </button>
+                  {sorobanError && (
+                    <p className="text-[11px] text-rose-400 font-sans">{sorobanError}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

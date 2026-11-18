@@ -10,6 +10,7 @@ import { NrTokenService } from '../services/nrTokenService.js';
 import { verifyToken } from '../services/jwt.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { env } from '../config/env.js';
+import { SorobanService, NEXUS_SWAP_CONTRACT_ID, NEXUS_VAULT_CONTRACT_ID } from '../services/soroban.js';
 
 export const swapRouter = Router();
 
@@ -599,6 +600,244 @@ swapRouter.get('/history', async (req: Request, res: Response) => {
     return res.json({ success: true, count: sliced.length, data: sliced });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to fetch swap history' });
+  }
+});
+
+/**
+ * ============================================================================
+ * SOROBAN ON-CHAIN AMM SWAP (NexusSwap) & BRIDGE ESCROW / BURN-FOR-BRIDGE
+ * ============================================================================
+ */
+
+// GET /api/v1/swap/soroban/pool - Live on-chain NexusSwap AMM reserves, spot price & escrows
+swapRouter.get('/soroban/pool', async (_req: Request, res: Response) => {
+  try {
+    const pool = await SorobanService.getLiveSwapPoolState();
+    return res.json({ success: true, data: pool });
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || 'Failed to read on-chain AMM pool' });
+  }
+});
+
+// POST /api/v1/swap/soroban/quote - Live on-chain constant-product quote (XLM <-> NXL)
+swapRouter.post('/soroban/quote', async (req: Request, res: Response) => {
+  try {
+    const fromAsset = String(req.body?.fromAsset || 'XLM').toUpperCase();
+    const amount = Number(req.body?.amount || 0);
+    if ((fromAsset !== 'XLM' && fromAsset !== 'NXL') || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, error: 'fromAsset (XLM or NXL) and positive amount are required' });
+    }
+    const quote = await SorobanService.quoteOnChainSwap(fromAsset, amount);
+    return res.json({ success: true, data: quote });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err?.message || 'On-chain quote failed' });
+  }
+});
+
+// POST /api/v1/swap/soroban/prepare - Build Freighter unsigned XDR for AMM Swap, Bridge Escrow, or Burn-for-Bridge
+swapRouter.post('/soroban/prepare', async (req: Request, res: Response) => {
+  try {
+    const fromAsset = String(req.body?.fromAsset || '').toUpperCase();
+    const toAsset = String(req.body?.toAsset || '').toUpperCase();
+    const amount = Number(req.body?.amount || 0);
+    const traderAddress = String(req.body?.traderAddress || req.body?.userSourceAddress || '').trim();
+    const xrplDestination = String(req.body?.userDestinationAddress || '').trim();
+    const slippagePct = Math.min(5, Math.max(0.1, Number(req.body?.slippagePct || 1.0)));
+
+    if (!traderAddress || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, error: 'traderAddress (Stellar G... key) and positive amount are required' });
+    }
+
+    // Mode 1: On-Chain Stellar AMM Swap (XLM <-> NXL) via NexusSwap::swap_exact_in
+    if ((fromAsset === 'XLM' && toAsset === 'NXL') || (fromAsset === 'NXL' && toAsset === 'XLM')) {
+      const quote = await SorobanService.quoteOnChainSwap(fromAsset, amount);
+      const minAmountOut = Number((quote.amountOut * (1 - slippagePct / 100)).toFixed(7));
+      const deadlineUnixSec = Math.floor(Date.now() / 1000) + 300;
+      const prepared = await SorobanService.buildAmmSwapXdr({
+        traderAddress,
+        fromAsset,
+        amountIn: amount,
+        minAmountOut,
+        deadlineUnixSec,
+      });
+      return res.json({
+        success: true,
+        mode: 'SOROBAN_AMM_SWAP',
+        data: {
+          ...prepared,
+          fromAsset,
+          toAsset,
+          quote,
+          minAmountOut,
+          deadlineUnixSec,
+          contractId: NEXUS_SWAP_CONTRACT_ID,
+        },
+      });
+    }
+
+    // Mode 2: Stellar XLM -> XRPL XRP via Trustless Bridge Escrow (NexusSwap::lock_bridge_escrow)
+    if (fromAsset === 'XLM' && toAsset === 'XRP') {
+      if (!xrplDestination.startsWith('r')) {
+        return res.status(400).json({ success: false, error: 'Valid XRPL destination address (r...) is required' });
+      }
+      const swapId = `BRG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const expiryUnixSec = Math.floor(Date.now() / 1000) + 900;
+      const prepared = await SorobanService.buildLockBridgeEscrowXdr({
+        senderAddress: traderAddress,
+        tokenAsset: 'XLM',
+        amount,
+        swapId,
+        xrplDestination,
+        expiryUnixSec,
+      });
+      return res.json({
+        success: true,
+        mode: 'SOROBAN_BRIDGE_ESCROW',
+        data: {
+          ...prepared,
+          swapId,
+          fromAsset,
+          toAsset,
+          amount,
+          xrplDestination,
+          expiryUnixSec,
+          contractId: NEXUS_SWAP_CONTRACT_ID,
+        },
+      });
+    }
+
+    // Mode 3: Stellar $NXL -> XRPL $NXL via Provable On-Chain Burn (NexusVault::burn_for_bridge)
+    if (fromAsset === 'NXL' && toAsset === 'XRP') {
+      if (!xrplDestination.startsWith('r')) {
+        return res.status(400).json({ success: false, error: 'Valid XRPL destination address (r...) is required' });
+      }
+      const swapId = `BRN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const prepared = await SorobanService.buildBurnForBridgeXdr({
+        holderAddress: traderAddress,
+        amountNxl: amount,
+        xrplDestination,
+        swapId,
+      });
+      return res.json({
+        success: true,
+        mode: 'SOROBAN_BRIDGE_BURN',
+        data: {
+          ...prepared,
+          swapId,
+          fromAsset,
+          toAsset,
+          amount,
+          xrplDestination,
+          contractId: NEXUS_VAULT_CONTRACT_ID,
+        },
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      error: `Soroban on-chain route supports XLM<->NXL (AMM), XLM->XRP (Bridge Escrow), or NXL->XRP (Burn-for-Bridge). Got ${fromAsset}->${toAsset}.`,
+    });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err?.message || 'Failed to prepare Soroban swap XDR' });
+  }
+});
+
+// POST /api/v1/swap/soroban/submit - Submit signed Soroban AMM Swap / Bridge Escrow / Burn XDR
+swapRouter.post('/soroban/submit', async (req: Request, res: Response) => {
+  try {
+    const signedXdr = String(req.body?.signedXdr || '').trim();
+    const mode = String(req.body?.mode || 'SOROBAN_AMM_SWAP');
+    const fromAsset = String(req.body?.fromAsset || 'XLM').toUpperCase();
+    const toAsset = String(req.body?.toAsset || 'NXL').toUpperCase();
+    const amount = Number(req.body?.amount || 0);
+    const swapId = String(req.body?.swapId || `AMM-${Date.now().toString(36).toUpperCase()}`);
+    const xrplDestination = String(req.body?.xrplDestination || '').trim();
+    const userId = extractOptionalUserId(req);
+
+    if (!signedXdr) {
+      return res.status(400).json({ success: false, error: 'signedXdr is required' });
+    }
+
+    const txRes = await SorobanService.submitSignedSorobanXdr(signedXdr);
+
+    let payoutTxHash: string | undefined;
+    let payoutExplorerUrl: string | undefined;
+    let escrowReleaseTxHash: string | undefined;
+
+    // For XLM -> XRP Bridge Escrow: verify locked escrow on-chain -> execute XRPL payout -> release escrow with XRPL proof!
+    if (mode === 'SOROBAN_BRIDGE_ESCROW' && xrplDestination.startsWith('r') && amount > 0) {
+      const fx = await getFxQuote();
+      const receiveXrp = Number(((amount * fx.xlmUsd) / fx.xrpUsd).toFixed(4));
+      const payout = await CrossChainSwapService.payoutAssetToUser({
+        toAsset: 'XRP',
+        destinationAddress: xrplDestination,
+        amount: receiveXrp,
+        referenceId: swapId,
+      });
+      payoutTxHash = payout.txHash;
+      payoutExplorerUrl = payout.explorerUrl;
+
+      if (payoutTxHash) {
+        const rel = await SorobanService.releaseBridgeEscrowOnChain({
+          swapId,
+          xrplTxHash: payoutTxHash,
+        }).catch(() => null);
+        escrowReleaseTxHash = rel?.txHash;
+      }
+    }
+
+    // For NXL -> XRP Burn-for-Bridge: user burned $NXL on Stellar -> execute equivalent XRP payout on XRPL
+    if (mode === 'SOROBAN_BRIDGE_BURN' && xrplDestination.startsWith('r') && amount > 0) {
+      const fx = await getFxQuote();
+      const poolStats = await NrTokenService.getPoolStats().catch(() => ({ spotPriceUsd: 1 }));
+      const usdVal = amount * (poolStats.spotPriceUsd || 1);
+      const receiveXrp = Number((usdVal / Math.max(0.01, fx.xrpUsd)).toFixed(4));
+      const payout = await CrossChainSwapService.payoutAssetToUser({
+        toAsset: 'XRP',
+        destinationAddress: xrplDestination,
+        amount: receiveXrp,
+        referenceId: swapId,
+      });
+      payoutTxHash = payout.txHash;
+      payoutExplorerUrl = payout.explorerUrl;
+    }
+
+    await DualRailTokenService.logChainAction({
+      chain: 'STELLAR',
+      action: mode === 'SOROBAN_AMM_SWAP' ? 'AMM_SWAP' : 'CROSS_CHAIN_BRIDGE',
+      operatorId: userId || 'FREIGHTER_USER',
+      referenceId: swapId,
+      txHash: txRes.txHash,
+      ledgerSeq: txRes.ledger,
+      amountPrimary: amount,
+      details: {
+        mode,
+        fromAsset,
+        toAsset,
+        contractId: mode === 'SOROBAN_BRIDGE_BURN' ? NEXUS_VAULT_CONTRACT_ID : NEXUS_SWAP_CONTRACT_ID,
+        destinationAddress: xrplDestination || undefined,
+        payoutTxHash,
+        escrowReleaseTxHash,
+        returnValue: txRes.returnValue,
+      },
+    }).catch(() => {});
+
+    return res.json({
+      success: true,
+      data: {
+        swapId,
+        mode,
+        txHash: txRes.txHash,
+        ledger: txRes.ledger,
+        explorerUrl: txRes.explorerUrl,
+        returnValue: txRes.returnValue,
+        payoutTxHash,
+        payoutExplorerUrl,
+        escrowReleaseTxHash,
+      },
+    });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err?.message || 'Soroban swap submission failed' });
   }
 });
 

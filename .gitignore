@@ -24,3 +24,7 @@ pnpm-debug.log*
 tsconfig.tsbuildinfo
 
 .vercel
+
+# Rust / Soroban Smart Contract build & test artifacts
+contracts/target/
+contracts/**/test_snapshots/

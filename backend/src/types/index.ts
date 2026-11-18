@@ -351,7 +351,7 @@ export interface OnChainTokenDTO {
 export interface ChainActionLogDTO {
   id: string;
   chain: 'STELLAR' | 'XRPL';
-  action: 'MINT' | 'TRUSTLINE' | 'AMM_CREATE' | 'AMM_DEPOSIT' | 'AMM_WITHDRAW' | 'CROSS_CHAIN_BRIDGE' | 'CONTRACT_SPLIT';
+  action: 'MINT' | 'BURN' | 'REFUND' | 'TRUSTLINE' | 'AMM_CREATE' | 'AMM_DEPOSIT' | 'AMM_WITHDRAW' | 'AMM_SWAP' | 'CROSS_CHAIN_BRIDGE' | 'CONTRACT_SPLIT';
   reference_id?: string;
   operator_id: string;
   tx_hash: string;

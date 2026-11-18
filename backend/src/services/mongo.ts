@@ -382,10 +382,13 @@ export interface MongoPlatformTokenDoc {
 
 export type ChainActionType =
   | 'MINT'
+  | 'BURN'
+  | 'REFUND'
   | 'TRUSTLINE'
   | 'AMM_CREATE'
   | 'AMM_DEPOSIT'
   | 'AMM_WITHDRAW'
+  | 'AMM_SWAP'
   | 'CROSS_CHAIN_BRIDGE'
   | 'CONTRACT_SPLIT';
 

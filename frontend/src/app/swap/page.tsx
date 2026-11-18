@@ -86,6 +86,7 @@ interface AmmQuoteOverlay {
 }
 
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
+import { executeSorobanSwapOrBridge, fetchLiveSorobanSwapPool } from '@/lib/soroban';
 
 export default function SwapPage() {
   const [fromToken, setFromToken] = useState<SwapToken>('XRP');
@@ -122,6 +123,81 @@ export default function SwapPage() {
   const [bridgeHistory, setBridgeHistory] = useState<any[]>([]);
   const [loadingBridgeHistory, setLoadingBridgeHistory] = useState(false);
   const [elapsedPayoutSeconds, setElapsedPayoutSeconds] = useState(0);
+
+  // Live On-Chain Soroban AMM & Bridge Escrow state
+  const [sorobanPool, setSorobanPool] = useState<{
+    contractId: string;
+    explorerUrl: string;
+    reserveXlm: number;
+    reserveNxl: number;
+    totalSwaps: number;
+    totalEscrowsLocked: number;
+  } | null>(null);
+  const [sorobanSwapBusy, setSorobanSwapBusy] = useState(false);
+  const [sorobanSwapNotice, setSorobanSwapNotice] = useState<{
+    tone: 'success' | 'error';
+    text: string;
+    explorerUrl?: string;
+    payoutExplorerUrl?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetchLiveSorobanSwapPool()
+      .then((pool) => setSorobanPool(pool))
+      .catch(() => {});
+  }, []);
+
+  const canUseSorobanContract =
+    (fromToken === 'XLM' && (toToken === 'NXL' || toToken === 'XRP')) ||
+    (fromToken === 'NXL' && (toToken === 'XLM' || toToken === 'XRP'));
+
+  const handleSorobanDirectSwap = async () => {
+    const amt = Number(payAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setSorobanSwapNotice({ tone: 'error', text: 'Enter a valid swap amount greater than 0.' });
+      return;
+    }
+    if (!canUseSorobanContract) return;
+    if (toToken === 'XRP' && !destinationAddress.trim().startsWith('r')) {
+      setSorobanSwapNotice({ tone: 'error', text: 'Enter a valid XRPL destination address (r...) first.' });
+      return;
+    }
+
+    setSorobanSwapBusy(true);
+    setSorobanSwapNotice(null);
+    try {
+      const slippageNum = parseFloat(slippage.replace('%', '')) || 0.5;
+      const res = await executeSorobanSwapOrBridge({
+        fromAsset: fromToken as 'XLM' | 'NXL',
+        toAsset: toToken as 'XLM' | 'NXL' | 'XRP',
+        amount: amt,
+        userDestinationAddress: toToken === 'XRP' ? destinationAddress.trim() : undefined,
+        slippagePct: slippageNum,
+      });
+
+      const modeLabel =
+        res.mode === 'SOROBAN_AMM_SWAP'
+          ? 'NexusSwap AMM swap confirmed on Stellar Testnet!'
+          : res.mode === 'SOROBAN_BRIDGE_BURN'
+          ? '$NXL burned on NexusVault & XRPL payout sent!'
+          : 'Bridge escrow locked, XRPL payout sent & escrow released!';
+
+      setSorobanSwapNotice({
+        tone: 'success',
+        text: modeLabel,
+        explorerUrl: res.explorerUrl,
+        payoutExplorerUrl: res.payoutExplorerUrl,
+      });
+      fetchLiveSorobanSwapPool().then((pool) => setSorobanPool(pool)).catch(() => {});
+    } catch (err: any) {
+      setSorobanSwapNotice({
+        tone: 'error',
+        text: err?.message || 'Soroban smart contract execution failed',
+      });
+    } finally {
+      setSorobanSwapBusy(false);
+    }
+  };
 
   // Cross-Chain Payout Elapsed Timer
   useEffect(() => {
@@ -1700,6 +1776,83 @@ export default function SwapPage() {
                 </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              {/* Direct On-Chain Soroban Smart Contract Execution (AMM / Bridge Escrow / Burn-for-Bridge) */}
+              {canUseSorobanContract && (
+                <div className="rounded-xl border border-white/10 bg-[#0B0F17] p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-300">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      {toToken === 'XRP'
+                        ? fromToken === 'NXL'
+                          ? 'NexusVault Burn-for-Bridge'
+                          : 'NexusSwap Trustless Escrow'
+                        : 'NexusSwap On-Chain AMM (x·y=k)'}
+                    </span>
+                    {sorobanPool && (
+                      <a
+                        href={sorobanPool.explorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-[10px] text-sky-300 hover:underline inline-flex items-center gap-1"
+                      >
+                        {sorobanPool.reserveXlm.toFixed(0)} XLM / {sorobanPool.reserveNxl.toFixed(0)} NXL
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSorobanDirectSwap}
+                    disabled={sorobanSwapBusy}
+                    className="w-full py-2.5 px-3 rounded-lg border border-[var(--gold)]/40 bg-[var(--gold)]/10 hover:bg-[var(--gold)]/20 disabled:opacity-60 text-[var(--gold-bright)] font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>
+                      {sorobanSwapBusy
+                        ? 'Signing Soroban tx in Freighter…'
+                        : toToken === 'XRP'
+                        ? fromToken === 'NXL'
+                          ? `Burn ${fromToken} on Contract & Bridge to XRPL (Freighter)`
+                          : `Lock ${fromToken} in Bridge Escrow & Receive XRP (Freighter)`
+                        : `Swap ${fromToken} → ${toToken} Directly On-Chain (Freighter)`}
+                    </span>
+                  </button>
+                  {sorobanSwapNotice && (
+                    <div
+                      className={`rounded-lg px-3 py-2 text-[11px] flex flex-wrap items-center justify-between gap-2 ${
+                        sorobanSwapNotice.tone === 'success'
+                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                          : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
+                      }`}
+                    >
+                      <span>{sorobanSwapNotice.text}</span>
+                      <div className="flex items-center gap-2">
+                        {sorobanSwapNotice.explorerUrl && (
+                          <a
+                            href={sorobanSwapNotice.explorerUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline font-semibold inline-flex items-center gap-1"
+                          >
+                            Stellar Tx <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                        {sorobanSwapNotice.payoutExplorerUrl && (
+                          <a
+                            href={sorobanSwapNotice.payoutExplorerUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline font-semibold inline-flex items-center gap-1"
+                          >
+                            XRPL Tx <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Safety Subtext */}
               <p className="text-xs text-[var(--muted)] text-center leading-relaxed pt-1">

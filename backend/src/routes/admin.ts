@@ -524,7 +524,37 @@ adminRouter.patch('/treasury/config', async (req: AuthenticatedRequest, res: Res
   try {
     const updated = await TreasuryService.updateConfig(req.body, req.user?.id);
     await AdminAnalyticsService.invalidateCache();
-    res.json({ success: true, data: updated });
+
+    // Sync supported governance parameters live to NexusVault Soroban contract on Stellar Testnet
+    let onChainSync: { synced: boolean; configTxHash?: string; pauseTxHash?: string; error?: string } = {
+      synced: false,
+    };
+    try {
+      const orderFeeBps =
+        typeof req.body?.orderFeeBps === 'number' ? req.body.orderFeeBps : undefined;
+      const ownerSplitPct =
+        typeof req.body?.buybackSharePct === 'number'
+          ? Math.max(0, Math.min(100, 100 - req.body.buybackSharePct))
+          : undefined;
+      const isPaused = typeof req.body?.isPaused === 'boolean' ? req.body.isPaused : undefined;
+
+      if (orderFeeBps !== undefined || ownerSplitPct !== undefined || isPaused !== undefined) {
+        const syncRes = await SorobanService.syncVaultConfigOnChain({
+          orderFeeBps,
+          ownerSplitPct,
+          isPaused,
+        });
+        onChainSync = {
+          synced: true,
+          configTxHash: syncRes.configTx?.txHash,
+          pauseTxHash: syncRes.pauseTx?.txHash,
+        };
+      }
+    } catch (syncErr: any) {
+      onChainSync = { synced: false, error: syncErr?.message || 'On-chain sync skipped' };
+    }
+
+    res.json({ success: true, data: updated, onChainSync });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Failed to update treasury config' });
   }
@@ -627,6 +657,66 @@ adminRouter.get('/contracts/nexus-vault', async (_req: AuthenticatedRequest, res
     res.json({ success: true, data: meta });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to inspect smart contract' });
+  }
+});
+
+adminRouter.get('/contracts/live', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const live = await SorobanService.getFullLiveTelemetry();
+    res.json({ success: true, data: live });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: error.message || 'Failed to query live Soroban contracts' });
+  }
+});
+
+adminRouter.post('/contracts/nexus-vault/mint-nxl', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const amountNxl = Number(req.body?.amountNxl || 0);
+    const recipientAddress = String(req.body?.recipientAddress || env.PLATFORM_STELLAR_VAULT).trim();
+    const rawReason = String(req.body?.reason || 'admin').toLowerCase();
+    const reason = (['cashback', 'bridge', 'liquidity', 'admin'].includes(rawReason) ? rawReason : 'admin') as
+      | 'cashback'
+      | 'bridge'
+      | 'liquidity'
+      | 'admin';
+    if (!Number.isFinite(amountNxl) || amountNxl <= 0 || amountNxl > 100_000) {
+      return res.status(400).json({ success: false, error: 'amountNxl must be between 0 and 100,000' });
+    }
+    const refId = `ADMIN_MINT_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const result = await SorobanService.mintNxlOnChain({
+      recipientAddress,
+      amountNxl,
+      reason,
+      refId,
+      operatorId: req.user?.id || 'ADMIN',
+    });
+    res.json({ success: true, data: { ...result, amountNxl, recipientAddress, reason, refId } });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error?.message || 'On-chain $NXL mint failed' });
+  }
+});
+
+adminRouter.post('/contracts/nexus-vault/burn-nxl', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const amountNxl = Number(req.body?.amountNxl || 0);
+    const rawReason = String(req.body?.reason || 'buyback').toLowerCase();
+    const reason = (['buyback', 'admin', 'bridge'].includes(rawReason) ? rawReason : 'buyback') as
+      | 'buyback'
+      | 'admin'
+      | 'bridge';
+    if (!Number.isFinite(amountNxl) || amountNxl <= 0 || amountNxl > 100_000) {
+      return res.status(400).json({ success: false, error: 'amountNxl must be between 0 and 100,000' });
+    }
+    const refId = `ADMIN_BURN_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const result = await SorobanService.burnNxlOnChain({
+      amountNxl,
+      reason,
+      refId,
+      operatorId: req.user?.id || 'ADMIN',
+    });
+    res.json({ success: true, data: { ...result, amountNxl, reason, refId } });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error?.message || 'On-chain $NXL burn failed' });
   }
 });
 

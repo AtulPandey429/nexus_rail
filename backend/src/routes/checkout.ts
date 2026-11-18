@@ -10,6 +10,9 @@ import { RatesService } from '../services/rates.js';
 import { NrTokenService } from '../services/nrTokenService.js';
 import { PortfolioService } from '../services/portfolioService.js';
 import { resolveUnderpaidOrder, type UnderpaidResolutionMode } from '../services/underpaidOrderService.js';
+import { SorobanService, NEXUS_VAULT_CONTRACT_ID } from '../services/soroban.js';
+import { TreasuryService } from '../services/treasuryService.js';
+import { DualRailTokenService } from '../services/dualRailTokenService.js';
 
 export const checkoutRouter = Router();
 
@@ -495,5 +498,186 @@ checkoutRouter.post('/orders/:orderId/resolve-underpaid', requireAuth, async (re
       ? 402
       : 400;
     return res.status(status).json({ success: false, error: msg });
+  }
+});
+
+// ============================================================================
+// SOROBAN SMART CONTRACT ATOMIC CHECKOUT (NexusVault::settle_order)
+// ============================================================================
+
+// POST /api/v1/checkout/soroban/prepare - Build unsigned Freighter XDR for atomic 50/50 split settlement
+checkoutRouter.post('/soroban/prepare', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orderId = String(req.body?.orderId || '').trim();
+    const payerAddress = String(req.body?.payerAddress || '').trim();
+    const tokenAsset = String(req.body?.tokenAsset || 'XLM').toUpperCase() === 'NXL' ? 'NXL' : 'XLM';
+
+    if (!orderId || !payerAddress) {
+      return res.status(400).json({ success: false, error: 'orderId and payerAddress (Stellar G... public key) are required' });
+    }
+
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const order = await ordersCol.findOne({
+      $or: [{ id: orderId }, { order_number: orderId }],
+      user_id: req.user!.id,
+    });
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    if (order.status === 'PAID' || order.status === 'FULFILLED') {
+      return res.status(400).json({ success: false, error: 'Order is already paid' });
+    }
+
+    // Compute exact token amount from live quote ticket or live FX rates
+    let grossAmount = Number(req.body?.amount || 0);
+    if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
+      const ticket = await RatesService.generateQuoteTicket(order.id, order.total_cents, tokenAsset);
+      grossAmount = Number(ticket.cryptoAmount);
+    }
+
+    const prepared = await SorobanService.buildSettleOrderXdr({
+      payerAddress,
+      tokenAsset,
+      grossAmount,
+      orderId: order.id,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        ...prepared,
+        orderId: order.id,
+        tokenAsset,
+        grossAmount,
+      },
+    });
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      error: error?.message || 'Failed to prepare Soroban settlement transaction',
+    });
+  }
+});
+
+// POST /api/v1/checkout/soroban/submit - Submit signed NexusVault::settle_order XDR & finalize order
+checkoutRouter.post('/soroban/submit', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orderId = String(req.body?.orderId || '').trim();
+    const signedXdr = String(req.body?.signedXdr || '').trim();
+    const tokenAsset = String(req.body?.tokenAsset || 'XLM').toUpperCase() === 'NXL' ? 'NXL' : 'XLM';
+
+    if (!orderId || !signedXdr) {
+      return res.status(400).json({ success: false, error: 'orderId and signedXdr are required' });
+    }
+
+    const ordersCol = await MongoService.getCollection<MongoOrderDoc>('orders');
+    const order = await ordersCol.findOne({
+      $or: [{ id: orderId }, { order_number: orderId }],
+      user_id: req.user!.id,
+    });
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    if (order.status === 'PAID' || order.status === 'FULFILLED') {
+      return res.json({ success: true, alreadyPaid: true, orderId: order.id, txHash: order.tx_hash });
+    }
+
+    // 1. Submit signed Soroban tx to Stellar Testnet RPC and await finality
+    const txRes = await SorobanService.submitSignedSorobanXdr(signedXdr);
+
+    // 2. Verify authoritative on-chain SettlementRecord inside NexusVault
+    const onChainRecord = await SorobanService.getOnChainOrder(order.id).catch(() => null);
+    if (!onChainRecord) {
+      return res.status(400).json({
+        success: false,
+        error: 'Transaction succeeded but order settlement record was not found in NexusVault',
+      });
+    }
+
+    const paidAt = new Date().toISOString();
+    const paidAmount = Number(onChainRecord.gross_amount || 0) / 1e7;
+
+    // 3. Mark order PAID in MongoDB
+    await ordersCol.updateOne(
+      { id: order.id },
+      {
+        $set: {
+          status: 'PAID',
+          payment_rail: tokenAsset === 'NXL' ? 'NXL' : 'XLM',
+          tx_hash: txRes.txHash,
+          paid_at: paidAt,
+          updated_at: paidAt,
+          payment_verification_details: {
+            contractId: NEXUS_VAULT_CONTRACT_ID,
+            method: 'settle_order',
+            ledger: txRes.ledger,
+            explorerUrl: txRes.explorerUrl,
+            onChainRecord,
+          },
+        },
+      }
+    );
+
+    // 4. Record exact split revenue & chain log
+    const feeCents = Math.max(1, Math.round(order.total_cents * 0.01));
+    await TreasuryService.recordRevenueEvent({
+      sourceType: 'ORDER',
+      referenceId: order.id,
+      grossCents: order.total_cents,
+      feeCents,
+      rail: tokenAsset === 'NXL' ? 'NXL' : 'STELLAR',
+    }).catch(() => {});
+
+    await DualRailTokenService.logChainAction({
+      chain: 'STELLAR',
+      action: 'CONTRACT_SPLIT',
+      operatorId: req.user!.id,
+      referenceId: order.id,
+      txHash: txRes.txHash,
+      ledgerSeq: txRes.ledger,
+      amountPrimary: paidAmount,
+      details: {
+        contract: NEXUS_VAULT_CONTRACT_ID,
+        method: 'settle_order',
+        tokenAsset,
+        principal: Number(onChainRecord.principal || 0) / 1e7,
+        ownerShare: Number(onChainRecord.owner_share || 0) / 1e7,
+        nrShare: Number(onChainRecord.nr_share || 0) / 1e7,
+      },
+    }).catch(() => {});
+
+    // 5. Credit Portfolio RWA allocations & automatic 2% $NXL cashback
+    const updatedOrder = (await ordersCol.findOne({ id: order.id })) || order;
+    await PortfolioService.creditOrderAllocations(updatedOrder).catch((err) => {
+      console.warn('[SorobanCheckout] Portfolio credit warning:', err?.message);
+    });
+
+    // 6. Emit live SSE settlement notification
+    settlementEmitter.emitSettlement({
+      orderId: order.id,
+      orderNumber: order.order_number,
+      status: 'PAID',
+      paymentRail: tokenAsset,
+      txHash: txRes.txHash,
+      timestamp: paidAt,
+    });
+
+    return res.json({
+      success: true,
+      orderStatus: 'PAID',
+      data: {
+        orderId: order.id,
+        txHash: txRes.txHash,
+        ledger: txRes.ledger,
+        explorerUrl: txRes.explorerUrl,
+        contractId: NEXUS_VAULT_CONTRACT_ID,
+        onChainRecord,
+      },
+    });
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      error: error?.message || 'Soroban checkout submission failed',
+    });
   }
 });

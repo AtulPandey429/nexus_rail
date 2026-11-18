@@ -1,11 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CircleDollarSign,
   Coins,
   ExternalLink,
+  Flame,
   Landmark,
+  Plus,
   RefreshCw,
   Wallet,
 } from 'lucide-react';
@@ -87,6 +89,88 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
   const treasuryAddress = sc?.treasuryAddress || sc?.treasury_address || '';
   const nrReserveAddress = sc?.nrReserveAddress || sc?.nr_reserve_address || '';
   const contractExplorerUrl = sc?.explorerUrl || sc?.explorer_url || '';
+
+  // Live on-chain Soroban v2.0 telemetry (NexusVault + NexusSwap AMM)
+  const [liveContracts, setLiveContracts] = useState<any | null>(null);
+  const [loadingLiveContracts, setLoadingLiveContracts] = useState(false);
+  const [nxlActionAmount, setNxlActionAmount] = useState('10');
+  const [nxlActionBusy, setNxlActionBusy] = useState<'mint' | 'burn' | null>(null);
+  const [nxlActionFeedback, setNxlActionFeedback] = useState<{
+    tone: 'success' | 'error';
+    message: string;
+    explorerUrl?: string;
+  } | null>(null);
+
+  const loadLiveContracts = async () => {
+    setLoadingLiveContracts(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+      const res = await fetch('/api/v1/admin/contracts/live', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setLiveContracts(json.data);
+      }
+    } catch {
+      // keep silent fallback
+    } finally {
+      setLoadingLiveContracts(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLiveContracts();
+  }, []);
+
+  const handleOnChainTokenAction = async (mode: 'mint' | 'burn') => {
+    const amountNxl = Number(nxlActionAmount);
+    if (!Number.isFinite(amountNxl) || amountNxl <= 0) {
+      setNxlActionFeedback({ tone: 'error', message: 'Enter a positive $NXL amount.' });
+      return;
+    }
+    setNxlActionBusy(mode);
+    setNxlActionFeedback(null);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+      const endpoint =
+        mode === 'mint'
+          ? '/api/v1/admin/contracts/nexus-vault/mint-nxl'
+          : '/api/v1/admin/contracts/nexus-vault/burn-nxl';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          amountNxl,
+          reason: mode === 'mint' ? 'admin' : 'buyback',
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json?.error || `On-chain ${mode} failed`);
+      }
+      setNxlActionFeedback({
+        tone: 'success',
+        message:
+          mode === 'mint'
+            ? `Minted ${amountNxl} $NXL on Stellar Testnet via NexusVault.`
+            : `Burned ${amountNxl} $NXL permanently via NexusVault buyback-and-burn.`,
+        explorerUrl: json.data?.explorerUrl,
+      });
+      loadLiveContracts();
+    } catch (err: any) {
+      setNxlActionFeedback({ tone: 'error', message: err?.message || `On-chain ${mode} failed` });
+    } finally {
+      setNxlActionBusy(null);
+    }
+  };
+
+  const liveVaultCfg = liveContracts?.vault?.config;
+  const liveVaultMetrics = liveContracts?.vault?.metrics;
+  const liveSwapPool = liveContracts?.swap?.pool;
 
   return (
     <div className="space-y-4">
@@ -374,6 +458,131 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
             </Button>
           </div>
         )}
+
+        {/* Live On-Chain v2.0 Telemetry: Mint/Burn Supply Cap + NexusSwap AMM Pool */}
+        <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-gold-soft">
+                Live Soroban RPC State
+              </p>
+              <p className="text-xs text-admin-muted mt-0.5">
+                Real-time on-chain supply cap, burn counter, and NexusSwap AMM liquidity reserves.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {liveSwapPool?.explorerUrl && (
+                <a
+                  href={liveSwapPool.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-300 hover:text-sky-200"
+                >
+                  NexusSwap Explorer
+                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                </a>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={RefreshCw}
+                loading={loadingLiveContracts}
+                onClick={loadLiveContracts}
+              >
+                Sync RPC
+              </Button>
+            </div>
+          </div>
+
+          {liveVaultMetrics && liveSwapPool && (
+            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              <MiniStat
+                label="Circulating $NXL"
+                value={`${Number(liveVaultMetrics.circulatingNxl).toLocaleString()} NXL`}
+                hint={`Cap ${Number(liveVaultCfg?.nxlSupplyCap ?? 2000000).toLocaleString()} NXL`}
+                tone="text-admin-gold-soft"
+              />
+              <MiniStat
+                label="On-Chain Burned"
+                value={`${Number(liveVaultMetrics.totalNxlBurned).toLocaleString()} NXL`}
+                hint={`Bridge burns: ${liveVaultMetrics.totalBridgeBurns ?? 0}`}
+                tone="text-rose-300"
+              />
+              <MiniStat
+                label="AMM Pool Reserves"
+                value={`${Number(liveSwapPool.reserveXlm).toFixed(2)} XLM / ${Number(liveSwapPool.reserveNxl).toFixed(2)} NXL`}
+                hint={`Swaps: ${liveSwapPool.totalSwaps} · Escrows: ${liveSwapPool.totalEscrowsLocked}`}
+                tone="text-sky-300"
+              />
+              <MiniStat
+                label="Vault Settlements"
+                value={`${liveVaultMetrics.totalOrdersSettled} orders`}
+                hint={`On-chain vol: ${Number(liveVaultMetrics.totalVolumeSettled).toFixed(2)}`}
+                tone="text-emerald-300"
+              />
+            </div>
+          )}
+
+          {/* Direct On-Chain Supply-Capped Mint & Deflationary Buyback Burn */}
+          <div className="rounded-xl border border-admin-border bg-[#0B0F16] p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-white">$NXL On-Chain Supply Controls</p>
+              <p className="text-[11px] text-admin-muted mt-0.5">
+                Execute supply-capped mint or permanent buyback-and-burn directly via NexusVault.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={nxlActionAmount}
+                onChange={(e) => setNxlActionAmount(e.target.value)}
+                aria-label="$NXL amount"
+                className={cn(inputClassName, 'w-24 py-1.5 text-xs font-admin-mono')}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Plus}
+                loading={nxlActionBusy === 'mint'}
+                disabled={nxlActionBusy !== null}
+                onClick={() => handleOnChainTokenAction('mint')}
+              >
+                Mint $NXL
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Flame}
+                loading={nxlActionBusy === 'burn'}
+                disabled={nxlActionBusy !== null}
+                onClick={() => handleOnChainTokenAction('burn')}
+              >
+                Burn $NXL
+              </Button>
+            </div>
+          </div>
+
+          {nxlActionFeedback && (
+            <Feedback tone={nxlActionFeedback.tone}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>{nxlActionFeedback.message}</span>
+                {nxlActionFeedback.explorerUrl && (
+                  <a
+                    href={nxlActionFeedback.explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-medium underline"
+                  >
+                    View on Stellar Expert
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            </Feedback>
+          )}
+        </div>
       </Card>
 
       <Card className="p-5 sm:p-6">
