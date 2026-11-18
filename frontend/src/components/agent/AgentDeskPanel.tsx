@@ -385,7 +385,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
               <h2 className="font-extrabold text-base text-[var(--foreground)] tracking-tight">
                 NexusRail AI Agent Desk
               </h2>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold">
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono text-emerald-400 font-bold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Autonomous Assistant</span>
               </span>
@@ -530,7 +530,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                                       {ord.orderNumber}
                                     </span>
                                     <span
-                                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                                      className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold uppercase ${
                                         isPaid
                                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                           : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
@@ -599,14 +599,14 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                         {/* Total Portfolio Valuation */}
                         <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] flex items-center justify-between">
                           <div>
-                            <span className="text-[10px] font-mono uppercase text-[var(--muted)] block">
+                            <span className="text-[11px] font-mono uppercase text-[var(--muted)] block">
                               Total Portfolio Valuation
                             </span>
                             <span className="text-2xl font-black font-mono text-[var(--gold)]">
                               ${m.holdings.totalUsd.toFixed(2)} USD
                             </span>
                           </div>
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono text-emerald-400 font-bold">
                             Live Oracle Synced
                           </span>
                         </div>
@@ -626,7 +626,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                                   <div className="font-bold text-[var(--foreground)]">
                                     {asset.name}
                                   </div>
-                                  <div className="text-[10px] text-[var(--muted)]">
+                                  <div className="text-[11px] text-[var(--muted)]">
                                     {asset.rail}
                                   </div>
                                 </div>
@@ -635,7 +635,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                                 <div className="font-bold text-[var(--foreground)]">
                                   {asset.amount}
                                 </div>
-                                <div className="text-[10px] text-[var(--muted)]">
+                                <div className="text-[11px] text-[var(--muted)]">
                                   ≈ ${asset.usdValue.toFixed(2)} USD
                                 </div>
                               </div>
@@ -658,13 +658,13 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                                 : 'Order Proposal Lock'}
                             </span>
                           </span>
-                          <span className="opacity-70 text-[10px]">{m.proposal.proposalId}</span>
+                          <span className="opacity-70 text-[11px]">{m.proposal.proposalId}</span>
                         </div>
 
                         {/* Proposal Details Grid */}
                         <div className="space-y-2 text-xs font-mono">
                           <div className="p-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1">
-                            <span className="text-[10px] text-[var(--muted)] uppercase block">
+                            <span className="text-[11px] text-[var(--muted)] uppercase block">
                               {m.proposal.action === 'PAY_ORDER' ? 'Payment Reference' : 'Item Description'}
                             </span>
                             <div className="font-bold text-sm text-[var(--foreground)]">
@@ -680,7 +680,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
 
                           <div className="grid grid-cols-2 gap-2">
                             <div className="p-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)]">
-                              <span className="text-[10px] text-[var(--muted)] uppercase block">
+                              <span className="text-[11px] text-[var(--muted)] uppercase block">
                                 Amount Due
                               </span>
                               <span className="font-bold text-base text-[var(--gold)]">
@@ -688,7 +688,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
                               </span>
                             </div>
                             <div className="p-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)]">
-                              <span className="text-[10px] text-[var(--muted)] uppercase block">
+                              <span className="text-[11px] text-[var(--muted)] uppercase block">
                                 Network Fee
                               </span>
                               <span className="font-bold text-xs text-[var(--foreground)]">
@@ -906,7 +906,7 @@ export function AgentDeskPanel({ isOpen, onClose }: { isOpen: boolean; onClose: 
             </button>
           </form>
 
-          <p className="text-[10px] text-[var(--muted)]/70 text-center font-mono">
+          <p className="text-[11px] text-[var(--muted)]/70 text-center font-mono">
             NexusRail AI operates strictly on non-custodial proposals. It cannot move funds or sign transactions without your explicit approval.
           </p>
         </div>

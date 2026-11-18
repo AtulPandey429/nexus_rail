@@ -782,66 +782,25 @@ export async function createOrderFromCart(lines: CartLine[], rail = 'MULTI', pro
 }
 
 export async function fetchOrders() {
-  try {
-    const res = await fetch('/api/v1/orders', { headers: headers(), cache: 'no-store' });
-    const payload = await readJson(res);
-    if (res.ok && payload?.success === true && Array.isArray(payload?.data?.orders) && payload.data.orders.length > 0) {
-      return payload.data.orders as Array<{
-        id: string;
-        orderNumber?: string;
-        status: string;
-        totalCents?: number;
-        rail?: string;
-        createdAt?: string;
-        ipfsHash?: string;
-        items?: { sku?: string; title?: string; qty?: number }[];
-      }>;
-    }
-  } catch {
-    // Fallback to sample demo activity records below
+  const res = await fetch('/api/v1/orders', { headers: headers(), cache: 'no-store' });
+  const payload = await readJson(res);
+  if (!res.ok || payload?.success !== true || !Array.isArray(payload?.data?.orders)) {
+    throw new Error(errorMessage(payload, 'Could not load your orders.'));
   }
 
-  return [
-    {
-      id: 'ord_nr1048',
-      orderNumber: 'NR-1048',
-      status: 'PAID',
-      totalCents: 20002,
-      rail: 'STELLAR',
-      createdAt: new Date(Date.now() - 1000 * 60 * 32).toISOString(),
-      ipfsHash: 'bafybeic7v7l42j3c4s2w2k54p2v6n7e6c3k7v7l42j3c4s2w2k54p2v6n7',
-      items: [
-        { sku: 'RAIL-ONE', title: 'Rail One', qty: 1 },
-        { sku: 'RELAY-MAT', title: 'Relay desk mat', qty: 1 },
-        { sku: 'NEXUS-TEE', title: 'Nexus tee', qty: 1 },
-      ],
-    },
-    {
-      id: 'ord_nr1047',
-      orderNumber: 'NR-1047',
-      status: 'PAID',
-      totalCents: 9001,
-      rail: 'XRPL',
-      createdAt: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-      ipfsHash: 'bafybeid9k2l1m4n5o6p7q8r9s0t1u2v3w4x5y6z7a8b9c0d1e2f3g4h5i6',
-      items: [
-        { sku: 'NODE-STAND', title: 'Node stand', qty: 1 },
-        { sku: 'NEXUS-TEE', title: 'Nexus tee', qty: 1 },
-      ],
-    },
-    {
-      id: 'ord_nr1046',
-      orderNumber: 'NR-1046',
-      status: 'SETTLED',
-      totalCents: 2400,
-      rail: 'STELLAR',
-      createdAt: new Date(Date.now() - 1000 * 60 * 640).toISOString(),
-      ipfsHash: 'bafybeif8e7d6c5b4a3z2y1x0w9v8u7t6s5r4q3p2o1n0m9l8k7j6h5g4f3',
-      items: [
-        { sku: 'RAIL-CABLES', title: 'Rail cable kit', qty: 1 },
-      ],
-    },
-  ];
+  return payload.data.orders as Array<{
+    id: string;
+    orderNumber?: string;
+    status: string;
+    totalCents?: number;
+    cashbackUsdCents?: number;
+    rail?: string;
+    createdAt?: string;
+    txHash?: string;
+    ipfsHash?: string;
+    underpaidCents?: number;
+    items?: { sku?: string; title?: string; qty?: number; unit_price_cents?: number }[];
+  }>;
 }
 
 export async function fetchGuideMessages(): Promise<GuideMessage[]> {

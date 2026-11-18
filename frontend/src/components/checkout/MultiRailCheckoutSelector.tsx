@@ -339,7 +339,7 @@ export function MultiRailCheckoutSelector({
               <div className="text-left">
                 <div className="text-sm font-semibold text-white flex items-center gap-2">
                   <span>Circle USDC (Stellar)</span>
-                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">1:1 Guaranteed</span>
+                  <span className="text-[11px] uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">1:1 Guaranteed</span>
                 </div>
                 <div className="text-xs text-gray-400">${usdPrice} USDC • Zero Volatility</div>
               </div>
@@ -389,7 +389,7 @@ export function MultiRailCheckoutSelector({
                   type="button"
                   onClick={handleRefreshQuote}
                   disabled={isRefreshingQuote}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400/20 text-amber-200 hover:bg-amber-400/30 text-[10px] font-bold"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400/20 text-amber-200 hover:bg-amber-400/30 text-[11px] font-bold"
                 >
                   <RefreshCw className={`w-3 h-3 ${isRefreshingQuote ? 'animate-spin' : ''}`} />
                   <span>{isRefreshingQuote ? 'Refreshing…' : 'Renew Quote'}</span>

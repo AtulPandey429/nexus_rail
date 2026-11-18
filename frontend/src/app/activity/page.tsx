@@ -30,7 +30,7 @@ interface OrderItem {
   railLabel: string;
   token: string;
   totalUsd: number;
-  cryptoAmount: string;
+  cashbackCents: number;
   status: 'PAID' | 'AWAITING PAYMENT' | 'UNDERPAID' | 'REFUNDED' | 'EXPIRED';
   underpaidCents?: number;
   slippagePercent?: number;
@@ -39,9 +39,7 @@ interface OrderItem {
   txHash: string;
   ledgerSequence: string;
   journalId: string;
-  customerClearing: number;
-  merchantPayable: number;
-  networkFee: number;
+  networkFeeCents: number | null;
 }
 
 function ActivityContent() {
@@ -61,52 +59,56 @@ function ActivityContent() {
   const loadOrders = () => {
     return fetchOrders()
       .then((live) => {
-        if (live && live.length > 0) {
-          const mapped: OrderItem[] = live.map((o: any, idx: number) => {
-            const rawStatus = String(o.status || '').toUpperCase();
-            const isPaid = rawStatus === 'PAID';
-            const isStellar = (o.payment_rail || o.rail || '').toLowerCase().includes('stellar');
-            const token = isStellar ? 'XLM' : 'XRP';
-            const total = (o.total_cents || 0) / 100;
-            const normalizedStatus: OrderItem['status'] =
-              rawStatus === 'PAID'
-                ? 'PAID'
-                : rawStatus === 'UNDERPAID'
-                ? 'UNDERPAID'
-                : rawStatus === 'REFUNDED'
-                ? 'REFUNDED'
-                : rawStatus === 'EXPIRED' || rawStatus === 'CANCELLED'
-                ? 'EXPIRED'
-                : 'AWAITING PAYMENT';
-            return {
-              id: o.id || `ord_${idx}`,
-              orderNumber: o.order_number || `#NR${String(idx + 1).padStart(7, '0')}`,
-              items: o.items?.[0]?.title ? `${o.items[0].title}${o.items.length > 1 ? ` + ${o.items.length - 1} more` : ''}` : 'Rail Item',
-              rail: isStellar ? 'STELLAR' : 'XRPL',
-              railLabel: isStellar ? 'Stellar / XLM' : 'XRPL / XRP',
-              token,
-              totalUsd: total,
-              cryptoAmount: isStellar ? `${(total * 10).toFixed(2)} XLM` : `${(total * 2).toFixed(2)} XRP`,
-              status: normalizedStatus,
-              underpaidCents: Number(o.underpaid_cents || 0),
-              slippagePercent: typeof o.slippage_percent === 'number' ? o.slippage_percent : undefined,
-              refundTxHash: o.refund_tx_hash,
-              dateUtc: o.created_at ? new Date(o.created_at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
-              txHash: o.tx_hash || 'pending',
-              ledgerSequence: o.ledger_seq ? String(o.ledger_seq) : isPaid ? 'confirmed' : 'unposted',
-              journalId: o.journal_id || `NL-${new Date().getFullYear()}-${String(idx + 1).padStart(4, '0')}`,
-              customerClearing: total,
-              merchantPayable: total > 0.0001 ? total - 0.0001 : total,
-              networkFee: 0.0001,
-            };
-          });
-          setOrders(mapped);
-          if (mapped.length > 0 && !selectedOrderId) {
-            setSelectedOrderId(mapped[0].orderNumber);
-          }
-        } else {
-          setOrders([]);
-        }
+        const rows = Array.isArray(live) ? live : [];
+        const mapped: OrderItem[] = rows.map((o: any, idx: number) => {
+          const rawStatus = String(o.status || '').toUpperCase();
+          const railRaw = String(o.rail ?? o.payment_rail ?? '').toUpperCase();
+          const isStellar = /STELLAR|XLM|USDC/.test(railRaw);
+          const isXrpl = /XRPL|XRP|RLUSD/.test(railRaw);
+          const totalCents = Number(o.totalCents ?? o.total_cents ?? 0);
+          const total = totalCents / 100;
+          const normalizedStatus: OrderItem['status'] =
+            rawStatus === 'PAID' || rawStatus === 'FULFILLING' || rawStatus === 'FULFILLED'
+              ? 'PAID'
+              : rawStatus === 'UNDERPAID'
+              ? 'UNDERPAID'
+              : rawStatus === 'REFUNDED'
+              ? 'REFUNDED'
+              : rawStatus === 'EXPIRED' || rawStatus === 'CANCELLED'
+              ? 'EXPIRED'
+              : 'AWAITING PAYMENT';
+          const createdAt = o.createdAt ?? o.created_at;
+          return {
+            id: o.id || `ord_${idx}`,
+            orderNumber: o.orderNumber || o.order_number || `#${o.id || idx}`,
+            items: o.items?.[0]?.title
+              ? `${o.items[0].title}${o.items.length > 1 ? ` + ${o.items.length - 1} more` : ''}`
+              : 'Order items unavailable',
+            rail: isStellar ? 'STELLAR' : isXrpl ? 'XRPL' : railRaw || 'UNKNOWN',
+            railLabel: isStellar ? 'Stellar / XLM' : isXrpl ? 'XRPL / XRP' : railRaw || 'Unknown rail',
+            token: isStellar ? 'XLM' : isXrpl ? 'XRP' : '',
+            totalUsd: total,
+            cashbackCents: Number(o.cashbackUsdCents ?? o.cashback_usd_cents ?? 0),
+            status: normalizedStatus,
+            underpaidCents: Number(o.underpaidCents ?? o.underpaid_cents ?? 0),
+            slippagePercent:
+              typeof o.slippage_percent === 'number'
+                ? o.slippage_percent
+                : typeof o.slippagePercent === 'number'
+                ? o.slippagePercent
+                : undefined,
+            refundTxHash: o.refund_tx_hash ?? o.refundTxHash,
+            dateUtc: createdAt
+              ? new Date(createdAt).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
+              : '—',
+            txHash: o.txHash || o.tx_hash || '',
+            ledgerSequence: o.ledger_seq ? String(o.ledger_seq) : '',
+            journalId: o.journal_id || '',
+            networkFeeCents: typeof o.fee_cents === 'number' ? o.fee_cents : null,
+          };
+        });
+        setOrders(mapped);
+        setSelectedOrderId((prev) => prev || (mapped.length > 0 ? mapped[0].orderNumber : ''));
       })
       .catch(() => {
         setOrders([]);
@@ -164,6 +166,10 @@ function ActivityContent() {
 
   const awaitingCount = useMemo(() => {
     return orders.filter((o) => o.status === 'AWAITING PAYMENT').length;
+  }, [orders]);
+
+  const totalCashbackCents = useMemo(() => {
+    return orders.reduce((sum, o) => sum + (o.cashbackCents || 0), 0);
   }, [orders]);
 
   const filteredOrders = useMemo(() => {
@@ -243,7 +249,7 @@ function ActivityContent() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Tile 1: Total Paid */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
-            <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <p className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               TOTAL PAID / USD
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--foreground)] tracking-tight">
@@ -256,7 +262,7 @@ function ActivityContent() {
 
           {/* Tile 2: Awaiting Payment */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
-            <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <p className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               AWAITING PAYMENT
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--foreground)] tracking-tight">
@@ -267,16 +273,16 @@ function ActivityContent() {
             </p>
           </div>
 
-          {/* Tile 3: Ledger Difference */}
+          {/* Tile 3: Cashback Earned */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
-            <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
-              LEDGER DIFFERENCE
+            <p className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
+              CASHBACK EARNED
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--foreground)] tracking-tight">
-              $0.00
+              ${(totalCashbackCents / 100).toFixed(2)}
             </p>
-            <p className="text-xs font-mono text-[var(--gold)] pt-1">
-              All posted entries balanced
+            <p className="text-xs font-mono text-[var(--muted)] pt-1">
+              {totalCashbackCents > 0 ? 'Credited to your portfolio' : 'No cashback credited yet'}
             </p>
           </div>
         </div>
@@ -323,7 +329,7 @@ function ActivityContent() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono">
                   <thead>
-                    <tr className="border-b border-[var(--border)] text-[10px] tracking-widest uppercase text-[var(--muted)] bg-[var(--card-subtle)]/50">
+                    <tr className="border-b border-[var(--border)] text-[11px] tracking-widest uppercase text-[var(--muted)] bg-[var(--card-subtle)]/50">
                       <th className="py-3.5 px-4 sm:px-6">EVENT TYPE</th>
                       <th className="py-3.5 px-4">ASSET &amp; QUANTITY</th>
                       <th className="py-3.5 px-4">UNIT PRICE</th>
@@ -349,7 +355,7 @@ function ActivityContent() {
                           <tr key={evt.id} className="hover:bg-[var(--card-subtle)] transition-colors">
                             <td className="py-3.5 px-4 sm:px-6">
                               <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
                                   isAcquire
                                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                                     : isCashback
@@ -376,7 +382,7 @@ function ActivityContent() {
                             </td>
                             <td className="py-3.5 px-4 sm:px-6 text-right text-[11px] text-[var(--muted)] font-mono">
                               <div>{new Date(evt.created_at).toLocaleString()}</div>
-                              <div className="text-[10px] text-[var(--muted)]/60 truncate max-w-[150px] ml-auto">{evt.reference_id}</div>
+                              <div className="text-[11px] text-[var(--muted)]/60 truncate max-w-[150px] ml-auto">{evt.reference_id}</div>
                             </td>
                           </tr>
                         );
@@ -442,7 +448,7 @@ function ActivityContent() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs font-mono">
               <thead>
-                <tr className="border-b border-[var(--border)] text-[10px] tracking-widest uppercase text-[var(--muted)] bg-[var(--card-subtle)]">
+                <tr className="border-b border-[var(--border)] text-[11px] tracking-widest uppercase text-[var(--muted)] bg-[var(--card-subtle)]">
                   <th className="py-3.5 px-4 sm:px-6">ORDER</th>
                   <th className="py-3.5 px-4">ITEMS</th>
                   <th className="py-3.5 px-4">PAYMENT RAIL</th>
@@ -490,27 +496,27 @@ function ActivityContent() {
                       </td>
                       <td className="py-4 px-4">
                         {ord.status === 'PAID' && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-semibold">
                             PAID
                           </span>
                         )}
                         {ord.status === 'AWAITING PAYMENT' && (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-semibold">
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-semibold">
                             AWAITING PAYMENT
                           </span>
                         )}
                         {ord.status === 'UNDERPAID' && (
-                          <span className="px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-400/40 text-orange-300 text-[10px] font-semibold">
+                          <span className="px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-400/40 text-orange-300 text-[11px] font-semibold">
                             ACTION NEEDED (SHORTFALL)
                           </span>
                         )}
                         {ord.status === 'REFUNDED' && (
-                          <span className="px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-400/30 text-sky-300 text-[10px] font-semibold">
+                          <span className="px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-400/30 text-sky-300 text-[11px] font-semibold">
                             REFUNDED
                           </span>
                         )}
                         {ord.status === 'EXPIRED' && (
-                          <span className="px-2 py-0.5 rounded-full bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--muted)] text-[10px]">
+                          <span className="px-2 py-0.5 rounded-full bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--muted)] text-[11px]">
                             EXPIRED
                           </span>
                         )}
@@ -536,55 +542,82 @@ function ActivityContent() {
             </p>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Card: Double-entry ledger (7 cols) */}
+              {/* Left Card: Settlement summary (7 cols) */}
               <div className="lg:col-span-7 rounded-3xl nexus-glass-card border border-[var(--border)] p-6 sm:p-7 shadow-xl space-y-5">
-                <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]">
+                <div className="flex items-center justify-between gap-3 pb-2 border-b border-[var(--border)]">
                   <div>
                     <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
-                      Double-entry ledger
+                      Settlement summary
                     </h2>
-                    <p className="text-[10px] font-mono text-[var(--muted)] uppercase mt-0.5">
-                      ACCOUNT / JOURNAL {selectedOrder.journalId}
+                    <p className="text-[11px] font-mono text-[var(--muted)] uppercase mt-0.5">
+                      {selectedOrder.journalId
+                        ? `JOURNAL ${selectedOrder.journalId}`
+                        : 'NO JOURNAL REFERENCE'}
                     </p>
                   </div>
 
-                  <span className="px-2.5 py-0.5 rounded-full bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[var(--gold)] text-[10px] font-mono font-bold tracking-wider">
-                    BALANCED
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold tracking-wider border ${
+                      selectedOrder.status === 'PAID'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : selectedOrder.status === 'UNDERPAID'
+                        ? 'bg-amber-500/10 border-amber-400/30 text-amber-300'
+                        : 'bg-[var(--card-subtle)] border-[var(--border)] text-[var(--muted)]'
+                    }`}
+                  >
+                    {selectedOrder.status === 'PAID'
+                      ? 'SETTLED'
+                      : selectedOrder.status === 'UNDERPAID'
+                      ? 'SHORTFALL'
+                      : selectedOrder.status}
                   </span>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs font-mono">
                     <thead>
-                      <tr className="border-b border-[var(--border)] text-[10px] tracking-widest uppercase text-[var(--muted)]">
+                      <tr className="border-b border-[var(--border)] text-[11px] tracking-widest uppercase text-[var(--muted)]">
                         <th className="py-2.5 px-3">ACCOUNT</th>
-                        <th className="py-2.5 px-3">LEDGER REF</th>
+                        <th className="py-2.5 px-3">REFERENCE</th>
                         <th className="py-2.5 px-3 text-right">DEBIT / USD</th>
                         <th className="py-2.5 px-3 text-right">CREDIT / USD</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border)]">
                       <tr>
-                        <td className="py-3 px-3 text-[var(--foreground)] font-medium">Customer Clearing</td>
+                        <td className="py-3 px-3 text-[var(--foreground)] font-medium">Customer clearing</td>
                         <td className="py-3 px-3 text-[var(--muted)]">{selectedOrder.orderNumber}</td>
-                        <td className="py-3 px-3 text-right font-mono text-emerald-400 font-semibold">${selectedOrder.customerClearing.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-right font-mono text-emerald-400 font-semibold">
+                          ${selectedOrder.totalUsd.toFixed(2)}
+                        </td>
                         <td className="py-3 px-3 text-right font-mono text-[var(--muted)]">—</td>
                       </tr>
                       <tr>
-                        <td className="py-3 px-3 text-[var(--foreground)] font-medium">Merchant Payable</td>
+                        <td className="py-3 px-3 text-[var(--foreground)] font-medium">Merchant payable</td>
                         <td className="py-3 px-3 text-[var(--muted)]">nexus-vault</td>
                         <td className="py-3 px-3 text-right font-mono text-[var(--muted)]">—</td>
-                        <td className="py-3 px-3 text-right font-mono text-[var(--gold)] font-semibold">${selectedOrder.merchantPayable.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-right font-mono text-[var(--gold)] font-semibold">
+                          ${(selectedOrder.totalUsd - (selectedOrder.networkFeeCents ?? 0) / 100).toFixed(2)}
+                        </td>
                       </tr>
-                      <tr>
-                        <td className="py-3 px-3 text-[var(--foreground)] font-medium">Network Gas Fee</td>
-                        <td className="py-3 px-3 text-[var(--muted)]">{selectedOrder.rail.toLowerCase()}-fee</td>
-                        <td className="py-3 px-3 text-right font-mono text-[var(--muted)]">—</td>
-                        <td className="py-3 px-3 text-right font-mono text-[var(--muted)]">${selectedOrder.networkFee.toFixed(4)}</td>
-                      </tr>
+                      {selectedOrder.networkFeeCents !== null && (
+                        <tr>
+                          <td className="py-3 px-3 text-[var(--foreground)] font-medium">Network fee</td>
+                          <td className="py-3 px-3 text-[var(--muted)]">{selectedOrder.rail.toLowerCase()}-fee</td>
+                          <td className="py-3 px-3 text-right font-mono text-[var(--muted)]">—</td>
+                          <td className="py-3 px-3 text-right font-mono text-[var(--muted)]">
+                            ${(selectedOrder.networkFeeCents / 100).toFixed(4)}
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
+
+                <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                  Amounts are derived from the recorded order total. On-chain network fees are paid by the sender and
+                  are not stored on the order record.
+                </p>
               </div>
 
               {/* Right Card: On-chain settlement proof */}
@@ -596,22 +629,36 @@ function ActivityContent() {
 
                 <div className="space-y-4 text-xs font-mono">
                   <div className="space-y-1">
-                    <span className="text-[10px] uppercase text-[var(--muted)] block">Transaction Hash</span>
-                    <p className="p-2.5 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] break-all select-all font-semibold">
-                      {selectedOrder.txHash}
-                    </p>
+                    <span className="text-[11px] uppercase text-[var(--muted)] block">Transaction hash</span>
+                    {selectedOrder.txHash ? (
+                      <p className="p-2.5 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] break-all select-all font-semibold">
+                        {selectedOrder.txHash}
+                      </p>
+                    ) : (
+                      <p className="p-2.5 rounded-xl bg-[var(--card-subtle)] border border-dashed border-[var(--border)] text-[var(--muted)]">
+                        Not submitted yet
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1">
-                      <span className="text-[10px] text-[var(--muted)] uppercase block">Ledger Sequence</span>
-                      <p className="font-bold text-[var(--foreground)]">{selectedOrder.ledgerSequence}</p>
+                      <span className="text-[11px] text-[var(--muted)] uppercase block">Ledger sequence</span>
+                      <p className="font-bold text-[var(--foreground)]">{selectedOrder.ledgerSequence || 'Not recorded'}</p>
                     </div>
 
                     <div className="p-3 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1">
-                      <span className="text-[10px] text-[var(--muted)] uppercase block">Order Status</span>
-                      <p className={`font-bold ${selectedOrder.status === 'UNDERPAID' ? 'text-amber-400' : 'text-emerald-400'}`}>
-                        {selectedOrder.status === 'UNDERPAID' ? 'Shortfall Pending' : selectedOrder.status}
+                      <span className="text-[11px] text-[var(--muted)] uppercase block">Order status</span>
+                      <p
+                        className={`font-bold ${
+                          selectedOrder.status === 'PAID'
+                            ? 'text-emerald-400'
+                            : selectedOrder.status === 'UNDERPAID'
+                            ? 'text-amber-400'
+                            : 'text-[var(--muted)]'
+                        }`}
+                      >
+                        {selectedOrder.status === 'UNDERPAID' ? 'Shortfall pending' : selectedOrder.status}
                       </p>
                     </div>
                   </div>

@@ -870,7 +870,7 @@ export default function ProfilePage() {
                     onChange={(e) => setWithdrawAddress(e.target.value)}
                     className="w-full px-4 py-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] font-mono text-xs focus:outline-none focus:border-[#D4AF37]"
                   />
-                  <p className="text-[10px] text-[var(--muted)]">
+                  <p className="text-[11px] text-[var(--muted)]">
                     {withdrawChain === 'stellar'
                       ? 'Protocol 22 Asset Contract: CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N'
                       : 'XRPL XLS-30d Native AMM Token: Hex 4E52000000000000000000000000000000000000'}
@@ -1020,7 +1020,7 @@ export default function ProfilePage() {
                   <h2 className="text-xl font-bold text-[var(--foreground)]">
                     {profile?.name || 'Nexus Traveler'}
                   </h2>
-                  <span className="px-2 py-0.5 rounded-full bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[10px] font-mono text-[var(--gold)] uppercase font-semibold">
+                  <span className="px-2 py-0.5 rounded-full bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[11px] font-mono text-[var(--gold)] uppercase font-semibold">
                     {profile?.role || 'User'}
                   </span>
                 </div>
@@ -1082,7 +1082,7 @@ export default function ProfilePage() {
           {/* Account Attributes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)] block">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--muted)] block">
                 Email Address
               </span>
               <div className="flex items-center gap-2">
@@ -1094,7 +1094,7 @@ export default function ProfilePage() {
             </div>
 
             <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-1">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)] block">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--muted)] block">
                 Member Since
               </span>
               <div className="flex items-center gap-2">
@@ -1178,7 +1178,7 @@ export default function ProfilePage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Total Invested Cost */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
-            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <span className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               TOTAL INVESTED COST
             </span>
             <p className="text-xl sm:text-2xl font-mono font-bold text-[var(--foreground)]">
@@ -1191,7 +1191,7 @@ export default function ProfilePage() {
 
           {/* Card 2: Current Portfolio Value */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
-            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <span className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               CURRENT MARKET VALUE
             </span>
             <p className="text-xl sm:text-2xl font-mono font-bold text-[var(--gold)]">
@@ -1204,7 +1204,7 @@ export default function ProfilePage() {
 
           {/* Card 3: Net Unrealized P&L */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
-            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <span className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               NET UNREALIZED P&amp;L
             </span>
             {(() => {
@@ -1217,7 +1217,7 @@ export default function ProfilePage() {
                     {isPositive ? <TrendingUp className="w-5 h-5 shrink-0" /> : <TrendingDown className="w-5 h-5 shrink-0" />}
                     <span>{isPositive ? '+' : ''}${(pnlCents / 100).toFixed(2)}</span>
                   </div>
-                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold ${isPositive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`}>
+                  <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold ${isPositive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`}>
                     {isPositive ? '+' : ''}{pnlPct.toFixed(2)}%
                   </span>
                 </>
@@ -1227,7 +1227,7 @@ export default function ProfilePage() {
 
           {/* Card 4: Total Realized Gains */}
           <div className="p-5 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-1">
-            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <span className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               REALIZED CASHOUT GAINS
             </span>
             <p className="text-xl sm:text-2xl font-mono font-bold text-[var(--foreground)]">
@@ -1280,13 +1280,13 @@ export default function ProfilePage() {
                           <span className="w-2.5 h-2.5 rounded-full bg-[var(--gold)]" />
                           <h3 className="font-bold text-sm text-[var(--foreground)]">{h.label}</h3>
                         </div>
-                        <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block mt-0.5">
+                        <span className="text-[11px] font-mono text-[var(--muted)] uppercase tracking-wider block mt-0.5">
                           {h.symbol} • Oracle: {h.oracle_source}
                         </span>
                       </div>
 
                       {has24hChange && (
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 shrink-0 ${is24hUp ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`}>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold flex items-center gap-1 shrink-0 ${is24hUp ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`}>
                           {is24hUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                           <span>{is24hUp ? '+' : ''}{(h.change_24h_percent || 0).toFixed(2)}% 24h</span>
                         </span>
@@ -1312,13 +1312,13 @@ export default function ProfilePage() {
                     {/* Valuation & Cost Basis Grid */}
                     <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                       <div className="p-2.5 rounded-xl bg-[var(--card-subtle)]/50 border border-[var(--border)]/50">
-                        <span className="text-[10px] text-[var(--muted)] block">Avg Cost Basis</span>
+                        <span className="text-[11px] text-[var(--muted)] block">Avg Cost Basis</span>
                         <span className="font-semibold text-[var(--foreground)]">
                           ${(h.avg_buy_price_cents / 100).toFixed(2)}
                         </span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-[var(--card-subtle)]/50 border border-[var(--border)]/50">
-                        <span className="text-[10px] text-[var(--muted)] block">Live Market Price</span>
+                        <span className="text-[11px] text-[var(--muted)] block">Live Market Price</span>
                         <span className="font-semibold text-[var(--foreground)]">
                           ${(h.current_price_cents / 100).toFixed(2)}
                         </span>
@@ -1373,7 +1373,7 @@ export default function ProfilePage() {
               <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
                 Verified Blockchain Wallets
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-[var(--gold)]/10 border border-[var(--gold)]/30 text-[10px] font-mono text-[var(--gold)] font-bold">
+              <span className="px-2 py-0.5 rounded-full bg-[var(--gold)]/10 border border-[var(--gold)]/30 text-[11px] font-mono text-[var(--gold)] font-bold">
                 Dual-Rail Policy (Max 2)
               </span>
             </div>
@@ -1392,16 +1392,16 @@ export default function ProfilePage() {
                   <span className="w-3 h-3 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50" />
                   <div>
                     <h3 className="font-bold text-sm text-[var(--foreground)]">Stellar Network (XLM)</h3>
-                    <span className="text-[10px] font-mono text-[var(--muted)]">Rail 1 · Horizon &amp; Soroban</span>
+                    <span className="text-[11px] font-mono text-[var(--muted)]">Rail 1 · Horizon &amp; Soroban</span>
                   </div>
                 </div>
                 {resolvedStellar ? (
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1.5">
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono text-emerald-400 font-bold flex items-center gap-1.5">
                     <ShieldCheck className="w-3 h-3" />
                     <span>{stellarProvider || 'Freighter'} Active</span>
                   </span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-full bg-[var(--card-subtle)] text-[10px] font-mono text-[var(--muted)]">
+                  <span className="px-2.5 py-1 rounded-full bg-[var(--card-subtle)] text-[11px] font-mono text-[var(--muted)]">
                     Slot Available
                   </span>
                 )}
@@ -1410,13 +1410,13 @@ export default function ProfilePage() {
               {resolvedStellar ? (
                 <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block">
+                    <span className="text-[11px] font-mono text-[var(--muted)] uppercase tracking-wider block">
                       Stellar Public Key
                     </span>
                     <button
                       type="button"
                       onClick={() => handleCopyHash(resolvedStellar)}
-                      className="text-[10px] font-mono text-[var(--gold)] hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] font-mono text-[var(--gold)] hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       {copiedTxHash === resolvedStellar ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedTxHash === resolvedStellar ? 'Copied' : 'Copy'}</span>
@@ -1425,7 +1425,7 @@ export default function ProfilePage() {
                   <p className="text-xs font-mono text-[var(--foreground)] break-all font-semibold select-all">
                     {resolvedStellar}
                   </p>
-                  <div className="flex items-center justify-between pt-1 text-[10px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
+                  <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
                     <span>Compatible with Soroban &amp; SEP-0007</span>
                     <a
                       href={`https://stellar.expert/explorer/testnet/account/${resolvedStellar}`}
@@ -1482,16 +1482,16 @@ export default function ProfilePage() {
                   <span className="w-3 h-3 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
                   <div>
                     <h3 className="font-bold text-sm text-[var(--foreground)]">XRP Ledger (XRP)</h3>
-                    <span className="text-[10px] font-mono text-[var(--muted)]">Rail 2 · Altnet &amp; XLS-30d</span>
+                    <span className="text-[11px] font-mono text-[var(--muted)]">Rail 2 · Altnet &amp; XLS-30d</span>
                   </div>
                 </div>
                 {resolvedXrpl ? (
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1.5">
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono text-emerald-400 font-bold flex items-center gap-1.5">
                     <ShieldCheck className="w-3 h-3" />
                     <span>{xrplProvider || 'GemWallet'} Active</span>
                   </span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-full bg-[var(--card-subtle)] text-[10px] font-mono text-[var(--muted)]">
+                  <span className="px-2.5 py-1 rounded-full bg-[var(--card-subtle)] text-[11px] font-mono text-[var(--muted)]">
                     Slot Available
                   </span>
                 )}
@@ -1500,13 +1500,13 @@ export default function ProfilePage() {
               {resolvedXrpl ? (
                 <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider block">
+                    <span className="text-[11px] font-mono text-[var(--muted)] uppercase tracking-wider block">
                       XRPL Account Address
                     </span>
                     <button
                       type="button"
                       onClick={() => handleCopyHash(resolvedXrpl)}
-                      className="text-[10px] font-mono text-[var(--gold)] hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] font-mono text-[var(--gold)] hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       {copiedTxHash === resolvedXrpl ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedTxHash === resolvedXrpl ? 'Copied' : 'Copy'}</span>
@@ -1515,7 +1515,7 @@ export default function ProfilePage() {
                   <p className="text-xs font-mono text-[var(--foreground)] break-all font-semibold select-all">
                     {resolvedXrpl}
                   </p>
-                  <div className="flex items-center justify-between pt-1 text-[10px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
+                  <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
                     <span>Compatible with XLS-30d AMM &amp; Escrow</span>
                     <a
                       href={`https://testnet.xrpl.org/accounts/${resolvedXrpl}`}
@@ -1648,7 +1648,7 @@ export default function ProfilePage() {
                   >
                     <span className="w-2 h-2 rounded-full bg-[#0081F2]" />
                     <span>XRPL Testnet</span>
-                    {resolvedXrpl && <span className="text-[10px] opacity-75 font-normal">({resolvedXrpl.slice(0, 4)}...{resolvedXrpl.slice(-3)})</span>}
+                    {resolvedXrpl && <span className="text-[11px] opacity-75 font-normal">({resolvedXrpl.slice(0, 4)}...{resolvedXrpl.slice(-3)})</span>}
                   </button>
 
                   <button
@@ -1662,7 +1662,7 @@ export default function ProfilePage() {
                   >
                     <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
                     <span>Stellar Testnet</span>
-                    {resolvedStellar && <span className="text-[10px] opacity-75 font-normal">({resolvedStellar.slice(0, 4)}...{resolvedStellar.slice(-3)})</span>}
+                    {resolvedStellar && <span className="text-[11px] opacity-75 font-normal">({resolvedStellar.slice(0, 4)}...{resolvedStellar.slice(-3)})</span>}
                   </button>
                 </div>
               </div>
@@ -1731,7 +1731,7 @@ export default function ProfilePage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left font-mono text-xs">
                     <thead>
-                      <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                      <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
                         <th className="py-3 px-4">Direction / Type</th>
                         <th className="py-3 px-4">Amount / Asset</th>
                         <th className="py-3 px-4">Counterparty</th>
@@ -1767,7 +1767,7 @@ export default function ProfilePage() {
                                 </span>
                                 <div>
                                   <span className="font-bold text-[var(--foreground)]">{tx.type || 'Transaction'}</span>
-                                  <span className="block text-[10px] text-[var(--muted)] uppercase">{tx.direction || 'transfer'}</span>
+                                  <span className="block text-[11px] text-[var(--muted)] uppercase">{tx.direction || 'transfer'}</span>
                                 </div>
                               </div>
                             </td>
@@ -1803,7 +1803,7 @@ export default function ProfilePage() {
                             </td>
 
                             <td className="py-3.5 px-4 whitespace-nowrap">
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
                                 <CheckCircle2 className="w-3 h-3" />
                                 <span>{tx.status || 'SUCCESS'}</span>
                               </span>
@@ -1863,7 +1863,7 @@ export default function ProfilePage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left font-mono text-xs">
                     <thead>
-                      <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                      <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
                         <th className="py-3 px-4">Action / Chain</th>
                         <th className="py-3 px-4">Amount Disbursed</th>
                         <th className="py-3 px-4">Destination Address</th>
@@ -1880,7 +1880,7 @@ export default function ProfilePage() {
                               <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
                               <div>
                                 <span className="font-bold text-[var(--foreground)]">Cross-Chain Bridge</span>
-                                <span className="block text-[10px] text-[var(--muted)]">Disbursed on {b.chain}</span>
+                                <span className="block text-[11px] text-[var(--muted)]">Disbursed on {b.chain}</span>
                               </div>
                             </div>
                           </td>
@@ -1900,7 +1900,7 @@ export default function ProfilePage() {
                           </td>
 
                           <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
                               <CheckCircle2 className="w-3 h-3" />
                               <span>{b.status || 'CONFIRMED'}</span>
                             </span>
@@ -1941,7 +1941,7 @@ export default function ProfilePage() {
               Last connected via <strong>{(profile?.lastConnectedWallet || sessionUser?.lastConnectedWallet)?.provider}</strong> on {new Date((profile?.lastConnectedWallet || sessionUser?.lastConnectedWallet)!.connectedAt).toLocaleString()}
             </span>
           </div>
-          <span className="uppercase text-[10px] px-2 py-0.5 rounded bg-[var(--card-subtle)] text-[var(--foreground)]">
+          <span className="uppercase text-[11px] px-2 py-0.5 rounded bg-[var(--card-subtle)] text-[var(--foreground)]">
             {(profile?.lastConnectedWallet || sessionUser?.lastConnectedWallet)?.network}
           </span>
         </div>

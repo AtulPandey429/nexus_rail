@@ -132,11 +132,11 @@ export default function HomePage() {
                 </div>
                 <div className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--muted)] opacity-60 flex items-center gap-2">
                   <span>EVM</span>
-                  <span className="text-[10px] uppercase font-bold">STAGING</span>
+                  <span className="text-[11px] uppercase font-bold">STAGING</span>
                 </div>
                 <div className="px-3 py-1.5 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--muted)] opacity-60 flex items-center gap-2">
                   <span>Solana</span>
-                  <span className="text-[10px] uppercase font-bold">STAGING</span>
+                  <span className="text-[11px] uppercase font-bold">STAGING</span>
                 </div>
               </div>
             </div>
@@ -155,7 +155,7 @@ export default function HomePage() {
                   <span className="flex items-center gap-1.5 text-stellar-cyan font-bold">
                     <Rocket className="w-3.5 h-3.5" /> Stellar
                   </span>
-                  <span className="px-2.5 py-1 rounded-md nexus-glass-surface text-[10px] text-[var(--foreground)] font-bold border border-[var(--border)]">
+                  <span className="px-2.5 py-1 rounded-md nexus-glass-surface text-[11px] text-[var(--foreground)] font-bold border border-[var(--border)]">
                     XLM / XRP
                   </span>
                   <span className="flex items-center gap-1.5 text-xrpl-blue font-bold">
@@ -181,11 +181,11 @@ export default function HomePage() {
                 {/* Floating Order Badge */}
                 <div className="relative z-10 p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center justify-between font-mono text-xs shadow-md">
                   <div>
-                    <span className="text-[10px] text-[var(--muted)] uppercase block">Sample order</span>
+                    <span className="text-[11px] text-[var(--muted)] uppercase block">Sample order</span>
                     <span className="font-bold text-[var(--foreground)]">#NR8K2P9X</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-[var(--muted)] uppercase block">Total settled</span>
+                    <span className="text-[11px] text-[var(--muted)] uppercase block">Total settled</span>
                     <span className="font-extrabold text-[var(--gold)] text-sm sm:text-base">$200.02 USD</span>
                   </div>
                 </div>
@@ -392,7 +392,7 @@ export default function HomePage() {
                 </div>
                 <div className="text-right font-mono">
                   <div className="text-[var(--foreground)] font-bold">~84.92 XLM</div>
-                  <span className="text-[10px] text-stellar-cyan font-bold">TESTNET</span>
+                  <span className="text-[11px] text-stellar-cyan font-bold">TESTNET</span>
                 </div>
               </div>
 
@@ -406,7 +406,7 @@ export default function HomePage() {
                 </div>
                 <div className="text-right font-mono">
                   <div className="text-[var(--foreground)] font-bold">~84.95 XRP</div>
-                  <span className="text-[10px] text-xrpl-blue font-bold">TESTNET</span>
+                  <span className="text-[11px] text-xrpl-blue font-bold">TESTNET</span>
                 </div>
               </div>
             </div>
@@ -418,7 +418,7 @@ export default function HomePage() {
             <div className="lg:col-span-6 order-2 lg:order-1 p-5 sm:p-6 rounded-2xl nexus-glass-card border border-[var(--border)] font-mono text-xs space-y-4 shadow-xl">
               <div className="flex justify-between items-center border-b border-[var(--border)] pb-3">
                 <span className="font-bold text-[var(--foreground)]">JOURNAL / #NR8K2P9X</span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">
+                <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">
                   BALANCED
                 </span>
               </div>
@@ -522,7 +522,7 @@ export default function HomePage() {
                   <span className="flex items-center gap-1.5 text-[var(--gold)] font-bold">
                     <Bot className="w-3.5 h-3.5" /> AI Agent Desk
                   </span>
-                  <span className="px-2 py-0.5 rounded bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/30 text-[10px] font-bold">
+                  <span className="px-2 py-0.5 rounded bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/30 text-[11px] font-bold">
                     AWAITING CONFIRMATION
                   </span>
                 </div>

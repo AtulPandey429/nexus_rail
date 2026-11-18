@@ -10,7 +10,6 @@ import {
   Minus,
   Plus,
   ShoppingBag,
-  ExternalLink,
   Check,
 } from 'lucide-react';
 import {
@@ -20,7 +19,6 @@ import {
   fetchCartLines,
   removeCartSku,
   setCartQty,
-  addSkuToCart,
   readSession,
   SessionUser,
   onSessionChange,
@@ -34,34 +32,6 @@ const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'SIGNAL-CAP': '/products/signal-cap.png',
   'RAIL-CABLES': '/products/rail-cables.png',
 };
-
-// Default Figma Screen 4 items for demo initialization
-const FIGMA_DEFAULT_ITEMS: Array<{ sku: string; title: string; category: string; variant: string; priceCents: number; qty: number }> = [
-  {
-    sku: 'RAIL-ONE',
-    title: 'Rail One',
-    category: 'HARDWARE',
-    variant: 'Graphite · USB-C',
-    priceCents: 12900,
-    qty: 1,
-  },
-  {
-    sku: 'RELAY-MAT',
-    title: 'Relay desk mat',
-    category: 'WORKSPACE',
-    variant: 'Charcoal · 80 × 40 cm',
-    priceCents: 3900,
-    qty: 1,
-  },
-  {
-    sku: 'NEXUS-TEE',
-    title: 'Nexus tee',
-    category: 'ESSENTIALS',
-    variant: 'Washed black · Size M',
-    priceCents: 3200,
-    qty: 1,
-  },
-];
 
 export default function CartPage() {
   const router = useRouter();
@@ -199,18 +169,6 @@ export default function CartPage() {
     }
   };
 
-  // Variant metadata helper
-  const getItemDetails = (sku: string, title: string) => {
-    const known = FIGMA_DEFAULT_ITEMS.find((d) => d.sku === sku);
-    if (known) return { category: known.category, variant: known.variant };
-    if (sku.includes('MAT')) return { category: 'WORKSPACE', variant: 'Charcoal · 80 × 40 cm' };
-    if (sku.includes('TEE')) return { category: 'ESSENTIALS', variant: 'Washed black · Size M' };
-    if (sku.includes('STAND')) return { category: 'WORKSPACE', variant: 'Anodized aluminum' };
-    if (sku.includes('CAP')) return { category: 'ESSENTIALS', variant: 'Structured 6-panel' };
-    if (sku.includes('CABLE')) return { category: 'HARDWARE', variant: 'Braided nylon · USB-C' };
-    return { category: 'ESSENTIALS', variant: 'Official Nexus Edition' };
-  };
-
   return (
     <div className="min-h-screen bg-transparent text-[var(--foreground)] font-sans antialiased selection:bg-[var(--gold)]/30 selection:text-[var(--foreground)]">
       
@@ -226,7 +184,7 @@ export default function CartPage() {
             A few good choices.
           </h1>
           <p className="text-sm sm:text-base text-[var(--muted)] mt-1.5 font-normal">
-            Three considered essentials. One connected checkout.
+            Review your items, apply a promo code, and continue to secure checkout.
           </p>
         </div>
 
@@ -249,23 +207,14 @@ export default function CartPage() {
             </div>
             <h2 className="text-xl font-bold text-[var(--foreground)]">Your cart is empty</h2>
             <p className="text-xs text-[var(--muted)] mt-2 max-w-sm mx-auto">
-              Explore the NexusRail collection to select hardware signers, workspace objects, and testnet essentials.
+              Browse the collection to add hardware, workspace items, or testnet essentials.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  FIGMA_DEFAULT_ITEMS.forEach((i) => addSkuToCart(i.sku));
-                }}
-                className="px-4 py-2 rounded-lg nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--foreground)] hover:border-[var(--gold)]/50 transition-all cursor-pointer"
-              >
-                Restore 3 Curated Essentials
-              </button>
               <Link
                 href="/store"
                 className="px-4 py-2 rounded-lg bg-[var(--gold)] text-black text-xs font-mono font-bold hover:bg-[var(--gold-bright)] transition-all cursor-pointer"
               >
-                Go to Store &rarr;
+                Browse the store &rarr;
               </Link>
             </div>
           </div>
@@ -286,7 +235,6 @@ export default function CartPage() {
               {/* Product Rows */}
               <div className="divide-y divide-[var(--border)]">
                 {items.map((item) => {
-                  const { category, variant } = getItemDetails(item.sku, item.title);
                   const imgUrl = PRODUCT_IMAGE_MAP[item.sku] || '/products/rail-one.png';
 
                   return (
@@ -306,15 +254,17 @@ export default function CartPage() {
                           />
                         </div>
                         <div>
-                          <p className="text-[10px] font-mono tracking-[0.2em] text-[var(--gold)] uppercase font-semibold">
-                            {category}
+                          <p className="text-[11px] font-mono tracking-[0.2em] text-[var(--gold)] uppercase font-semibold">
+                            {item.sku}
                           </p>
                           <h3 className="text-base sm:text-lg font-semibold text-[var(--foreground)] tracking-tight mt-0.5">
                             {item.title}
                           </h3>
-                          <p className="text-xs text-[var(--muted)] mt-0.5">
-                            {variant}
-                          </p>
+                          {item.description && (
+                            <p className="text-xs text-[var(--muted)] mt-0.5 line-clamp-2">
+                              {item.description}
+                            </p>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleRemove(item.sku)}
@@ -421,7 +371,7 @@ export default function CartPage() {
               <div className="mt-8 p-3.5 sm:p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center gap-3 text-xs font-mono text-[var(--muted)]">
                 <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
                 <span className="text-[var(--foreground)]/90 leading-relaxed">
-                  Direct testnet verification. Instant ledger settlement across Stellar Horizon and XRPL Altnet.
+                  Payments settle on the Stellar or XRPL testnet. You approve the exact amount in your wallet before anything is sent.
                 </span>
               </div>
             </div>
@@ -508,7 +458,7 @@ export default function CartPage() {
                 <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center gap-2.5 mt-4 text-xs font-mono text-[var(--gold)]">
                   <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
                   <span className="text-[var(--foreground)]/90">
-                    Dual-rail cryptographic settlement.
+                    You approve every payment in your wallet before it is sent.
                   </span>
                 </div>
 
@@ -518,10 +468,10 @@ export default function CartPage() {
                     AVAILABLE PAYMENT RAILS
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-[10px] font-mono font-medium tracking-wide">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-[11px] font-mono font-medium tracking-wide">
                       STELLAR HORIZON
                     </span>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-[10px] font-mono font-medium tracking-wide">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg nexus-glass-surface border border-[var(--border)] text-[var(--foreground)] text-[11px] font-mono font-medium tracking-wide">
                       XRPL ALTNET
                     </span>
                   </div>

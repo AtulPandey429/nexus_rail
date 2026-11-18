@@ -54,7 +54,7 @@ export function EndToEndFlowMonitor({ currentStage, orderId, selectedRail = 'STR
                 {isPassed && s.stage < currentStage && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
               </div>
               <div className="font-bold text-[11px] truncate w-full">{s.label}</div>
-              <div className="text-[9px] text-gray-400 truncate w-full mt-0.5">{s.sub}</div>
+              <div className="text-[11px] text-gray-400 truncate w-full mt-0.5">{s.sub}</div>
             </div>
           );
         })}

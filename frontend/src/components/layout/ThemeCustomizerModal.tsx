@@ -151,7 +151,7 @@ export function ThemeCustomizerModal() {
                             {opt.title}
                           </span>
                           {isSelected && (
-                            <span className="px-2 py-0.5 rounded bg-[var(--gold)]/20 border border-[var(--gold)]/40 text-[var(--gold)] text-[10px] font-bold">
+                            <span className="px-2 py-0.5 rounded bg-[var(--gold)]/20 border border-[var(--gold)]/40 text-[var(--gold)] text-[11px] font-bold">
                               ACTIVE
                             </span>
                           )}
@@ -209,7 +209,7 @@ export function ThemeCustomizerModal() {
                     }`}
                   >
                     <p className="text-xs font-semibold">{item.label}</p>
-                    <p className="text-[9px] text-[var(--muted)] font-sans truncate mt-0.5">
+                    <p className="text-[11px] text-[var(--muted)] font-sans truncate mt-0.5">
                       {item.desc.split(' ')[0]}
                     </p>
                   </button>

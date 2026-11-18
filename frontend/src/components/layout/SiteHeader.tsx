@@ -142,7 +142,7 @@ export function SiteHeader() {
             </span>
           </Link>
 
-          <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[10px] font-mono text-[var(--muted)]">
+          <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[11px] font-mono text-[var(--muted)]">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span>Dual-Rail Testnet</span>
           </span>
@@ -181,7 +181,7 @@ export function SiteHeader() {
           >
             <ShoppingBag className="w-5 h-5 text-[var(--muted)] hover:text-[var(--foreground)]" strokeWidth={2.4} />
             {cartCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-[var(--gold)] text-black text-[10px] font-mono font-bold">
+              <span className="px-1.5 py-0.2 rounded-full bg-[var(--gold)] text-black text-[11px] font-mono font-bold">
                 {cartCount}
               </span>
             )}
@@ -203,10 +203,10 @@ export function SiteHeader() {
                     <span className="font-mono text-xs font-bold text-[var(--foreground)] group-hover:text-[var(--gold)] transition-colors">
                       {formattedWalletAddress}
                     </span>
-                    <span className="text-[10px] font-mono text-[var(--muted)] flex items-center gap-1">
+                    <span className="text-[11px] font-mono text-[var(--muted)] flex items-center gap-1">
                       <span>{walletProvider}</span>
                       <span className="opacity-40">·</span>
-                      <span className="uppercase text-[10px] opacity-70">{walletNetwork === 'stellar' ? 'Stellar' : 'XRPL'}</span>
+                      <span className="uppercase text-[11px] opacity-70">{walletNetwork === 'stellar' ? 'Stellar' : 'XRPL'}</span>
                     </span>
                   </div>
                 </button>
@@ -223,7 +223,7 @@ export function SiteHeader() {
                       <span className="font-semibold text-xs text-[var(--foreground)] max-w-[110px] truncate">
                         {user.name || user.email?.split('@')[0] || 'Google User'}
                       </span>
-                      <span className="text-[10px] text-[var(--muted)]">Google Account</span>
+                      <span className="text-[11px] text-[var(--muted)]">Google Account</span>
                     </div>
                   </Link>
 
@@ -336,7 +336,7 @@ export function SiteHeader() {
                     <Wallet className="w-4 h-4" />
                     <span>{hasConnectedWallet ? `${formattedWalletAddress} (${walletProvider})` : '+ Connect Web3 Wallet'}</span>
                   </div>
-                  <span className="text-[10px] text-[var(--muted)] uppercase">{walletNetwork || 'Stellar / XRPL'}</span>
+                  <span className="text-[11px] text-[var(--muted)] uppercase">{walletNetwork || 'Stellar / XRPL'}</span>
                 </button>
 
                 <button

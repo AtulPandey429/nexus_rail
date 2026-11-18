@@ -45,16 +45,10 @@ const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-CABLES': '/products/rail-cables.png',
 };
 
-const DEFAULT_ITEMS: CartLine[] = [
-  { sku: 'RAIL-ONE', title: 'Rail One', description: 'Graphite · USB-C', priceCents: 12900, qty: 1, priced: true },
-  { sku: 'RELAY-MAT', title: 'Relay desk mat', description: 'Charcoal · 80 × 40 cm', priceCents: 3900, qty: 1, priced: true },
-  { sku: 'NEXUS-TEE', title: 'Nexus tee', description: 'Washed black · Size M', priceCents: 3200, qty: 1, priced: true },
-];
-
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const paramOrderId = searchParams.get('orderId') || '#NR8K2P9X';
+  const paramOrderId = searchParams.get('orderId') || '';
 
   const [orderId, setOrderId] = useState(paramOrderId);
   const [items, setItems] = useState<CartLine[]>([]);
@@ -64,6 +58,7 @@ function CheckoutContent() {
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(58);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [showSafetyCenter, setShowSafetyCenter] = useState(false);
+  const [reviewMemo, setReviewMemo] = useState<string | number | undefined>(undefined);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [nrSpotUsd, setNrSpotUsd] = useState(1.0);
   const [nrBalance, setNrBalance] = useState(0);
@@ -191,6 +186,19 @@ function CheckoutContent() {
     selectedRail === 'STELLAR' ? stellarFeeCrypto : selectedRail === 'XRPL' ? xrplFeeCrypto : '0.00';
   const activeToken = selectedRail === 'STELLAR' ? 'XLM' : selectedRail === 'XRPL' ? 'XRP' : 'NXL';
 
+  // Derive the exact reconciliation memo/tag that will be sent, so the review
+  // screen shows the real value instead of a placeholder.
+  const handleOpenSafetyCenter = async () => {
+    if (selectedRail === 'STELLAR') {
+      setReviewMemo(await deriveAuthoritativeStellarMemo(orderId));
+    } else if (selectedRail === 'XRPL') {
+      setReviewMemo(await deriveAuthoritativeXrplTag(orderId));
+    } else {
+      setReviewMemo(`NXL-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`);
+    }
+    setShowSafetyCenter(true);
+  };
+
   // Handle onchain or $NR native ledger payment submission
   const handleConfirmAndPay = async () => {
     setIsProcessing(true);
@@ -198,7 +206,7 @@ function CheckoutContent() {
 
     try {
       let txHash = '';
-      let ledgerSeq = '5,777,235';
+      let ledgerSeq = '';
       let finalPaidUsd = totalUsd;
       let finalPaidCrypto = activeTotalCrypto;
       let sourceWallet = '';
@@ -224,7 +232,10 @@ function CheckoutContent() {
         finalPaidUsd = (nrJson.data.finalPaidCents || 0) / 100;
         finalPaidCrypto = String(nrJson.data.paidNrAmount ?? nrTotalCrypto);
         sourceWallet = user?.walletAddress || 'NXL-NATIVE-BALANCE';
-      } else if (selectedRail === 'STELLAR' && hasFreighter) {
+      } else if (selectedRail === 'STELLAR') {
+        if (!hasFreighter) {
+          throw new Error('Install or unlock the Freighter wallet to pay with Stellar.');
+        }
         // Authoritative 28-byte HMAC-SHA256 memo derivation (NR<HMAC>)
         const authoritativeMemo = await deriveAuthoritativeStellarMemo(orderId);
         const res = await payWithFreighter({
@@ -234,10 +245,16 @@ function CheckoutContent() {
           orderId,
           authToken: token || undefined,
         });
-        txHash = res.txHash || `8fa2${Math.random().toString(16).slice(2, 8)}c91d`;
+        if (!res.txHash) {
+          throw new Error('Freighter did not return a transaction hash. Please try again.');
+        }
+        txHash = res.txHash;
         if (res.sourceAddress) sourceWallet = res.sourceAddress;
         if (res.ledger) ledgerSeq = res.ledger.toLocaleString('en-US');
-      } else if (selectedRail === 'XRPL' && hasGemWallet) {
+      } else if (selectedRail === 'XRPL') {
+        if (!hasGemWallet) {
+          throw new Error('Install or unlock the GemWallet extension to pay with XRPL.');
+        }
         // Authoritative 32-bit HMAC-SHA256 destination tag derivation
         const authoritativeTag = await deriveAuthoritativeXrplTag(orderId);
         const res = await payWithGemWallet({
@@ -245,29 +262,36 @@ function CheckoutContent() {
           destination: 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW',
           destinationTag: authoritativeTag,
         });
-        txHash = res.txHash || `xrpl_${Math.random().toString(16).slice(2, 10)}`;
+        if (!res.txHash) {
+          throw new Error('GemWallet did not return a transaction hash. Please try again.');
+        }
+        txHash = res.txHash;
         if (res.sourceAddress) sourceWallet = res.sourceAddress;
       } else {
-        // Realistic testnet simulation with delay
-        await new Promise((resolve) => setTimeout(resolve, 1400));
-        txHash = selectedRail === 'STELLAR'
-          ? `8fa2b7e4${Math.random().toString(16).slice(2, 6)}c91d`
-          : `5d91e3f8${Math.random().toString(16).slice(2, 6)}b41a`;
-        ledgerSeq = `${Math.floor(5770000 + Math.random() * 9000)}`;
+        throw new Error('Select a payment rail to continue.');
       }
 
       if (!sourceWallet) {
         if (selectedRail === 'STELLAR') {
-          sourceWallet = user?.stellarAddress || (user?.walletAddress?.startsWith('G') ? user.walletAddress : (user?.lastConnectedWallet?.address?.startsWith('G') ? user.lastConnectedWallet.address : 'GBS6IALQNERJAK23Z6NWCNF2UFDWUPZA5G2KD6B3DZO3UTOJK2XTN7ML'));
+          sourceWallet =
+            user?.stellarAddress ||
+            (user?.walletAddress?.startsWith('G') ? user.walletAddress : '') ||
+            (user?.lastConnectedWallet?.address?.startsWith('G') ? user.lastConnectedWallet.address : '');
         } else if (selectedRail === 'XRPL') {
-          sourceWallet = user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : (user?.lastConnectedWallet?.address?.startsWith('r') ? user.lastConnectedWallet.address : 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt'));
+          sourceWallet =
+            user?.xrplAddress ||
+            (user?.walletAddress?.startsWith('r') ? user.walletAddress : '') ||
+            (user?.lastConnectedWallet?.address?.startsWith('r') ? user.lastConnectedWallet.address : '');
         } else {
-          sourceWallet = user?.walletAddress || 'NexusRail Internal Vault';
+          sourceWallet = user?.walletAddress || 'NXL-NATIVE-BALANCE';
+        }
+        if (!sourceWallet) {
+          throw new Error('Connect a wallet before paying.');
         }
       }
 
       // Verify on-chain payment with backend if real wallet transaction
-      if (selectedRail !== 'NR_TOKEN' && token && txHash && !txHash.startsWith('8fa2') && !txHash.startsWith('5d91')) {
+      if (selectedRail !== 'NR_TOKEN' && token && txHash) {
         try {
           const path = selectedRail === 'XRPL' ? 'xrpl' : 'stellar';
           await fetch(`/api/v1/checkout/${path}/verify-payment`, {
@@ -296,7 +320,7 @@ function CheckoutContent() {
         txHash,
         ledgerSequence: ledgerSeq,
         timestamp: new Date().toUTCString(),
-        email: customerEmail && !customerEmail.includes('alex.kim') ? customerEmail : (user?.email || ''),
+        email: customerEmail || user?.email || '',
         items,
         paidFrom: sourceWallet,
         vaultAddress: selectedRail === 'STELLAR'
@@ -321,6 +345,27 @@ function CheckoutContent() {
     }
   };
 
+  if (!orderId) {
+    return (
+      <main className="min-h-screen bg-transparent text-[var(--foreground)] flex items-center justify-center px-4 py-20">
+        <div className="max-w-md w-full text-center space-y-4 rounded-2xl nexus-glass-card border border-[var(--border)] p-8">
+          <Lock className="w-8 h-8 mx-auto text-[var(--gold)]" />
+          <h1 className="text-xl font-bold">No active order</h1>
+          <p className="text-sm text-[var(--muted)]">
+            Start from your cart to create an order before checking out.
+          </p>
+          <Link
+            href="/cart"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--gold)] text-black text-xs font-mono font-bold hover:bg-[var(--gold-bright)] transition-colors"
+          >
+            Back to cart
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-transparent text-[var(--foreground)] font-sans antialiased selection:bg-[var(--gold)]/30 selection:text-black transition-colors duration-200">
       
@@ -330,21 +375,21 @@ function CheckoutContent() {
         {/* Step Progress Breadcrumb */}
         <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono mb-8 overflow-x-auto pb-1">
           <Link href="/cart" className="flex items-center gap-1.5 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors shrink-0">
-            <span className="w-4 h-4 rounded-full nexus-glass-surface border border-[var(--gold)]/40 text-[var(--gold)] flex items-center justify-center text-[10px] font-bold">
+            <span className="w-4 h-4 rounded-full nexus-glass-surface border border-[var(--gold)]/40 text-[var(--gold)] flex items-center justify-center text-[11px] font-bold">
               ✓
             </span>
             <span>Cart</span>
           </Link>
           <span className="text-[var(--border)]">──────</span>
           <div className="flex items-center gap-1.5 text-[var(--foreground)] font-semibold shrink-0">
-            <span className="w-4 h-4 rounded-full bg-[var(--gold)] text-black flex items-center justify-center text-[10px] font-bold">
+            <span className="w-4 h-4 rounded-full bg-[var(--gold)] text-black flex items-center justify-center text-[11px] font-bold">
               2
             </span>
             <span>Checkout</span>
           </div>
           <span className="text-[var(--border)]">──────</span>
           <div className="flex items-center gap-1.5 text-[var(--muted)] shrink-0">
-            <span className="w-4 h-4 rounded-full nexus-glass-surface border border-[var(--border)] flex items-center justify-center text-[10px]">
+            <span className="w-4 h-4 rounded-full nexus-glass-surface border border-[var(--border)] flex items-center justify-center text-[11px]">
               3
             </span>
             <span>Receipt</span>
@@ -432,7 +477,7 @@ function CheckoutContent() {
                       </span>
                       <span className="text-sm font-semibold text-[var(--foreground)]">Stellar</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold-bright)] text-[10px] font-mono font-bold">
+                    <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold-bright)] text-[11px] font-mono font-bold">
                       TESTNET
                     </span>
                   </div>
@@ -442,12 +487,16 @@ function CheckoutContent() {
                   </p>
 
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    Balance 3,480.50 XLM · Fee $0.02
+                    {hasFreighter ? 'Freighter detected · Fee $0.02' : 'Freighter not detected · Fee $0.02'}
                   </p>
 
-                  <p className="text-xs font-mono text-[var(--gold)] mt-3 flex items-center gap-1.5 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
-                    Recommended · Wallet ready
+                  <p
+                    className={`text-xs font-mono mt-3 flex items-center gap-1.5 font-semibold ${
+                      hasFreighter ? 'text-[var(--gold)]' : 'text-amber-400'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${hasFreighter ? 'bg-[var(--gold)]' : 'bg-amber-400'}`} />
+                    {hasFreighter ? 'Wallet ready' : 'Install Freighter to pay'}
                   </p>
                 </button>
 
@@ -470,7 +519,7 @@ function CheckoutContent() {
                       </span>
                       <span className="text-sm font-semibold text-[var(--foreground)]">XRPL</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-[#0081F2]/15 border border-[#0081F2]/40 text-[#60A5FA] text-[10px] font-mono font-bold">
+                    <span className="px-2 py-0.5 rounded bg-[#0081F2]/15 border border-[#0081F2]/40 text-[#60A5FA] text-[11px] font-mono font-bold">
                       TESTNET
                     </span>
                   </div>
@@ -480,11 +529,15 @@ function CheckoutContent() {
                   </p>
 
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    Balance 500.00 XRP · Fee &lt; $0.01
+                    {hasGemWallet ? 'GemWallet detected · Fee < $0.01' : 'GemWallet not detected · Fee < $0.01'}
                   </p>
 
-                  <p className="text-xs font-mono text-amber-500 mt-3 flex items-center gap-1 font-semibold">
-                    Insufficient XRP · Add test funds ↗
+                  <p
+                    className={`text-xs font-mono mt-3 flex items-center gap-1 font-semibold ${
+                      hasGemWallet ? 'text-[var(--gold)]' : 'text-amber-500'
+                    }`}
+                  >
+                    {hasGemWallet ? 'Wallet ready' : 'Install GemWallet to pay'}
                   </p>
                 </button>
 
@@ -507,7 +560,7 @@ function CheckoutContent() {
                       </span>
                       <span className="text-sm font-semibold text-[var(--foreground)]">$NXL Token</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[10px] font-mono font-bold">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] font-mono font-bold">
                       SAVE 10%
                     </span>
                   </div>
@@ -539,7 +592,7 @@ function CheckoutContent() {
                 {/* Card 4: Solana (Coming Soon) */}
                 <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center justify-between opacity-50 cursor-not-allowed">
                   <span className="text-xs font-mono text-[var(--muted)]">Solana</span>
-                  <span className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider">COMING SOON</span>
+                  <span className="text-[11px] font-mono text-[var(--muted)] uppercase tracking-wider">COMING SOON</span>
                 </div>
 
               </div>
@@ -553,15 +606,19 @@ function CheckoutContent() {
                   <div>
                     <p className="text-xs font-mono text-[var(--foreground)] font-medium">
                       {selectedRail === 'STELLAR'
-                        ? 'Freighter · Stellar testnet'
+                        ? hasFreighter
+                          ? 'Freighter · Stellar testnet'
+                          : 'Stellar wallet not connected'
                         : selectedRail === 'XRPL'
-                        ? 'GemWallet · XRPL testnet'
+                        ? hasGemWallet
+                          ? 'GemWallet · XRPL testnet'
+                          : 'XRPL wallet not connected'
                         : 'NexusRail Ledger · $NXL Token'}
                     </p>
                     <p className="text-[11px] font-mono text-[var(--muted)]">
                       {selectedRail === 'NR_TOKEN'
                         ? `Available: ${nrBalance.toFixed(4)} NXL`
-                        : user?.walletAddress || (selectedRail === 'STELLAR' ? 'GCKF...7Q2M' : 'rNXs...9b3K')}
+                        : user?.walletAddress || 'Not connected'}
                     </p>
                   </div>
                 </div>
@@ -581,8 +638,8 @@ function CheckoutContent() {
             <div className="space-y-4">
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="tracking-widest uppercase text-[var(--muted)]">03 / REVIEW THE QUOTE</span>
-                <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold-bright)] text-[10px] font-bold">
-                  FRESH · 2S AGO
+                <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold-bright)] text-[11px] font-bold">
+                  LIVE RATE
                 </span>
               </div>
 
@@ -597,7 +654,7 @@ function CheckoutContent() {
                   <span className="text-[var(--foreground)] font-medium">{activeOrderCrypto} {activeToken}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-[var(--muted)]">Network fee</span>
+                  <span className="text-[var(--muted)]">Estimated network fee</span>
                   <span className="text-[var(--foreground)] font-medium">
                     {selectedRail === 'NR_TOKEN' ? '$0.00 (Waived)' : `${activeFeeCrypto} ${activeToken} / $0.02`}
                   </span>
@@ -614,13 +671,13 @@ function CheckoutContent() {
 
               {/* Metadata quote expiration line */}
               <p className="text-[11px] font-mono text-[var(--muted)] tracking-wider">
-                QT-8822 · PROVIDER RATE · EXPIRES IN {quoteSecondsLeft}S
+                RATE LOCKED · REFRESHES IN {quoteSecondsLeft}S
               </p>
 
               {/* Confirm & Pay CTA */}
               <button
                 type="button"
-                onClick={() => setShowSafetyCenter(true)}
+                onClick={() => void handleOpenSafetyCenter()}
                 disabled={isProcessing}
                 className="w-full py-4 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[var(--gold)]/20 active:scale-[0.99] disabled:opacity-50 mt-2 cursor-pointer"
               >
@@ -636,7 +693,7 @@ function CheckoutContent() {
 
               {/* Readiness subtext */}
               <p className="text-xs font-mono text-[var(--muted)] flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full border border-[var(--border)] animate-pulse" />
+                <span className="w-2 h-2 rounded-full border border-[var(--border)]" />
                 <span>Ready for wallet approval. No transaction has been submitted.</span>
               </p>
 
@@ -693,7 +750,7 @@ function CheckoutContent() {
                   <span className="text-[var(--foreground)] font-bold">Free</span>
                 </div>
                 <div className="flex justify-between text-[var(--muted)]">
-                  <span>Network fee</span>
+                  <span>Estimated network fee</span>
                   <span className="text-[var(--foreground)]">
                     {selectedRail === 'NR_TOKEN' ? '$0.00 (Waived)' : `$${networkFeeUsd.toFixed(2)}`}
                   </span>
@@ -756,7 +813,7 @@ function CheckoutContent() {
                   actionType={selectedRail === 'NR_TOKEN' ? '$NXL Native Token Checkout (10% Off)' : 'Commercial Hardware Settlement'}
                   recipientAddress={selectedRail === 'STELLAR' ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR' : selectedRail === 'XRPL' ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW' : 'NXL-AMM-TREASURY-VAULT'}
                   isMerchantVault={true}
-                  destinationTagOrMemo={selectedRail === 'XRPL' ? 104857 : `NXL-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`}
+                  destinationTagOrMemo={reviewMemo}
                   assetSymbol={activeToken}
                   isNativeAsset={true}
                   amount={activeTotalCrypto}

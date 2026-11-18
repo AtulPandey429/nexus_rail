@@ -186,46 +186,44 @@ function ReceiptContent() {
   const paramOrderId = searchParams.get('orderId');
   const paramTxHash = searchParams.get('txHash');
 
-  const orderId = paramOrderId || '#NR9MCHHF';
+  const orderId = paramOrderId || '';
   const [copied, setCopied] = useState(false);
   const [orderCopied, setOrderCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
-  // Authoritative receipt details state initialized with real transaction fallback
+  // Receipt details start empty and are filled from the saved receipt or the
+  // authenticated order record. No placeholder transaction is ever shown.
   const [receiptData, setReceiptData] = useState({
     orderId,
-    rail: 'STELLAR',
-    token: 'XLM',
-    amountCrypto: '750.51328',
-    amountUsd: '103.68',
-    subtotalUsd: '103.66',
-    feeUsd: '0.02',
-    rateAtApproval: '1 XLM = $0.1381',
-    txHash: paramTxHash || 'f02ac116e83999cfc9cafd6b0201ee4fc1082f0b06cc5588c90e3c2e9898b6c3',
-    ledgerSequence: '5,777,235',
-    timestamp: 'Tue, 17 Nov 2026 10:03:41 GMT',
+    rail: '',
+    token: '',
+    amountCrypto: '',
+    amountUsd: '',
+    subtotalUsd: '',
+    feeUsd: '0.00',
+    rateAtApproval: '',
+    txHash: paramTxHash || '',
+    ledgerSequence: '',
+    timestamp: '',
     email: '',
-    paidFrom: 'GBS6IALQNERJAK23Z6NWCNF2UFDWUPZA5G2KD6B3DZO3UTOJK2XTN7ML',
-    vaultAddress: 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
-    status: 'SETTLED',
-    items: [
-      {
-        sku: 'BASKET-AI-ALPHA',
-        title: 'AI Dynamic Alpha Basket',
-        description: 'All-in-one diversified combo pairing 0.40g Gold, 25 $NR AMM Tokens, 15 XRP, and 100 XLM priced live every 60s.',
-        priceCents: 10366,
-        qty: 1,
-        priced: true,
-      },
-    ] as CartLine[],
+    paidFrom: '',
+    vaultAddress: '',
+    status: 'PENDING',
+    items: [] as CartLine[],
   });
 
-  const explorerUrl = receiptData.rail === 'STELLAR'
+  const explorerUrl = !receiptData.txHash
+    ? ''
+    : receiptData.rail === 'STELLAR'
     ? `https://stellar.expert/explorer/testnet/tx/${receiptData.txHash}`
     : `https://testnet.xrpl.org/transactions/${receiptData.txHash}`;
 
   // Generate on-chain verification QR code with high-contrast black on white for 100% instant mobile scanning
   useEffect(() => {
+    if (!explorerUrl) {
+      setQrDataUrl('');
+      return;
+    }
     QRCode.toDataURL(explorerUrl, {
       color: {
         dark: '#000000',
@@ -243,7 +241,7 @@ function ReceiptContent() {
     // 1. Sync logged in user details if available
     try {
       const sess = readSession();
-      if (sess.user?.email && !sess.user.email.includes('alex.kim')) {
+      if (sess.user?.email) {
         setReceiptData((prev) => ({ ...prev, email: sess.user!.email! }));
       }
     } catch {}
@@ -257,21 +255,13 @@ function ReceiptContent() {
           if (parsed.items && Array.isArray(parsed.items)) {
             parsed.items = parsed.items.map((it: any) => ({
               ...it,
-              sku: it.sku || 'BASKET-AI-ALPHA',
-              title: it.title || it.sku || 'Nexus Item',
+              sku: it.sku || '',
+              title: it.title || it.sku || 'Item',
               description: getItemDescription(it),
               priceCents: getItemPriceCents(it),
               unit_price_cents: getItemPriceCents(it),
               qty: it.qty || 1,
             }));
-          }
-          // Do not adopt invalid/hardcoded alex.kim email
-          if (parsed.email && parsed.email.includes('alex.kim')) {
-            parsed.email = '';
-          }
-          // Do not adopt XRPL address for Stellar rail
-          if (parsed.rail === 'STELLAR' && parsed.paidFrom?.startsWith('r')) {
-            delete parsed.paidFrom;
           }
           setReceiptData((prev) => ({ ...prev, ...parsed }));
         } catch {}
@@ -292,8 +282,8 @@ function ReceiptContent() {
               const o = json.data.order;
               const mappedItems = o.items && o.items.length > 0
                 ? o.items.map((it: any) => ({
-                    sku: it.sku || 'BASKET-AI-ALPHA',
-                    title: it.title || it.sku || 'Nexus Item',
+                    sku: it.sku || '',
+                    title: it.title || it.sku || 'Item',
                     description: getItemDescription(it),
                     priceCents: getItemPriceCents(it),
                     unit_price_cents: getItemPriceCents(it),
@@ -369,12 +359,31 @@ function ReceiptContent() {
   };
 
   const handleCopyHash = () => {
-    if (typeof navigator !== 'undefined') {
+    if (typeof navigator !== 'undefined' && receiptData.txHash) {
       navigator.clipboard.writeText(receiptData.txHash);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  if (!orderId) {
+    return (
+      <main className="min-h-screen bg-transparent text-[var(--foreground)] flex items-center justify-center px-4 py-20">
+        <div className="max-w-md w-full text-center space-y-4 rounded-2xl nexus-glass-card border border-[var(--border)] p-8">
+          <h1 className="text-xl font-bold">Receipt not found</h1>
+          <p className="text-sm text-[var(--muted)]">
+            Open a receipt from your order history to view its details.
+          </p>
+          <Link
+            href="/orders"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--gold)] text-black text-xs font-mono font-bold hover:bg-[var(--gold-bright)] transition-colors"
+          >
+            Go to orders
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   // Dynamic calculations ensuring mathematical exactness (Subtotal + Fee = Settled Total)
   const computedSubtotalCents = receiptData.items.reduce(
@@ -386,18 +395,23 @@ function ReceiptContent() {
       ? (computedSubtotalCents / 100).toFixed(2)
       : receiptData.subtotalUsd;
 
-  const feeUsd = Number(receiptData.feeUsd || '0.02');
-  const displayAmountUsd = (Number(displaySubtotalUsd) + feeUsd).toFixed(2);
+  const feeUsd = Number(receiptData.feeUsd || '0');
+  const displayAmountUsd = (Number(displaySubtotalUsd || 0) + feeUsd).toFixed(2);
 
-  // Authoritative Crypto Amount (Directly from verified on-chain execution or checkout quote)
+  // Authoritative crypto amount comes from the verified on-chain execution or
+  // the checkout quote. Never convert using a hardcoded rate.
   const displayAmountCrypto =
     receiptData.amountCrypto && receiptData.amountCrypto !== '0'
       ? receiptData.amountCrypto
-      : (Number(displayAmountUsd) / (receiptData.token === 'XLM' ? 0.1381 : 0.50)).toFixed(5);
+      : '—';
 
-  const activeVault = receiptData.vaultAddress || (receiptData.rail === 'STELLAR'
-    ? PLATFORM_STELLAR_VAULT
-    : PLATFORM_XRPL_VAULT);
+  const activeVault =
+    receiptData.vaultAddress ||
+    (receiptData.rail === 'STELLAR'
+      ? PLATFORM_STELLAR_VAULT
+      : receiptData.rail === 'XRPL'
+      ? PLATFORM_XRPL_VAULT
+      : '—');
 
   return (
     <div className="receipt-outer min-h-screen bg-transparent text-[#E0D8C3] font-sans antialiased selection:bg-[#D4AF37]/30 selection:text-[#F8F7F2] py-6 sm:py-10 px-3 sm:px-6 print:py-0 print:px-0 print:min-h-0 print:bg-transparent">
@@ -421,15 +435,17 @@ function ReceiptContent() {
         </div>
 
         <div className="flex items-center gap-3">
-          <a
-            href={explorerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1.5 rounded-lg bg-[#22252A] border border-[#3D4148] hover:border-[#D4AF37]/60 text-xs font-mono text-[#E0D8C3] hover:text-white flex items-center gap-1.5 transition-all shadow-sm"
-          >
-            <span>Explorer Proof</span>
-            <ExternalLink className="w-3.5 h-3.5 text-[#D4AF37]" />
-          </a>
+          {explorerUrl && (
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-lg bg-[#22252A] border border-[#3D4148] hover:border-[#D4AF37]/60 text-xs font-mono text-[#E0D8C3] hover:text-white flex items-center gap-1.5 transition-all shadow-sm"
+            >
+              <span>Explorer Proof</span>
+              <ExternalLink className="w-3.5 h-3.5 text-[#D4AF37]" />
+            </a>
+          )}
 
           <button
             type="button"
@@ -521,10 +537,10 @@ function ReceiptContent() {
               </button>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <span className="inline-block px-2 py-0.5 bg-[#C5A059]/15 border border-[#C5A059]/40 text-[#F2D675] font-mono text-[9.5px] font-bold uppercase tracking-wider">
+              <span className="inline-block px-2 py-0.5 bg-[#C5A059]/15 border border-[#C5A059]/40 text-[#F2D675] font-mono text-[11px] font-bold uppercase tracking-wider">
                 {receiptData.status === 'PAID' || receiptData.status === 'SETTLED' ? 'OFFICIAL SETTLED' : receiptData.status}
               </span>
-              <span className="text-[10px] font-mono text-[#A69E8D]">
+              <span className="text-[11px] font-mono text-[#A69E8D]">
                 {receiptData.timestamp}
               </span>
             </div>
@@ -549,41 +565,41 @@ function ReceiptContent() {
             
             {/* Client Destination */}
             <div className="space-y-0.5">
-              <p className="text-[#C5A059] font-bold tracking-wider text-[10px] uppercase">
+              <p className="text-[#C5A059] font-bold tracking-wider text-[11px] uppercase">
                 To:
               </p>
               <p className="font-semibold text-[#F2E8D3] text-xs">
                 Client / Account Holder
               </p>
               {receiptData.email && (
-                <p className="text-[#B3AA96] break-all text-[10.5px]">
+                <p className="text-[#B3AA96] break-all text-[11px]">
                   {receiptData.email}
                 </p>
               )}
-              <p className="text-[#A69E8D] text-[9.5px]">
+              <p className="text-[#A69E8D] text-[11px]">
                 WALLET: <span className="text-[#D4AF37] font-mono break-all">{receiptData.paidFrom}</span>
               </p>
-              <p className="text-[#A69E8D] text-[9.5px]">
+              <p className="text-[#A69E8D] text-[11px]">
                 NETWORK: <span className="text-[#F2E8D3]">{receiptData.rail} Testnet Ledger</span>
               </p>
             </div>
 
             {/* Terms & Conditions */}
             <div className="space-y-0.5 pt-1">
-              <p className="text-[#C5A059] font-bold tracking-wider text-[10px] uppercase">
+              <p className="text-[#C5A059] font-bold tracking-wider text-[11px] uppercase">
                 TERMS & CONDITIONS
               </p>
-              <p className="text-[#9E9584] text-[9.5px] leading-relaxed">
-                Cryptographic Dual-Chain Settlement. Verified against Horizon & Altnet consensus ledgers. All posted entries zero-variance balanced.
+              <p className="text-[#9E9584] text-[11px] leading-relaxed">
+                Settled on the Stellar or XRP Ledger testnet. Amounts reflect the verified order total.
               </p>
             </div>
 
             {/* Platform Vault Account Reference */}
             <div className="space-y-0.5">
-              <p className="text-[#C5A059] font-bold tracking-wider text-[10px] uppercase">
+              <p className="text-[#C5A059] font-bold tracking-wider text-[11px] uppercase">
                 Bank / Vault Account:
               </p>
-              <p className="text-[#A69E8D] text-[9.5px] font-mono break-all leading-tight">
+              <p className="text-[#A69E8D] text-[11px] font-mono break-all leading-tight">
                 {activeVault}
               </p>
             </div>
@@ -591,7 +607,7 @@ function ReceiptContent() {
             {/* Bottom Left Bracket Section with Instant Scannable QR Code */}
             <div className="pt-2 border-l-2 border-[#C5A059] pl-3 space-y-2.5 mt-3">
               <div>
-                <p className="text-[9.5px] uppercase tracking-wider text-[#C5A059] font-bold">
+                <p className="text-[11px] uppercase tracking-wider text-[#C5A059] font-bold">
                   PAYMENT METHOD
                 </p>
                 <p className="text-[11px] text-[#F2E8D3] font-semibold">
@@ -600,20 +616,20 @@ function ReceiptContent() {
               </div>
 
               <div>
-                <p className="text-[9.5px] uppercase tracking-wider text-[#C5A059] font-bold">
+                <p className="text-[11px] uppercase tracking-wider text-[#C5A059] font-bold">
                   SETTLEMENT DATE
                 </p>
-                <p className="text-[10px] text-[#D9D2C2]">
+                <p className="text-[11px] text-[#D9D2C2]">
                   {receiptData.timestamp}
                 </p>
               </div>
 
               <div>
-                <p className="text-[9.5px] uppercase tracking-wider text-[#C5A059] font-bold">
+                <p className="text-[11px] uppercase tracking-wider text-[#C5A059] font-bold">
                   LEDGER PROOF
                 </p>
                 <div className="flex items-center gap-1.5">
-                  <p className="text-[9.5px] text-[#A69E8D] font-mono truncate max-w-[180px]">
+                  <p className="text-[11px] text-[#A69E8D] font-mono truncate max-w-[180px]">
                     Tx: {receiptData.txHash}
                   </p>
                   <button
@@ -625,7 +641,7 @@ function ReceiptContent() {
                     {copied ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
                   </button>
                 </div>
-                <p className="text-[9.5px] text-[#A69E8D] mt-0.5 font-mono">
+                <p className="text-[11px] text-[#A69E8D] mt-0.5 font-mono">
                   Ledger #{receiptData.ledgerSequence} · Journal JE-2048
                 </p>
               </div>
@@ -641,7 +657,7 @@ function ReceiptContent() {
                     />
                   </div>
                   <div className="space-y-0.5">
-                    <p className="text-[9.5px] font-bold uppercase tracking-wider text-[#E8CE90]">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-[#E8CE90]">
                       SCAN TO VERIFY
                     </p>
                     <p className="text-[8.5px] text-[#A69E8D] leading-tight">
@@ -654,7 +670,7 @@ function ReceiptContent() {
 
             {/* Left Column Bottom Footer URL */}
             <div className="pt-2">
-              <p className="text-[9.5px] font-mono text-[#8C8372] tracking-wider">
+              <p className="text-[11px] font-mono text-[#8C8372] tracking-wider">
                 www.nexusrail.com
               </p>
             </div>
@@ -670,7 +686,7 @@ function ReceiptContent() {
             <div>
               <table className="w-full text-left font-mono text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-[#C5A059] text-[10px] uppercase tracking-wider text-[#E8CE90]">
+                  <tr className="border-b border-[#C5A059] text-[11px] uppercase tracking-wider text-[#E8CE90]">
                     <th className="py-2 font-bold text-center w-12">QTY</th>
                     <th className="py-2 font-bold pl-3">DESCRIPTIONS</th>
                     <th className="py-2 font-bold text-right w-24 pr-3">RATE</th>
@@ -685,7 +701,7 @@ function ReceiptContent() {
                       <tr key={idx} className="group">
                         {/* QTY with Left Accent Bracket */}
                         <td className="py-2 text-center font-mono text-[#E8CE90] align-top pt-3 w-12">
-                          <span className="border-l border-r border-[#C5A059]/40 px-1.5 py-0.5 text-[10px]">
+                          <span className="border-l border-r border-[#C5A059]/40 px-1.5 py-0.5 text-[11px]">
                             0{item.qty || 1}
                           </span>
                         </td>
@@ -714,7 +730,7 @@ function ReceiptContent() {
                                   {item.sku}
                                 </span>
                               </div>
-                              <p className="text-[9.5px] text-[#A69E8D] font-sans not-italic">
+                              <p className="text-[11px] text-[#A69E8D] font-sans not-italic">
                                 {item.description}
                               </p>
                             </div>
@@ -740,7 +756,7 @@ function ReceiptContent() {
             {/* 2. Subtotals and Totals Section */}
             <div className="space-y-2 pt-2.5 border-t border-[#3D4148]/80 text-xs font-mono">
               <div className="flex justify-between items-center text-[#B3AA96]">
-                <span className="uppercase tracking-wider text-[10px] text-[#C5A059]">
+                <span className="uppercase tracking-wider text-[11px] text-[#C5A059]">
                   SUB TOTALS |
                 </span>
                 <span className="text-[#F2E8D3] font-medium font-mono text-[11px]">
@@ -749,7 +765,7 @@ function ReceiptContent() {
               </div>
 
               {(receiptData as any).discountCents > 0 && (
-                <div className="flex justify-between items-center text-emerald-400 text-[10px]">
+                <div className="flex justify-between items-center text-emerald-400 text-[11px]">
                   <span className="uppercase tracking-wider">
                     PROMO DISCOUNT {(receiptData as any).promoCode ? `(${(receiptData as any).promoCode})` : ''}
                   </span>
@@ -759,7 +775,7 @@ function ReceiptContent() {
                 </div>
               )}
 
-              <div className="flex justify-between items-center text-[#A69E8D] text-[10px]">
+              <div className="flex justify-between items-center text-[#A69E8D] text-[11px]">
                 <span className="uppercase tracking-wider">
                   NETWORK SETTLEMENT FEE
                 </span>
@@ -779,14 +795,14 @@ function ReceiptContent() {
                   <span className="font-mono font-bold text-base sm:text-lg text-[#F2D675] tracking-tight">
                     ${displayAmountUsd}
                   </span>
-                  <span className="block text-[10px] font-mono text-[#C5A059]">
+                  <span className="block text-[11px] font-mono text-[#C5A059]">
                     ({displayAmountCrypto} {receiptData.token})
                   </span>
                 </div>
               </div>
 
               {(receiptData as any).cashbackNxlAmount > 0 && (
-                <div className="mt-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-[10.5px] font-mono text-emerald-300">
+                <div className="mt-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-[11px] font-mono text-emerald-300">
                   <span>2% Loyalty Cashback Credited</span>
                   <span className="font-bold">+{Number((receiptData as any).cashbackNxlAmount).toFixed(4)} $NXL</span>
                 </div>
@@ -813,10 +829,10 @@ function ReceiptContent() {
                 <ShieldCheck className="w-3 h-3 text-[#D4AF37]" />
                 <span>Digitally Signed by NexusRail Authority</span>
               </p>
-              <p className="text-[9.5px] text-[#A69E8D] uppercase tracking-wider font-mono">
+              <p className="text-[11px] text-[#A69E8D] uppercase tracking-wider font-mono">
                 Key ID: {activeVault.slice(0, 4)}...{activeVault.slice(-4)} (Ed25519 Verified Signer)
               </p>
-              <p className="text-[9px] text-[#C5A059] font-mono tracking-widest">
+              <p className="text-[11px] text-[#C5A059] font-mono tracking-widest">
                 ATTESTATION DIGEST: {receiptData.txHash.slice(0, 16).toUpperCase()}
               </p>
             </div>

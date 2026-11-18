@@ -65,6 +65,12 @@ const PRODUCT_IMAGES: Record<string, string> = {
   'NR-TOKEN': '/products/rail-cables.png',
 };
 
+const ORACLE_LABELS: Record<string, string> = {
+  coingecko: 'CoinGecko',
+  binance: 'Binance',
+  amm: 'NXL AMM',
+};
+
 export default function StoreCatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
   const [maxPrice, setMaxPrice] = useState<number>(600);
@@ -250,6 +256,9 @@ export default function StoreCatalogPage() {
     { id: 'essentials', label: 'Essentials', count: categoryCounts.essentials },
   ], [categoryCounts]);
 
+  const activeCategoryLabel =
+    categoryList.find((cat) => cat.id === selectedCategory)?.label ?? 'All products';
+
   const getItemCartQty = (sku: string) => {
     const line = cartLines.find((c) => c.sku === sku);
     return line ? line.qty : 0;
@@ -264,7 +273,7 @@ export default function StoreCatalogPage() {
         {/* Header Hero Section (Exact Figma Screen 3) */}
         <div className="space-y-4">
           <div className="space-y-1">
-            <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--gold)] font-semibold">
+            <span className="text-[11px] font-mono tracking-widest uppercase text-[var(--gold)] font-semibold">
               THE NEXUSRAIL COLLECTION
             </span>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-[var(--foreground)]">
@@ -281,7 +290,7 @@ export default function StoreCatalogPage() {
               <div className="w-5 h-5 rounded-md nexus-glass-card border border-[var(--border)] flex items-center justify-center text-[var(--gold)]">
                 <Box className="w-3 h-3" />
               </div>
-              <span>Live Smart Baskets &amp; RWA tokens auto-synced every 60s via CoinGecko, Binance &amp; $NXL AMM.</span>
+              <span>Live token prices refresh every 60 seconds from market feeds and the $NXL AMM.</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -289,15 +298,15 @@ export default function StoreCatalogPage() {
                 type="button"
                 onClick={syncLivePrices}
                 disabled={catalogLoading || ratesLoading}
-                className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-mono font-bold tracking-wider text-emerald-300 hover:bg-emerald-500/25 transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-mono font-bold tracking-wider text-emerald-300 hover:bg-emerald-500/25 transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw className={`w-3 h-3 ${(catalogLoading || ratesLoading) ? 'animate-spin' : ''}`} />
-                <span>{catalogLoading ? 'SYNCING ORACLE...' : 'SYNC LIVE PRICES'}</span>
+                <span>{catalogLoading ? 'SYNCING PRICES...' : 'SYNC LIVE PRICES'}</span>
               </button>
-              <span className="px-2.5 py-1 rounded-md bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[10px] font-mono font-bold tracking-wider text-[var(--gold)]">
+              <span className="px-2.5 py-1 rounded-md bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[11px] font-mono font-bold tracking-wider text-[var(--gold)]">
                 STELLAR TESTNET
               </span>
-              <span className="px-2.5 py-1 rounded-md bg-[#0081F2]/15 border border-[#0081F2]/30 text-[10px] font-mono font-bold tracking-wider text-[#60A5FA]">
+              <span className="px-2.5 py-1 rounded-md bg-[#0081F2]/15 border border-[#0081F2]/30 text-[11px] font-mono font-bold tracking-wider text-[#60A5FA]">
                 XRPL TESTNET
               </span>
             </div>
@@ -307,7 +316,7 @@ export default function StoreCatalogPage() {
         {/* Filter and Search Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
           <div className="text-xs font-mono text-[var(--muted)]">
-            Collection / <span className="text-[var(--foreground)] font-medium">All products</span>
+            Collection / <span className="text-[var(--foreground)] font-medium">{activeCategoryLabel}</span>
           </div>
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto">
@@ -387,7 +396,7 @@ export default function StoreCatalogPage() {
               >
                 <span>{cat.label}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
                     isActive ? 'bg-black/20 text-black' : 'bg-white/10 text-[var(--muted)]'
                   }`}
                 >
@@ -440,7 +449,7 @@ export default function StoreCatalogPage() {
             
             {/* Categories */}
             <div className="space-y-2">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
+              <div className="text-[11px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
                 CATEGORIES
               </div>
 
@@ -468,7 +477,7 @@ export default function StoreCatalogPage() {
 
             {/* Price Range */}
             <div className="space-y-3 pt-2 border-t border-[var(--border)]">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
+              <div className="text-[11px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
                 Price range
               </div>
 
@@ -544,7 +553,7 @@ export default function StoreCatalogPage() {
                       {/* Top-Left In-Cart Badge */}
                       {inCart && (
                         <div className="absolute top-3 left-3 z-10">
-                          <span className="px-2.5 py-1 rounded-md bg-[var(--gold)]/20 border border-[var(--gold)]/40 text-[10px] font-mono font-bold tracking-wider text-[var(--gold-bright)] shadow-sm backdrop-blur-md">
+                          <span className="px-2.5 py-1 rounded-md bg-[var(--gold)]/20 border border-[var(--gold)]/40 text-[11px] font-mono font-bold tracking-wider text-[var(--gold-bright)] shadow-sm backdrop-blur-md">
                             IN YOUR CART &bull; {qty}
                           </span>
                         </div>
@@ -553,12 +562,12 @@ export default function StoreCatalogPage() {
                       {/* Top-Right Live Oracle + 24h Trend Badges */}
                       {product.isLiveAsset && (
                         <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded-md bg-black/75 border border-emerald-400/40 text-[10px] font-mono font-bold text-emerald-300 backdrop-blur-md inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="px-2 py-0.5 rounded-md bg-black/75 border border-emerald-400/40 text-[11px] font-mono font-bold text-emerald-300 backdrop-blur-md inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                             <span>LIVE</span>
                           </span>
                           <span
-                            className={`px-2 py-0.5 rounded-md bg-black/75 border text-[10px] font-mono font-bold backdrop-blur-md ${
+                            className={`px-2 py-0.5 rounded-md bg-black/75 border text-[11px] font-mono font-bold backdrop-blur-md ${
                               change24h >= 0
                                 ? 'border-emerald-400/30 text-emerald-300'
                                 : 'border-rose-400/30 text-rose-300'
@@ -576,12 +585,12 @@ export default function StoreCatalogPage() {
                       <div className="space-y-2">
                         {/* Category Label */}
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
-                            {product.isBasket ? 'SMART BASKET' : product.isLiveAsset ? 'LIVE ORACLE' : product.category}
+                          <span className="text-[11px] font-mono uppercase tracking-widest text-[var(--muted)] font-bold">
+                            {product.isBasket ? 'SMART BASKET' : product.isLiveAsset ? 'LIVE PRICE' : product.category}
                           </span>
                           {product.oracleSource && (
-                            <span className="text-[10px] font-mono uppercase text-[var(--gold)]">
-                              {product.oracleSource}
+                            <span className="text-[11px] font-mono uppercase text-[var(--gold)]">
+                              {ORACLE_LABELS[product.oracleSource] || product.oracleSource}
                             </span>
                           )}
                         </div>
@@ -599,7 +608,7 @@ export default function StoreCatalogPage() {
                         {product.priceInr && product.isLiveAsset && (
                           <div className="flex items-center justify-between text-[11px] font-mono text-[var(--muted)]">
                             <span>≈ ₹{product.priceInr.toLocaleString('en-IN')} INR</span>
-                            <span className="text-emerald-400">10% off w/ $NXL</span>
+                            <span className="text-emerald-400">10% off with $NXL</span>
                           </div>
                         )}
 
@@ -625,7 +634,7 @@ export default function StoreCatalogPage() {
                               {product.allocations.map((alloc) => (
                                 <span
                                   key={`${product.sku}-chip-${alloc.symbol}`}
-                                  className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-[var(--muted)]"
+                                  className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] font-mono text-[var(--muted)]"
                                 >
                                   {alloc.unitQty} {alloc.symbol.replace('_G', 'g')} ({alloc.weightPercent ?? 100}%)
                                 </span>
@@ -682,7 +691,7 @@ export default function StoreCatalogPage() {
                   }}
                   className="px-3.5 py-1.5 rounded-xl bg-[var(--gold)] text-black font-mono text-xs font-bold hover:bg-[var(--gold-bright)] transition-colors mt-2"
                 >
-                  Reset All Filters
+                  Reset all filters
                 </button>
               </div>
             )}

@@ -239,7 +239,7 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
         <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-[var(--border)]">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-mono font-bold text-[var(--gold)] uppercase tracking-wider">
+            <span className="text-[11px] font-mono font-bold text-[var(--gold)] uppercase tracking-wider">
               Nexus AI
             </span>
           </div>
@@ -265,12 +265,12 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
         </div>
 
         {/* Footer Action */}
-        <div className="flex items-center justify-between pt-1.5 border-t border-[var(--border)]/60 text-[10px] font-mono">
+        <div className="flex items-center justify-between pt-1.5 border-t border-[var(--border)]/60 text-[11px] font-mono">
           <span className="text-[var(--muted)] text-[9.5px]">Hover / Drag ↔</span>
           <button
             type="button"
             onClick={onOpen}
-            className="px-2.5 py-0.5 rounded-lg bg-[var(--gold)] text-black font-bold hover:bg-[var(--gold-bright)] transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer text-[10px]"
+            className="px-2.5 py-0.5 rounded-lg bg-[var(--gold)] text-black font-bold hover:bg-[var(--gold-bright)] transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer text-[11px]"
           >
             <span>Open Desk</span>
             <ArrowRight className="w-2.5 h-2.5" />

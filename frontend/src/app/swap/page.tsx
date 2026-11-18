@@ -709,13 +709,12 @@ export default function SwapPage() {
       ? user?.id
         ? `nexus_wallet_${user.id.slice(0, 8)}`
         : 'NEXUS_INTERNAL_LEDGER'
-      : destinationAddress || (
-          toToken === 'NXL'
-            ? user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : '') || (user?.id ? `nexus_wallet_${user.id.slice(0, 8)}` : 'NEXUS_INTERNAL_LEDGER')
-            : toToken === 'XLM'
-            ? 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC'
-            : 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp'
-        );
+      : toToken === 'NXL'
+      ? destinationAddress ||
+        user?.xrplAddress ||
+        (user?.walletAddress?.startsWith('r') ? user.walletAddress : '') ||
+        (user?.id ? `nexus_wallet_${user.id.slice(0, 8)}` : 'NEXUS_INTERNAL_LEDGER')
+      : destinationAddress;
 
   // Copy helper
   const handleCopy = (text: string, key: string) => {
@@ -729,6 +728,10 @@ export default function SwapPage() {
   // Open Review Modal -> Initiates Real Escrow Order
   const handleOpenReview = async () => {
     setSwapError('');
+    if (!effectiveDestination) {
+      setSwapError('Enter the destination wallet address for this swap.');
+      return;
+    }
     setSwapState('preparing');
     setShowReviewModal(true);
     const { token } = readSession();
@@ -764,33 +767,15 @@ export default function SwapPage() {
         const errJson = await res.json().catch(() => null);
         if (errJson?.error) setSwapError(errJson.error);
       }
-    } catch {}
+    } catch (err) {
+      setSwapError(err instanceof Error ? err.message : 'Could not reach the swap service.');
+    }
 
-    // Fallback order state
-    const fallbackId = `SWAP-${Date.now().toString(36).toUpperCase()}`;
-    const fallbackDeposit =
-      fromToken === 'USD' || fromToken === 'NXL'
-        ? 'NEXUS_INTERNAL_LEDGER'
-        : fromToken === 'XRP'
-        ? PLATFORM_XRPL_VAULT
-        : PLATFORM_STELLAR_VAULT;
-    setActiveSwapOrder({
-      swapId: fallbackId,
-      depositAddress: fallbackDeposit,
-      identifierType:
-        fromToken === 'USD' || fromToken === 'NXL'
-          ? ('internal_ledger' as any)
-          : fromToken === 'XRP'
-          ? 'destination_tag'
-          : 'memo_text',
-      identifier:
-        fromToken === 'USD' || fromToken === 'NXL'
-          ? fallbackId
-          : fromToken === 'XRP'
-          ? Math.floor(100000 + Math.random() * 900000)
-          : `SWAP${Math.random().toString(16).slice(2, 10).toUpperCase()}`,
-    });
+    // Never fabricate a swap order. Without a backend-issued swap ID and
+    // deposit identifier the user could send funds that cannot be reconciled.
+    setSwapError((prev) => prev || 'Could not start this swap. Please try again.');
     setSwapState('idle');
+    setShowReviewModal(false);
   };
 
   // Execute Swap with Real Ingress Deposit (or Internal Ledger Balance)
@@ -983,13 +968,13 @@ export default function SwapPage() {
         {/* Header Breadcrumb */}
         <div className="mb-8">
           <p className="text-[11px] font-mono tracking-[0.2em] uppercase text-[var(--gold)] font-semibold">
-            CROSS-CHAIN ROUTING / DUAL-RAIL SETTLEMENT
+            SWAP
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-bold text-[var(--foreground)] tracking-tight mt-2">
-            Cross-Chain Liquidity Bridge
+            Swap across Stellar and XRP Ledger
           </h1>
           <p className="text-sm sm:text-base text-[var(--muted)] mt-1.5 font-normal">
-            Deposit from your connected wallet to the NexusRail Escrow Vault, or swap directly into the native $NXL AMM bonding curve pool.
+            Convert XLM, XRP, USD, and $NXL. Funds route through the NexusRail escrow vault before payout.
           </p>
         </div>
 
@@ -1001,35 +986,42 @@ export default function SwapPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-[var(--foreground)]">Nexus Cross-Ledger Token ($NXL)</span>
-                <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[10px] font-mono font-bold text-[var(--gold-bright)]">
-                  x · y = k AMM
+                <span className="text-sm font-bold text-[var(--foreground)]">$NXL token</span>
+                <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[11px] font-mono font-bold text-[var(--gold-bright)]">
+                  AMM pool
                 </span>
               </div>
               <p className="text-xs font-mono text-[var(--muted)] mt-0.5">
-                50% of swap fees &amp; platform revenue back the $NXL reserve pool. Pay at checkout for 10% off.
+                Half of all swap fees back the $NXL reserve. Pay with $NXL at checkout for 10% off.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
             <div className="px-3 py-2 rounded-xl nexus-glass-surface border border-[var(--border)]">
-              <span className="text-[10px] text-[var(--muted)] uppercase block">Spot Price</span>
+              <span className="text-[11px] text-[var(--muted)] uppercase block">Spot price</span>
               <span className="text-sm font-bold text-[var(--gold-bright)]">
-                ${nrSpotUsd.toFixed(4)}
+                {nrPool ? `$${nrSpotUsd.toFixed(4)}` : '—'}
               </span>
-              <span className={`ml-1.5 text-[10px] ${(nrPool?.change24hPercent ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {(nrPool?.change24hPercent ?? 0) >= 0 ? '+' : ''}{(nrPool?.change24hPercent ?? 0).toFixed(2)}%
-              </span>
+              {nrPool && (
+                <span
+                  className={`ml-1.5 text-[11px] ${
+                    nrPool.change24hPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  }`}
+                >
+                  {nrPool.change24hPercent >= 0 ? '+' : ''}
+                  {nrPool.change24hPercent.toFixed(2)}%
+                </span>
+              )}
             </div>
             <div className="px-3 py-2 rounded-xl nexus-glass-surface border border-[var(--border)]">
-              <span className="text-[10px] text-[var(--muted)] uppercase block">USD Reserve</span>
+              <span className="text-[11px] text-[var(--muted)] uppercase block">USD reserve</span>
               <span className="text-sm font-bold text-[var(--foreground)]">
-                ${(nrPool?.reserveUsd ?? 100000).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                {nrPool ? `$${nrPool.reserveUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
               </span>
             </div>
             <div className="px-3 py-2 rounded-xl nexus-glass-surface border border-[var(--border)]">
-              <span className="text-[10px] text-[var(--muted)] uppercase block">Your $NXL</span>
+              <span className="text-[11px] text-[var(--muted)] uppercase block">Your $NXL</span>
               <span className="text-sm font-bold text-[var(--foreground)]">
                 {nrBalance.toFixed(2)} NXL
               </span>
@@ -1060,7 +1052,7 @@ export default function SwapPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-[var(--foreground)]">Pending XRPL Swap Deposit Detected</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-400">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400">
                       ON-CHAIN VERIFIED
                     </span>
                   </div>
@@ -1111,7 +1103,7 @@ export default function SwapPage() {
                     type="button"
                     disabled={pendingClaimStatus === 'claiming'}
                     onClick={handleClaimPending}
-                    className="px-4 py-2.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-[var(--gold)]/20 animate-pulse"
+                    className="px-4 py-2.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-[var(--gold)]/20"
                   >
                     {pendingClaimStatus === 'claiming' ? 'Disbursing NXL...' : `Step 2: Claim ${pendingClaimData.amountNxl} NXL`}
                   </button>
@@ -1128,7 +1120,7 @@ export default function SwapPage() {
             {pendingClaimStatus === 'claimed' && (
               <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono flex items-center justify-between">
                 <span>🎉 {pendingClaimData.amountNxl} $NXL tokens successfully deposited to your XRPL wallet!</span>
-                <span className="text-[10px] text-[var(--muted)]">Tx: {pendingClaimData.payoutHash?.slice(0, 14)}...</span>
+                <span className="text-[11px] text-[var(--muted)]">Tx: {pendingClaimData.payoutHash?.slice(0, 14)}...</span>
               </div>
             )}
           </div>
@@ -1202,7 +1194,7 @@ export default function SwapPage() {
                   <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
                     {swapMode === 'same_chain' ? 'Same-Chain Swap' : 'Cross-Chain Bridge'}
                   </h2>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
                     swapMode === 'same_chain'
                       ? 'bg-amber-400/10 border-amber-400/30 text-amber-400'
                       : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
@@ -1216,7 +1208,7 @@ export default function SwapPage() {
                   <button
                     type="button"
                     onClick={() => setShowSlippageMenu(!showSlippageMenu)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg nexus-glass-surface text-[10px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg nexus-glass-surface text-[11px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
                   >
                     <span>{slippage} SLIPPAGE</span>
                     <Sliders className="w-3 h-3 text-[var(--muted)]" />
@@ -1284,7 +1276,7 @@ export default function SwapPage() {
                 <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)] pt-1">
                   <span>≈ ${payUsdValue} USD</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] tracking-wider text-[var(--muted)]">{TOKEN_DETAILS[fromToken].chain}</span>
+                    <span className="text-[11px] tracking-wider text-[var(--muted)]">{TOKEN_DETAILS[fromToken].chain}</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -1298,7 +1290,7 @@ export default function SwapPage() {
                             : usdBalance;
                         setPayAmount(maxVal > 0 ? maxVal.toFixed(2) : '100.00');
                       }}
-                      className="text-[10px] font-bold text-[var(--gold)] hover:underline uppercase cursor-pointer"
+                      className="text-[11px] font-bold text-[var(--gold)] hover:underline uppercase cursor-pointer"
                     >
                       MAX
                     </button>
@@ -1350,7 +1342,7 @@ export default function SwapPage() {
 
                 <div className="flex items-center justify-between text-xs font-mono text-[var(--muted)] pt-1">
                   <span>≈ ${receiveUsdValue} USD</span>
-                  <span className="text-[10px] tracking-wider text-[var(--muted)]">{TOKEN_DETAILS[toToken].chain}</span>
+                  <span className="text-[11px] tracking-wider text-[var(--muted)]">{TOKEN_DETAILS[toToken].chain}</span>
                 </div>
               </div>
 
@@ -1367,7 +1359,7 @@ export default function SwapPage() {
                         <button
                           type="button"
                           onClick={() => setIsWalletModalOpen(true)}
-                          className="text-[10px] text-[var(--gold)] hover:underline cursor-pointer"
+                          className="text-[11px] text-[var(--gold)] hover:underline cursor-pointer"
                         >
                           Select Wallet
                         </button>
@@ -1419,7 +1411,7 @@ export default function SwapPage() {
                               const xrplAddr = user?.xrplAddress || (user?.walletAddress?.startsWith('r') ? user.walletAddress : '');
                               if (xrplAddr) setDestinationAddress(xrplAddr);
                             }}
-                            className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                            className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold cursor-pointer transition-colors ${
                               targetChain === 'XRPL' ? 'bg-[var(--gold)] text-black' : 'text-[var(--muted)] hover:text-white'
                             }`}
                           >
@@ -1432,7 +1424,7 @@ export default function SwapPage() {
                               const stellarAddr = user?.stellarAddress || (user?.walletAddress?.startsWith('G') ? user.walletAddress : '');
                               if (stellarAddr) setDestinationAddress(stellarAddr);
                             }}
-                            className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                            className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold cursor-pointer transition-colors ${
                               targetChain === 'STELLAR' ? 'bg-[var(--gold)] text-black' : 'text-[var(--muted)] hover:text-white'
                             }`}
                           >
@@ -1454,7 +1446,7 @@ export default function SwapPage() {
                               if (addr) setDestinationAddress(addr);
                             }
                           }}
-                          className="text-[10px] text-[var(--gold)] hover:underline cursor-pointer"
+                          className="text-[11px] text-[var(--gold)] hover:underline cursor-pointer"
                         >
                           Use Connected {targetChain} Wallet
                         </button>
@@ -1468,7 +1460,7 @@ export default function SwapPage() {
                         className="w-full px-3 py-2 rounded-xl bg-[var(--surface-solid)] border border-[var(--border)] text-xs font-mono text-[var(--foreground)] placeholder-[var(--muted)]/40 focus:border-[var(--border-focus)] focus:outline-none"
                       />
 
-                      <p className="text-[10px] font-mono text-[var(--muted)]">
+                      <p className="text-[11px] font-mono text-[var(--muted)]">
                         Cross-Chain Bridge: Ingress deposit is verified in the server vault, and {receiveAmount} {toToken} is disbursed across ledgers to this {targetChain} address.
                       </p>
                     </>
@@ -1497,7 +1489,7 @@ export default function SwapPage() {
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                               <span>XRPL Trustline Required</span>
                             </span>
-                            <span className="text-[10px] text-[var(--muted)]">Account: {destinationAddress.slice(0, 6)}...{destinationAddress.slice(-4)}</span>
+                            <span className="text-[11px] text-[var(--muted)]">Account: {destinationAddress.slice(0, 6)}...{destinationAddress.slice(-4)}</span>
                           </div>
                           <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
                             XRPL consensus protocol strictly requires account <strong className="text-[var(--gold)]">{destinationAddress}</strong> to create a trustline to issuer <strong className="text-[var(--foreground)]">{XRPL_NR_ISSUER_ADDRESS.slice(0, 8)}...</strong> before receiving $NXL tokens.
@@ -1522,7 +1514,7 @@ export default function SwapPage() {
                             </button>
                           </div>
                           {trustlineActionMsg && (
-                            <p className={`text-[10px] ${trustlineActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            <p className={`text-[11px] ${trustlineActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {trustlineActionMsg.text}
                             </p>
                           )}
@@ -1564,7 +1556,7 @@ export default function SwapPage() {
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                               <span>Stellar Trustline Required</span>
                             </span>
-                            <span className="text-[10px] text-[var(--muted)]">Issuer: {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}...</span>
+                            <span className="text-[11px] text-[var(--muted)]">Issuer: {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}...</span>
                           </div>
                           <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
                             Stellar protocol requires account ({destinationAddress.slice(0, 8)}...{destinationAddress.slice(-4)}) to add a Trustline to Issuer {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}... for asset &quot;NXL&quot; before receiving tokens.
@@ -1609,7 +1601,7 @@ export default function SwapPage() {
                             <button
                               type="button"
                               onClick={() => setShowStellarSecretBox((prev) => !prev)}
-                              className="text-[10px] text-[var(--muted)] hover:text-[var(--gold)] underline cursor-pointer ml-auto"
+                              className="text-[11px] text-[var(--muted)] hover:text-[var(--gold)] underline cursor-pointer ml-auto"
                             >
                               {showStellarSecretBox ? 'Hide Dev Input' : 'Use Testnet Secret'}
                             </button>
@@ -1617,7 +1609,7 @@ export default function SwapPage() {
 
                           {showStellarSecretBox && (
                             <div className="p-2.5 rounded-lg nexus-glass-card border border-[var(--border)] space-y-2 mt-1">
-                              <p className="text-[10px] text-[var(--muted)]">Enter your Stellar Testnet Secret Key (S...) to sign change_trust directly on-chain:</p>
+                              <p className="text-[11px] text-[var(--muted)]">Enter your Stellar Testnet Secret Key (S...) to sign change_trust directly on-chain:</p>
                               <div className="flex items-center gap-2">
                                 <input
                                   type="password"
@@ -1639,7 +1631,7 @@ export default function SwapPage() {
                           )}
 
                           {stellarActionMsg && (
-                            <p className={`text-[10px] ${stellarActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            <p className={`text-[11px] ${stellarActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {stellarActionMsg.text}
                             </p>
                           )}
@@ -1711,7 +1703,7 @@ export default function SwapPage() {
 
               {/* Safety Subtext */}
               <p className="text-xs text-[var(--muted)] text-center leading-relaxed pt-1">
-                Atomic settlement: Funds are verified in server vault before destination payout.
+                Funds are verified in the NexusRail vault before payout is sent.
               </p>
 
             </div>
@@ -1724,14 +1716,14 @@ export default function SwapPage() {
               <div>
                 <p className="text-sm font-medium text-[var(--foreground)] flex items-center gap-2">
                   <span>Your Testnet Wallets</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--border)] text-[var(--gold)] transition-colors">
+                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--border)] text-[var(--gold)] transition-colors">
                     Manage
                   </span>
                 </p>
                 <p className="text-xs text-[var(--muted)] font-mono mt-0.5">Stellar & XRPL Multi-Rail Keys</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-mono text-[var(--muted)] uppercase">STELLAR: {user?.walletAddress ? `${user.walletAddress.slice(0, 4)}..${user.walletAddress.slice(-4)}` : 'GCKF..7Q2M'}</p>
+                <p className="text-[11px] font-mono text-[var(--muted)] uppercase">STELLAR: {user?.walletAddress ? `${user.walletAddress.slice(0, 4)}..${user.walletAddress.slice(-4)}` : 'Not connected'}</p>
                 <p className="text-xl sm:text-2xl font-mono font-medium text-[var(--gold-bright)] tracking-tight mt-0.5">
                   {xlmBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} XLM
                 </p>
@@ -1746,8 +1738,8 @@ export default function SwapPage() {
             {/* Top Bar with Status */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-mono text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>SERVER HOT WALLET READY</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span>Testnet swap · live rates</span>
               </div>
               <button
                 type="button"
@@ -1762,89 +1754,79 @@ export default function SwapPage() {
             <div>
               <div className="flex items-center gap-2 text-xs font-mono text-[var(--muted)] uppercase tracking-wider">
                 <span>{fromToken} / {toToken}</span>
-                <span className="px-1.5 py-0.5 rounded nexus-glass-surface border border-[var(--border)] text-[9px] text-[var(--gold)]">
+                <span className="px-1.5 py-0.5 rounded nexus-glass-surface border border-[var(--border)] text-[11px] text-[var(--gold)]">
                   {fromCache ? 'CACHED 30M RATES' : 'LIVE ORACLE RATES'}
                 </span>
               </div>
 
-              <div className="flex items-baseline gap-4 mt-2">
+              <div className="flex items-baseline gap-3 mt-2 flex-wrap">
                 <span className="text-4xl sm:text-5xl font-mono font-bold text-[var(--foreground)] tracking-tight">
                   {liveRate.toFixed(4)}
                 </span>
-                <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[var(--gold-bright)] text-xs font-mono font-semibold">
-                  +1.24% / 24H
+                <span className="text-xs font-mono text-[var(--muted)]">
+                  {toToken} per {fromToken}
                 </span>
               </div>
             </div>
 
-            {/* 24-Hour SVG Rate Line Chart */}
+            {/* Rate source & freshness */}
             <div className="rounded-2xl nexus-glass-card p-5 space-y-3">
-              <div className="h-44 w-full relative">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 500 160" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.25" />
-                      <stop offset="100%" stopColor="#D4AF37" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Gradient Area Fill */}
-                  <polygon
-                    points="0,120 25,125 50,110 75,130 100,105 125,115 150,90 175,110 200,85 225,95 250,80 275,95 300,75 325,85 350,70 375,80 400,65 425,75 450,60 475,65 500,55 500,160 0,160"
-                    fill="url(#chartGradient)"
-                  />
-
-                  {/* Main Teal Trend Line */}
-                  <polyline
-                    fill="none"
-                    stroke="#D4AF37"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points="0,120 25,125 50,110 75,130 100,105 125,115 150,90 175,110 200,85 225,95 250,80 275,95 300,75 325,85 350,70 375,80 400,65 425,75 450,60 475,65 500,55"
-                  />
-                </svg>
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="uppercase tracking-wider text-[var(--muted)]">Rate source</span>
+                <span className="text-[var(--foreground)]">
+                  {fromCache ? 'Cached feed' : 'Live feed'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="uppercase tracking-wider text-[var(--muted)]">Cache expires in</span>
+                <span className="text-[var(--foreground)]">
+                  {ttlMinutes > 0 ? `${ttlMinutes} min` : 'Refreshing now'}
+                </span>
               </div>
 
-              {/* Time Markers */}
-              <div className="flex justify-between text-[10px] font-mono text-[var(--muted)] pt-2 border-t border-[var(--border)]">
-                <span>00:00</span>
-                <span>06:00</span>
-                <span>12:00</span>
-                <span>18:00</span>
-                <span>24:00</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => void refreshRates()}
+                disabled={ratesLoading}
+                className="w-full py-2 rounded-xl nexus-glass-surface border border-[var(--border)] text-xs font-mono text-[var(--foreground)] hover:border-[var(--gold)]/60 transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {ratesLoading ? 'Refreshing…' : 'Refresh rates'}
+              </button>
+
+              <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                A 24-hour rate chart is not shown because no price history is stored yet.
+              </p>
             </div>
 
             {/* "Your route, explained" Section */}
             <div className="space-y-4 pt-2">
               <h3 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
-                Cross-Chain Escrow Architecture
+                How your swap is routed
               </h3>
 
               {/* Route Chain Flow Pills */}
               <div className="p-4 rounded-2xl nexus-glass-surface flex items-center justify-between text-xs font-mono">
                 <div className="text-center">
                   <span className="px-2.5 py-1 rounded-md nexus-glass-card border border-[var(--border)] text-[var(--foreground)] font-medium block">
-                    {fromToken === 'XRP' ? 'XRPL Wallet' : fromToken === 'XLM' ? 'Stellar Wallet' : 'NexusRail Wallet'}
+                    {fromToken === 'XRP' ? 'XRPL wallet' : fromToken === 'XLM' ? 'Stellar wallet' : 'NexusRail wallet'}
                   </span>
-                  <span className="text-[10px] text-[var(--muted)] mt-1 block">Ingress Deposit</span>
+                  <span className="text-[11px] text-[var(--muted)] mt-1 block">You send</span>
                 </div>
                 <ArrowRight className="w-4 h-4 text-[var(--gold)]" />
                 <div className="text-center">
                   <span className="px-2.5 py-1 rounded-md bg-[var(--gold)]/15 border border-[var(--gold)]/30 text-[var(--gold-bright)] font-bold block">
-                    {involvesNrOrUsd ? '$NR AMM POOL' : 'SERVER VAULT'}
+                    {involvesNrOrUsd ? '$NXL AMM pool' : 'NexusRail vault'}
                   </span>
-                  <span className="text-[10px] text-emerald-400 mt-1 block">
-                    {involvesNrOrUsd ? 'x · y = k Curve' : 'Escrow & Verification'}
+                  <span className="text-[11px] text-emerald-400 mt-1 block">
+                    {involvesNrOrUsd ? 'Pool pricing' : 'Escrow'}
                   </span>
                 </div>
                 <ArrowRight className="w-4 h-4 text-[var(--gold)]" />
                 <div className="text-center">
                   <span className="px-2.5 py-1 rounded-md nexus-glass-card border border-[var(--border)] text-[var(--foreground)] font-medium block">
-                    {toToken === 'XLM' ? 'Stellar Wallet' : toToken === 'XRP' ? 'XRPL Wallet' : 'NexusRail Wallet'}
+                    {toToken === 'XLM' ? 'Stellar wallet' : toToken === 'XRP' ? 'XRPL wallet' : 'NexusRail wallet'}
                   </span>
-                  <span className="text-[10px] text-[var(--muted)] mt-1 block">Egress Payout</span>
+                  <span className="text-[11px] text-[var(--muted)] mt-1 block">You receive</span>
                 </div>
               </div>
 
@@ -1857,21 +1839,25 @@ export default function SwapPage() {
                 <div className="flex justify-between items-center py-2">
                   <span className="text-[var(--muted)]">Estimated fee</span>
                   <span className="text-[var(--foreground)] font-medium">
-                    {involvesNrOrUsd && ammQuote ? `$${ammQuote.feeUsd.toFixed(2)} (0.5% AMM)` : `0.000012 ${fromToken}`}
+                    {involvesNrOrUsd && ammQuote
+                      ? `$${ammQuote.feeUsd.toFixed(2)} (0.5% pool fee)`
+                      : fromToken === 'XLM' || fromToken === 'XRP'
+                      ? `≈ 0.00001 ${fromToken} network fee`
+                      : 'No network fee'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-[var(--muted)]">Server Stellar Vault</span>
+                  <span className="text-[var(--muted)]">Stellar vault</span>
                   <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_STELLAR_VAULT}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-[var(--muted)]">Server XRPL Vault</span>
+                  <span className="text-[var(--muted)]">XRPL vault</span>
                   <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_XRPL_VAULT}</span>
                 </div>
               </div>
 
               <p className="text-xs text-[var(--muted)] leading-relaxed">
-                Atomic cross-chain bridge: Deposit to server vault triggers automatic disbursement to your destination address on the counterpart chain.
+                Your deposit is held in the NexusRail vault, then paid out to your destination address on the other chain.
               </p>
             </div>
 
@@ -1883,9 +1869,9 @@ export default function SwapPage() {
         <div className="mt-12 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
             <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[var(--gold)] animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[var(--gold)]" />
               <h2 className="text-xl font-bold text-[var(--foreground)] tracking-tight">
-                Live Cross-Chain Bridge Settlement History
+                Bridge settlement history
               </h2>
             </div>
             
@@ -1902,15 +1888,15 @@ export default function SwapPage() {
           </div>
 
           {loadingBridgeHistory ? (
-            <div className="nexus-glass-card p-10 rounded-2xl border border-[var(--border)] text-center text-xs font-mono text-[var(--muted)] flex items-center justify-center gap-3 animate-pulse">
+            <div className="nexus-glass-card p-10 rounded-2xl border border-[var(--border)] text-center text-xs font-mono text-[var(--muted)] flex items-center justify-center gap-3">
               <RefreshCw className="w-4 h-4 animate-spin text-[var(--gold)]" />
-              <span>Querying live cross-chain bridge logs...</span>
+              <span>Loading bridge history…</span>
             </div>
           ) : bridgeHistory.length === 0 ? (
             <div className="nexus-glass-card p-8 rounded-2xl border border-dashed border-[var(--border)] text-center space-y-2">
               <p className="text-sm font-bold text-[var(--foreground)]">No Bridge Swaps Recorded Yet</p>
               <p className="text-xs text-[var(--muted)] font-mono max-w-md mx-auto">
-                Completed cross-chain swaps will appear here with cryptographic deposit and payout transaction proofs.
+                Completed cross-chain swaps will appear here with their deposit and payout transaction hashes.
               </p>
             </div>
           ) : (
@@ -1918,7 +1904,7 @@ export default function SwapPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left font-mono text-xs">
                   <thead>
-                    <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                    <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
                       <th className="py-3 px-4">Action</th>
                       <th className="py-3 px-4">Disbursed Amount</th>
                       <th className="py-3 px-4">Destination Ledger &amp; Address</th>
@@ -1935,7 +1921,7 @@ export default function SwapPage() {
                             <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
                             <div>
                               <span className="font-bold text-[var(--foreground)]">Cross-Chain Bridge</span>
-                              <span className="block text-[10px] text-[var(--muted)]">Payout on {b.chain}</span>
+                              <span className="block text-[11px] text-[var(--muted)]">Payout on {b.chain}</span>
                             </div>
                           </div>
                         </td>
@@ -1955,7 +1941,7 @@ export default function SwapPage() {
                         </td>
 
                         <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
                             <CheckCircle2 className="w-3 h-3" />
                             <span>{b.status || 'CONFIRMED'}</span>
                           </span>
@@ -2022,7 +2008,7 @@ export default function SwapPage() {
               <div className="py-8 text-center space-y-4">
                 <div className="w-10 h-10 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin mx-auto" />
                 <p className="text-sm font-mono text-[var(--foreground)]">Preparing Cross-Chain Escrow Order...</p>
-                <p className="text-xs text-[var(--muted)] font-mono">Generating unique deposit vault address & cryptographic memo...</p>
+                <p className="text-xs text-[var(--muted)] font-mono">Preparing your deposit address and reference…</p>
               </div>
             )}
 
@@ -2033,7 +2019,7 @@ export default function SwapPage() {
                 <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-3">
                   <div className="flex items-center justify-between text-[var(--gold)] font-bold pb-2 border-b border-[var(--border)]">
                     <span className="flex items-center gap-1.5">
-                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[10px]">1</span>
+                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[11px]">1</span>
                       <span>INGRESS: DEPOSIT TO SERVER VAULT</span>
                     </span>
                     <span>{payAmount} {fromToken}</span>
@@ -2076,7 +2062,7 @@ export default function SwapPage() {
                 <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-2">
                   <div className="flex items-center justify-between text-[var(--gold)] font-bold pb-1 border-b border-[var(--border)]">
                     <span className="flex items-center gap-1.5">
-                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[10px]">2</span>
+                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[11px]">2</span>
                       <span>EGRESS: SERVER DISBURSES TO YOU</span>
                     </span>
                     <span>{receiveAmount} {toToken}</span>
@@ -2112,8 +2098,8 @@ export default function SwapPage() {
                           }`}
                         >
                           <Wallet className="w-4 h-4 mx-auto mb-1 text-[var(--gold)]" />
-                          <span className="block text-[10px]">Browser Wallet</span>
-                          <span className="text-[9px] text-[var(--muted)]">{fromToken === 'XLM' ? 'Freighter' : 'GemWallet'}</span>
+                          <span className="block text-[11px]">Browser Wallet</span>
+                          <span className="text-[11px] text-[var(--muted)]">{fromToken === 'XLM' ? 'Freighter' : 'GemWallet'}</span>
                         </button>
 
                         <button
@@ -2126,8 +2112,8 @@ export default function SwapPage() {
                           }`}
                         >
                           <Copy className="w-4 h-4 mx-auto mb-1 text-sky-400" />
-                          <span className="block text-[10px]">Manual Transfer</span>
-                          <span className="text-[9px] text-[var(--muted)]">From Mobile/App</span>
+                          <span className="block text-[11px]">Manual Transfer</span>
+                          <span className="text-[11px] text-[var(--muted)]">From Mobile/App</span>
                         </button>
 
                         <button
@@ -2140,8 +2126,8 @@ export default function SwapPage() {
                           }`}
                         >
                           <Key className="w-4 h-4 mx-auto mb-1 text-amber-400" />
-                          <span className="block text-[10px]">Testnet Secret</span>
-                          <span className="text-[9px] text-[var(--muted)]">Dev One-Click</span>
+                          <span className="block text-[11px]">Testnet Secret</span>
+                          <span className="text-[11px] text-[var(--muted)]">Dev One-Click</span>
                         </button>
                       </div>
                     </div>
@@ -2208,7 +2194,7 @@ export default function SwapPage() {
                       </button>
                     </div>
                     {trustlineActionMsg && (
-                      <p className={`text-[10px] ${trustlineActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <p className={`text-[11px] ${trustlineActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {trustlineActionMsg.text}
                       </p>
                     )}
@@ -2258,7 +2244,7 @@ export default function SwapPage() {
                       </button>
                     </div>
                     {stellarActionMsg && (
-                      <p className={`text-[10px] ${stellarActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <p className={`text-[11px] ${stellarActionMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {stellarActionMsg.text}
                       </p>
                     )}
@@ -2309,10 +2295,10 @@ export default function SwapPage() {
 
                 <div className="text-center space-y-1">
                   <h4 className="text-base font-bold text-[var(--foreground)]">
-                    Executing Dual-Rail Cross-Chain Swap
+                    Sending your swap payout
                   </h4>
                   <p className="text-xs font-mono text-[var(--gold)]">
-                    Elapsed: {elapsedPayoutSeconds}s &bull; Dual-ledger consensus in progress
+                    Elapsed: {elapsedPayoutSeconds}s &bull; waiting for network confirmation
                   </p>
                 </div>
 
@@ -2320,30 +2306,30 @@ export default function SwapPage() {
                   <div className="p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>1. Ingress Deposit ({payAmount} {fromToken}) Verified</span>
+                      <span>1. Deposit received ({payAmount} {fromToken})</span>
                     </div>
-                    <span className="text-[10px] uppercase font-bold">Confirmed</span>
+                    <span className="text-[11px] uppercase font-bold">Confirmed</span>
                   </div>
 
                   <div className="p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>2. AMM Curve x·y=k Execution</span>
+                      <span>2. Swap price applied</span>
                     </div>
-                    <span className="text-[10px] uppercase font-bold">Settled</span>
+                    <span className="text-[11px] uppercase font-bold">Settled</span>
                   </div>
 
                   <div className="p-3 rounded-xl border bg-[var(--gold)]/10 border-[var(--gold)]/30 text-[var(--gold)] flex items-center justify-between animate-pulse">
                     <div className="flex items-center gap-2.5">
                       <div className="w-2.5 h-2.5 rounded-full bg-[var(--gold)] animate-ping" />
-                      <span>3. Disbursing {receiveAmount} {toToken} to {destinationAddress.startsWith('G') ? 'Stellar' : 'XRPL'}...</span>
+                      <span>3. Sending {receiveAmount} {toToken} to {destinationAddress.startsWith('G') ? 'Stellar' : 'XRPL'}…</span>
                     </div>
-                    <span className="text-[10px] uppercase font-bold">Broadcasting</span>
+                    <span className="text-[11px] uppercase font-bold">Pending</span>
                   </div>
                 </div>
 
                 <p className="text-[11px] text-[var(--muted)] font-mono text-center max-w-sm mx-auto">
-                  Dual-ledger atomic consensus typically finalizes in 5–12 seconds. Please do not close this window.
+                  Cross-chain swaps usually confirm in 5–12 seconds. Please keep this window open.
                 </p>
               </div>
             )}
@@ -2355,7 +2341,7 @@ export default function SwapPage() {
                 </div>
                 
                 <div className="text-center">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold tracking-wider uppercase">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono font-bold tracking-wider uppercase">
                     SETTLED ON-CHAIN
                   </span>
                   <h4 className="text-xl font-bold text-[var(--foreground)] mt-1.5">Cross-Chain Swap Complete!</h4>
@@ -2369,7 +2355,7 @@ export default function SwapPage() {
                   {/* Deposit Proof */}
                   <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <span className="text-[var(--muted)] text-[10px] uppercase">User Deposit Tx ({fromToken})</span>
+                      <span className="text-[var(--muted)] text-[11px] uppercase">User Deposit Tx ({fromToken})</span>
                       <a
                         href={activeSwapOrder.depositExplorerUrl}
                         target="_blank"
@@ -2386,7 +2372,7 @@ export default function SwapPage() {
                   {/* Payout Proof */}
                   <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <span className="text-[var(--muted)] text-[10px] uppercase">Server Payout Tx ({toToken})</span>
+                      <span className="text-[var(--muted)] text-[11px] uppercase">Server Payout Tx ({toToken})</span>
                       <a
                         href={activeSwapOrder.payoutExplorerUrl}
                         target="_blank"

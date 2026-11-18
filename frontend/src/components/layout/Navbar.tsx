@@ -82,7 +82,7 @@ export function Navbar({
               <span className="text-xl font-bold tracking-tight text-white group-hover:text-amber-400 transition-colors">
                 NexusRail
               </span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-[10px] font-bold text-amber-400 flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-[11px] font-bold text-amber-400 flex items-center gap-1">
                 <Sparkles className="w-2.5 h-2.5" />
                 RWA Flagship
               </span>
@@ -142,7 +142,7 @@ export function Navbar({
             }`}
           >
             <ShoppingCart className="w-4 h-4" />
-            <span className="px-1.5 py-0.5 rounded-full bg-rail-emerald text-nexus-dark font-extrabold text-[10px]">
+            <span className="px-1.5 py-0.5 rounded-full bg-rail-emerald text-nexus-dark font-extrabold text-[11px]">
               {cartCount}
             </span>
           </button>
@@ -155,7 +155,7 @@ export function Navbar({
                 <span className="font-mono text-white text-[11px]">
                   {user.email || (user.walletAddress ? `${user.walletAddress.substring(0, 6)}...` : 'User')}
                 </span>
-                <span className="px-1.5 py-0.5 rounded-md bg-rail-emerald/20 text-rail-emerald text-[9px] uppercase font-bold">
+                <span className="px-1.5 py-0.5 rounded-md bg-rail-emerald/20 text-rail-emerald text-[11px] uppercase font-bold">
                   {user.role}
                 </span>
               </div>

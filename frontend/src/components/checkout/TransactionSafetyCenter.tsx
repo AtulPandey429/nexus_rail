@@ -93,7 +93,7 @@ export function TransactionSafetyCenter({
               <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight font-mono">
                 Transaction Safety Center
               </h3>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white/70 border border-slate-200 dark:border-white/10">
+              <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white/70 border border-slate-200 dark:border-white/10">
                 PRE-FLIGHT
               </span>
             </div>
@@ -105,7 +105,7 @@ export function TransactionSafetyCenter({
 
         <div className="flex items-center gap-2">
           <span
-            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border shrink-0 ${
+            className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border shrink-0 ${
               isStellar
                 ? 'bg-[#00E5FF]/10 text-cyan-700 dark:text-[#00E5FF] border-[#00E5FF]/30'
                 : 'bg-[#0081F2]/10 text-blue-700 dark:text-[#60A5FA] border-[#0081F2]/30'
@@ -132,10 +132,10 @@ export function TransactionSafetyCenter({
         <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300 text-xs font-mono">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="font-semibold">Pre-Flight Simulation Passed</span>
+            <span className="font-semibold">Review the parameters before signing</span>
           </div>
-          <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 hidden sm:inline">
-            Liquidity Verified
+          <span className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 hidden sm:inline">
+            Bound to this order
           </span>
         </div>
 
@@ -188,7 +188,7 @@ export function TransactionSafetyCenter({
             <button
               type="button"
               onClick={handleCopyAddress}
-              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shrink-0 flex items-center gap-1 text-[10px]"
+              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shrink-0 flex items-center gap-1 text-[11px]"
               title="Copy full address"
             >
               {copied ? (
@@ -232,7 +232,7 @@ export function TransactionSafetyCenter({
           </button>
 
           {detailsExpanded && (
-            <div className="p-3 border-t border-slate-200 dark:border-white/10 space-y-2 text-[10px] font-mono text-slate-500 dark:text-white/60 bg-slate-100/50 dark:bg-black/30">
+            <div className="p-3 border-t border-slate-200 dark:border-white/10 space-y-2 text-[11px] font-mono text-slate-500 dark:text-white/60 bg-slate-100/50 dark:bg-black/30">
               <div className="flex justify-between">
                 <span>Network Identifier:</span>
                 <span className="text-slate-800 dark:text-white/90 truncate max-w-[200px]" title={networkIdentifier}>
@@ -251,7 +251,7 @@ export function TransactionSafetyCenter({
                   {isStellar ? 'Stellar Horizon Testnet Node' : 'XRPL AltNet WebSocket RPC'}
                 </span>
               </div>
-              <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-white/5 text-[9px]">
+              <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-white/5 text-[11px]">
                 <span>Tamper Binding Hash:</span>
                 <span className="text-slate-600 dark:text-white/40">{bindingHash}</span>
               </div>

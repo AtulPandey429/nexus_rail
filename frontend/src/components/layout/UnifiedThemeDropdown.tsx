@@ -144,10 +144,10 @@ export function UnifiedThemeDropdown() {
         >
           {/* Header */}
           <div className="flex items-center justify-between px-1 pb-2.5 mb-2.5 border-b border-[var(--border)]">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--gold)] font-bold">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--gold)] font-bold">
               Theme & Effects
             </span>
-            <span className="text-[10px] font-mono text-[var(--muted)]">v2.4</span>
+            <span className="text-[11px] font-mono text-[var(--muted)]">v2.4</span>
           </div>
 
           {/* Section 1: Themes with Side Toggle Switches */}
