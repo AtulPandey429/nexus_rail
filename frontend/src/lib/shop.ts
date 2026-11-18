@@ -696,12 +696,12 @@ export async function clearCart() {
   notifyCart();
 }
 
-export async function startStripeCheckout() {
+export async function startStripeCheckout(promoCode?: string) {
   const clientUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
   const res = await fetch('/api/v1/checkout/stripe/create-session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers() },
-    body: JSON.stringify({ fromCart: true, clientUrl }),
+    body: JSON.stringify({ fromCart: true, clientUrl, ...(promoCode ? { promoCode } : {}) }),
   });
   const payload = await readJson(res);
   const url = payload?.data?.url;
@@ -711,13 +711,40 @@ export async function startStripeCheckout() {
   window.location.assign(url);
 }
 
-export async function createOrderFromCart(lines: CartLine[], rail = 'MULTI') {
+export interface CouponValidationData {
+  valid: boolean;
+  code: string;
+  discountPercent: number;
+  subtotalCents: number;
+  discountCents: number;
+  finalTotalCents: number;
+  estimatedCashbackUsdCents: number;
+  estimatedCashbackNxl: number;
+  message: string;
+}
+
+export async function validateCouponApi(code: string, subtotalCents: number): Promise<CouponValidationData> {
+  const res = await fetch('/api/v1/orders/validate-coupon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers() },
+    body: JSON.stringify({ code, subtotalCents }),
+  });
+  const payload = await readJson(res);
+  if (!res.ok || payload?.success !== true || !payload?.data) {
+    throw new Error(errorMessage(payload, 'Promo code could not be applied.'));
+  }
+  return payload.data as CouponValidationData;
+}
+
+export async function createOrderFromCart(lines: CartLine[], rail = 'MULTI', promoCode?: string) {
   try {
     const res = await fetch('/api/v1/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers() },
       body: JSON.stringify({
         rail,
+        fromCart: true,
+        ...(promoCode ? { promoCode } : {}),
         items: lines.map((line) => ({
           sku: line.sku,
           qty: line.qty,

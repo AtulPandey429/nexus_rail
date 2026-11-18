@@ -87,7 +87,13 @@ export interface MongoOrderDoc {
   id: string;
   user_id: string;
   order_number: string;
+  subtotal_cents?: number;
+  discount_cents?: number;
+  promo_code?: string;
   total_cents: number;
+  cashback_credited?: boolean;
+  cashback_usd_cents?: number;
+  cashback_nxl_amount?: number;
   items: OrderItem[];
   payment_rail: string;
   payment_address?: string;
@@ -135,6 +141,22 @@ export interface MongoSwapOrderDoc {
   createdAt: string;
   expiresAt: string;
   updatedAt: string;
+}
+
+export interface MongoCouponDoc {
+  _id?: any;
+  code: string;
+  discount_percent: number;
+  min_order_cents: number;
+  requires_nr_holder: boolean;
+  first_order_only?: boolean;
+  issued_to_user_id?: string;
+  active: boolean;
+  max_uses?: number;
+  used_count: number;
+  expires_at?: string;
+  description?: string;
+  created_at: string;
 }
 
 export interface MongoUserHoldingDoc {
@@ -559,6 +581,9 @@ export class MongoService {
       await db.collection('swaps').createIndex({ swapId: 1 }, { unique: true });
       await db.collection('swaps').createIndex({ user_id: 1, createdAt: -1 });
       await db.collection('swaps').createIndex({ createdAt: -1 });
+
+      // 18. Module 7: Smart Coupons
+      await db.collection('coupons').createIndex({ code: 1 }, { unique: true });
 
       console.log('✅ [MongoDB Atlas] Primary Collections & TTL Indexes Initialized');
     } catch (err: any) {

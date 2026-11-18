@@ -12,6 +12,7 @@ import { getExtendedMarketSnapshot, type ExtendedMarketSnapshot } from './market
 import { NrTokenService } from './nrTokenService.js';
 import { TreasuryService } from './treasuryService.js';
 import { walletService } from './wallet.js';
+import { CouponService } from './couponService.js';
 import type {
   AssetSymbol,
   HydratedHolding,
@@ -109,6 +110,11 @@ export class PortfolioService {
     order: MongoOrderDoc,
     session?: ClientSession
   ): Promise<boolean> {
+    // Module 7: Automatically award idempotent 2% $NXL cashback on settled orders
+    await CouponService.awardOrderCashback(order).catch((err) => {
+      console.warn('⚠️ [PortfolioService] Cashback warning:', err?.message);
+    });
+
     if (order.portfolio_credited === true) {
       return false; // Already processed
     }

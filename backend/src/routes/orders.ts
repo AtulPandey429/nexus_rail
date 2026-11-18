@@ -4,6 +4,7 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { MongoService, MongoOrderDoc, OrderItem, MongoCartItemDoc } from '../services/mongo.js';
 import { ProductService } from '../services/products.js';
 import { OrderSequenceService } from '../services/orderSequence.js';
+import { CouponService } from '../services/couponService.js';
 
 export const ordersRouter = Router();
 ordersRouter.use(requireAuth);
@@ -13,7 +14,12 @@ function formatOrder(order: MongoOrderDoc) {
     id: order.id,
     orderNumber: order.order_number,
     status: order.status,
+    subtotalCents: order.subtotal_cents ?? order.total_cents,
+    discountCents: order.discount_cents ?? 0,
+    promoCode: order.promo_code ?? null,
     totalCents: order.total_cents,
+    cashbackUsdCents: order.cashback_usd_cents ?? 0,
+    cashbackNxlAmount: order.cashback_nxl_amount ?? 0,
     rail: order.payment_rail,
     txHash: order.tx_hash,
     paymentAddress: order.payment_address,
@@ -23,6 +29,22 @@ function formatOrder(order: MongoOrderDoc) {
     items: order.items || [],
   };
 }
+
+// POST /api/v1/orders/validate-coupon - Server-authoritative promo validation
+ordersRouter.post('/validate-coupon', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const code = String(req.body?.code || '').trim();
+    const subtotalCents = Number(req.body?.subtotalCents || 0);
+    const result = await CouponService.validateCoupon({
+      code,
+      userId: req.user!.id,
+      subtotalCents,
+    });
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message || 'Invalid promo code' });
+  }
+});
 
 // GET /api/v1/orders - Get user's order history
 ordersRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
@@ -94,7 +116,23 @@ ordersRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const totalCents = pricedItems.reduce((sum, item) => sum + item.unit_price_cents * item.qty, 0);
+    const subtotalCents = pricedItems.reduce((sum, item) => sum + item.unit_price_cents * item.qty, 0);
+    let discountCents = 0;
+    let totalCents = subtotalCents;
+    let appliedPromoCode: string | undefined;
+
+    const rawPromo = typeof req.body?.promoCode === 'string' ? req.body.promoCode.trim() : '';
+    if (rawPromo) {
+      const redeemed = await CouponService.redeemCoupon({
+        code: rawPromo,
+        userId: req.user!.id,
+        subtotalCents,
+      });
+      discountCents = redeemed.discountCents;
+      totalCents = redeemed.finalTotalCents;
+      appliedPromoCode = redeemed.code;
+    }
+
     const orderId = crypto.randomUUID();
     const orderNumber = await OrderSequenceService.getNextOrderNumber();
     const now = new Date().toISOString();
@@ -103,6 +141,9 @@ ordersRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
       id: orderId,
       user_id: req.user!.id,
       order_number: orderNumber,
+      subtotal_cents: subtotalCents,
+      discount_cents: discountCents,
+      promo_code: appliedPromoCode,
       total_cents: totalCents,
       items: pricedItems,
       payment_rail: req.body?.rail || 'PENDING',

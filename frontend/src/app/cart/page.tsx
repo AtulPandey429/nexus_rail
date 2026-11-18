@@ -16,6 +16,7 @@ import {
 import {
   CartLine,
   createOrderFromCart,
+  validateCouponApi,
   fetchCartLines,
   removeCartSku,
   setCartQty,
@@ -70,10 +71,14 @@ export default function CartPage() {
   const [busy, setBusy] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
 
-  // Promo code state
+  // Promo code state (server-validated)
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
+  const [appliedDiscountPercent, setAppliedDiscountPercent] = useState<number>(0);
+  const [appliedDiscountCents, setAppliedDiscountCents] = useState<number>(0);
+  const [promoMessage, setPromoMessage] = useState('');
   const [promoError, setPromoError] = useState('');
+  const [applyingPromo, setApplyingPromo] = useState(false);
 
   // Synchronize session user
   useEffect(() => {
@@ -132,21 +137,6 @@ export default function CartPage() {
     }
   };
 
-  // Promo code validation
-  const handleApplyPromo = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPromoError('');
-    const code = promoCode.trim().toUpperCase();
-    if (!code) return;
-
-    if (code === 'NEXUS10' || code === 'STELLAR' || code === 'XRPL') {
-      setAppliedPromo(code);
-      setPromoError('');
-    } else {
-      setPromoError('Invalid code. Try "NEXUS10" for 10% off.');
-    }
-  };
-
   // Subtotal and discount math
   const subtotalCents = useMemo(() => {
     return items.reduce((acc, item) => acc + item.priceCents * item.qty, 0);
@@ -154,18 +144,52 @@ export default function CartPage() {
 
   const discountCents = useMemo(() => {
     if (!appliedPromo) return 0;
-    return Math.round(subtotalCents * 0.1); // 10% discount
-  }, [appliedPromo, subtotalCents]);
+    if (appliedDiscountPercent > 0) {
+      return Math.min(Math.max(0, subtotalCents - 100), Math.round((subtotalCents * appliedDiscountPercent) / 100));
+    }
+    return appliedDiscountCents;
+  }, [appliedPromo, appliedDiscountPercent, appliedDiscountCents, subtotalCents]);
 
   const totalCents = Math.max(0, subtotalCents - discountCents);
+  const estimatedCashbackUsd = ((totalCents * 0.02) / 100).toFixed(2);
   const totalItemCount = items.reduce((acc, i) => acc + i.qty, 0);
 
-  // Navigate to checkout
+  // Server-authoritative promo validation
+  const applyPromoCode = async (rawCode: string) => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) return;
+    setPromoCode(code);
+    setPromoError('');
+    setPromoMessage('');
+    setApplyingPromo(true);
+
+    try {
+      const result = await validateCouponApi(code, subtotalCents);
+      setAppliedPromo(result.code);
+      setAppliedDiscountPercent(result.discountPercent);
+      setAppliedDiscountCents(result.discountCents);
+      setPromoMessage(result.message);
+    } catch (err) {
+      setAppliedPromo(null);
+      setAppliedDiscountPercent(0);
+      setAppliedDiscountCents(0);
+      setPromoError(err instanceof Error ? err.message : 'Invalid promo code. Try NEXUS10.');
+    } finally {
+      setApplyingPromo(false);
+    }
+  };
+
+  const handleApplyPromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    void applyPromoCode(promoCode);
+  };
+
+  // Navigate to checkout (passes verified promo code to backend order creation)
   const handleProceedToCheckout = async () => {
     setBusy(true);
     setError('');
     try {
-      const order = await createOrderFromCart(items, 'MULTI');
+      const order = await createOrderFromCart(items, 'MULTI', appliedPromo || undefined);
       const orderTitle = items.map((i) => i.title).join(', ');
       const publicRef = order.orderNumber || order.id;
       router.push(`/checkout?orderId=${encodeURIComponent(publicRef)}&title=${encodeURIComponent(orderTitle)}`);
@@ -349,15 +373,41 @@ export default function CartPage() {
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2.5 rounded-xl nexus-glass-surface hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)]/50 text-xs font-mono text-[var(--foreground)] transition-colors font-medium cursor-pointer"
+                    disabled={applyingPromo || !promoCode.trim()}
+                    className="px-4 py-2.5 rounded-xl nexus-glass-surface hover:bg-[var(--card-hover)] border border-[var(--border)] hover:border-[var(--gold)]/50 text-xs font-mono text-[var(--foreground)] transition-colors font-medium cursor-pointer disabled:opacity-50"
                   >
-                    Apply code
+                    {applyingPromo ? 'Checking...' : 'Apply code'}
                   </button>
                 </form>
+
+                {/* 1-Click Quick Promo Chips */}
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <span className="text-[11px] font-mono text-[var(--muted)]">Available offers:</span>
+                  {[
+                    { code: 'NEXUS10', label: 'NEXUS10 · 10% off' },
+                    { code: 'WELCOME15', label: 'WELCOME15 · 15% first order' },
+                    { code: 'NRHOLDER20', label: 'NRHOLDER20 · 20% VIP ($NXL)' },
+                  ].map((offer) => (
+                    <button
+                      key={offer.code}
+                      type="button"
+                      disabled={applyingPromo}
+                      onClick={() => void applyPromoCode(offer.code)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-colors cursor-pointer ${
+                        appliedPromo === offer.code
+                          ? 'bg-[var(--gold)]/20 border-[var(--gold)] text-[var(--gold)] font-bold'
+                          : 'bg-[var(--card-subtle)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--gold)]/40'
+                      }`}
+                    >
+                      {offer.label}
+                    </button>
+                  ))}
+                </div>
+
                 {appliedPromo && (
-                  <p className="text-[11px] font-mono text-[var(--gold)] mt-2 flex items-center gap-1.5">
+                  <p className="text-[11px] font-mono text-[var(--gold)] mt-2.5 flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5" />
-                    Promo code &quot;{appliedPromo}&quot; applied: 10% discount deducted from total.
+                    {promoMessage || `Promo code "${appliedPromo}" applied (${appliedDiscountPercent}% off).`}
                   </p>
                 )}
                 {promoError && (
@@ -425,6 +475,13 @@ export default function CartPage() {
                     ${(totalCents / 100).toFixed(2)}
                   </span>
                 </div>
+
+                {totalCents > 0 && (
+                  <div className="mt-3 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between text-xs font-mono text-emerald-300">
+                    <span>2% $NXL Cashback Reward</span>
+                    <span className="font-bold">+${estimatedCashbackUsd} in $NXL</span>
+                  </div>
+                )}
 
                 <p className="text-xs text-[var(--muted)] leading-relaxed mt-3 mb-6">
                   Network fee is paid separately in XLM or XRP. Final amount confirmed before signing.

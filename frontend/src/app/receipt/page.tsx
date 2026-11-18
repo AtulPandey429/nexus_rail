@@ -308,6 +308,10 @@ function ReceiptContent() {
                 ...prev,
                 orderId: o.orderNumber || o.id,
                 amountUsd: totalUsdStr || prev.amountUsd,
+                promoCode: o.promoCode || (prev as any).promoCode,
+                discountCents: typeof o.discountCents === 'number' ? o.discountCents : (prev as any).discountCents,
+                cashbackNxlAmount: typeof o.cashbackNxlAmount === 'number' ? o.cashbackNxlAmount : (prev as any).cashbackNxlAmount,
+                cashbackUsdCents: typeof o.cashbackUsdCents === 'number' ? o.cashbackUsdCents : (prev as any).cashbackUsdCents,
                 subtotalUsd: totalUsdStr || prev.subtotalUsd,
                 rail: o.rail || prev.rail,
                 token: o.rail === 'XRPL' ? 'XRP' : (o.rail === 'STELLAR' ? 'XLM' : prev.token),
@@ -744,6 +748,17 @@ function ReceiptContent() {
                 </span>
               </div>
 
+              {(receiptData as any).discountCents > 0 && (
+                <div className="flex justify-between items-center text-emerald-400 text-[10px]">
+                  <span className="uppercase tracking-wider">
+                    PROMO DISCOUNT {(receiptData as any).promoCode ? `(${(receiptData as any).promoCode})` : ''}
+                  </span>
+                  <span className="font-mono font-semibold text-[11px]">
+                    -${(((receiptData as any).discountCents || 0) / 100).toFixed(2)}
+                  </span>
+                </div>
+              )}
+
               <div className="flex justify-between items-center text-[#A69E8D] text-[10px]">
                 <span className="uppercase tracking-wider">
                   NETWORK SETTLEMENT FEE
@@ -769,6 +784,13 @@ function ReceiptContent() {
                   </span>
                 </div>
               </div>
+
+              {(receiptData as any).cashbackNxlAmount > 0 && (
+                <div className="mt-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-[10.5px] font-mono text-emerald-300">
+                  <span>2% Loyalty Cashback Credited</span>
+                  <span className="font-bold">+{Number((receiptData as any).cashbackNxlAmount).toFixed(4)} $NXL</span>
+                </div>
+              )}
             </div>
 
             {/* 3. Bottom Right Official Platform Signature & Seal Section */}

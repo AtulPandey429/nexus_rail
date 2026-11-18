@@ -5,6 +5,7 @@ import { ProductService } from './products.js';
 import { settlementEmitter } from './settlementEvents.js';
 import { OrderSequenceService } from './orderSequence.js';
 import { PortfolioService } from './portfolioService.js';
+import { CouponService } from './couponService.js';
 import crypto from 'crypto';
 
 function stripe(): Stripe {
@@ -12,7 +13,7 @@ function stripe(): Stripe {
 }
 
 export class StripeService {
-  static async createCheckoutFromCart(userId: string, customClientUrl?: string) {
+  static async createCheckoutFromCart(userId: string, customClientUrl?: string, promoCode?: string) {
     const cartCol = await MongoService.getCollection<MongoCartItemDoc>('cart_items');
     const lines = await cartCol.find({ user_id: userId }).toArray();
     if (lines.length === 0) throw new Error('Cart is empty');
@@ -29,7 +30,22 @@ export class StripeService {
       });
     }
 
-    const totalCents = priced.reduce((sum, line) => sum + line.unit_price_cents * line.qty, 0);
+    const subtotalCents = priced.reduce((sum, line) => sum + line.unit_price_cents * line.qty, 0);
+    let discountCents = 0;
+    let totalCents = subtotalCents;
+    let appliedPromoCode: string | undefined;
+
+    if (promoCode && promoCode.trim()) {
+      const redeemed = await CouponService.redeemCoupon({
+        code: promoCode,
+        userId,
+        subtotalCents,
+      });
+      discountCents = redeemed.discountCents;
+      totalCents = redeemed.finalTotalCents;
+      appliedPromoCode = redeemed.code;
+    }
+
     const orderId = crypto.randomUUID();
     const orderNumber = await OrderSequenceService.getNextOrderNumber();
     const now = new Date().toISOString();
@@ -38,6 +54,9 @@ export class StripeService {
       id: orderId,
       user_id: userId,
       order_number: orderNumber,
+      subtotal_cents: subtotalCents,
+      discount_cents: discountCents,
+      promo_code: appliedPromoCode,
       total_cents: totalCents,
       items: priced,
       payment_rail: 'STRIPE',
@@ -61,20 +80,37 @@ export class StripeService {
     const origin = (customClientUrl || fallbackOrigin).replace(/\/+$/, '');
     const amountDollars = (totalCents / 100).toFixed(2);
 
+    // If a promo discount is applied, charge the exact net total as a single clear Stripe line item
+    const stripeLineItems = appliedPromoCode && discountCents > 0
+      ? [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: totalCents,
+              product_data: {
+                name: `NexusRail Order ${orderNumber} (Promo ${appliedPromoCode} applied)`,
+                description: priced.map((p) => `${p.qty}x ${p.title}`).join(', '),
+              },
+            },
+          },
+        ]
+      : priced.map((line) => ({
+          quantity: line.qty,
+          price_data: {
+            currency: 'usd',
+            unit_amount: line.unit_price_cents,
+            product_data: { name: line.title },
+          },
+        }));
+
     const session = await stripe().checkout.sessions.create({
       mode: 'payment',
       client_reference_id: orderId,
       success_url: `${origin}/app/receipt?orderId=${orderId}&rail=STRIPE&amount=${amountDollars}`,
       cancel_url: `${origin}/app/cart`,
-      metadata: { orderId },
-      line_items: priced.map((line) => ({
-        quantity: line.qty,
-        price_data: {
-          currency: 'usd',
-          unit_amount: line.unit_price_cents,
-          product_data: { name: line.title },
-        },
-      })),
+      metadata: { orderId, ...(appliedPromoCode ? { promoCode: appliedPromoCode } : {}) },
+      line_items: stripeLineItems,
     });
 
     if (!session.url || !session.id) throw new Error('Stripe did not return a checkout URL');

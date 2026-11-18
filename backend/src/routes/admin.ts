@@ -18,6 +18,7 @@ import { DualRailTokenService } from '../services/dualRailTokenService.js';
 import { AdminAnalyticsService } from '../services/adminAnalyticsService.js';
 import { CrossChainSwapService } from '../services/crossChainSwapService.js';
 import { resolveUnderpaidOrder, type UnderpaidResolutionMode } from '../services/underpaidOrderService.js';
+import { CouponService } from '../services/couponService.js';
 import { env } from '../config/env.js';
 import { z } from 'zod';
 
@@ -283,6 +284,39 @@ adminRouter.post('/orders/:id/resolve-underpaid', async (req: AuthenticatedReque
     res.json({ success: true, status: 'success', data: result });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Could not resolve order' });
+  }
+});
+
+// Admin: Smart Coupon Manager (GET & POST /api/v1/admin/coupons)
+adminRouter.get('/coupons', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const coupons = await CouponService.listCoupons();
+    res.json({ success: true, status: 'success', data: { coupons } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to load coupons' });
+  }
+});
+
+adminRouter.post('/coupons', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { code, discountPercent, minOrderCents, requiresNrHolder, firstOrderOnly, active, maxUses, description } =
+      req.body || {};
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ success: false, error: 'Coupon code is required' });
+    }
+    const coupon = await CouponService.upsertCoupon({
+      code,
+      discountPercent: Number(discountPercent) || 10,
+      minOrderCents: typeof minOrderCents === 'number' ? minOrderCents : undefined,
+      requiresNrHolder: Boolean(requiresNrHolder),
+      firstOrderOnly: Boolean(firstOrderOnly),
+      active: typeof active === 'boolean' ? active : true,
+      maxUses: typeof maxUses === 'number' ? maxUses : undefined,
+      description: typeof description === 'string' ? description : undefined,
+    });
+    res.json({ success: true, status: 'success', data: { coupon } });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message || 'Failed to save coupon' });
   }
 });
 

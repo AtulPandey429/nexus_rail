@@ -48,7 +48,8 @@ checkoutRouter.post('/nxl/pay', requireAuth, handleTokenPayOrder);
 checkoutRouter.post('/stripe/create-session', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const clientUrl = req.body?.clientUrl || (req.headers.origin as string) || (req.headers.referer as string);
-    const session = await StripeService.createCheckoutFromCart(req.user!.id, clientUrl);
+    const promoCode = typeof req.body?.promoCode === 'string' ? req.body.promoCode.trim() : undefined;
+    const session = await StripeService.createCheckoutFromCart(req.user!.id, clientUrl, promoCode);
     res.json({ success: true, data: session });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message || 'Stripe checkout failed' });
