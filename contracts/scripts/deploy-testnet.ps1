@@ -67,7 +67,7 @@ Write-Host "==> 3. Authorizing NexusVault as $NXL SAC Admin (for supply-capped m
     set_admin `
     --new_admin $vaultId
 
-Write-Host "==> 4. Seeding NexusSwap AMM Pool (500 XLM + 500 NXL)..." -ForegroundColor Cyan
+Write-Host "==> 4. Seeding NexusSwap AMM Pool (2,000 XLM + 2,000 NXL)..." -ForegroundColor Cyan
 & stellar contract invoke `
     --id $swapId `
     --source-account $hotSecret `
@@ -75,8 +75,8 @@ Write-Host "==> 4. Seeding NexusSwap AMM Pool (500 XLM + 500 NXL)..." -Foregroun
     -- `
     add_liquidity `
     --provider $adminPub `
-    --amount_a 5000000000 `
-    --amount_b 5000000000 `
+    --amount_a 20000000000 `
+    --amount_b 20000000000 `
     --min_shares 1
 
 Write-Host "==> 5. Verifying live on-chain state..." -ForegroundColor Cyan

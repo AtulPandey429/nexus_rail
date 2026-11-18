@@ -20,6 +20,7 @@ import {
 import { addSkuToCart } from '@/lib/shop';
 import { NexusLogo } from '@/components/ui/NexusLogo';
 import { Nexus3DCanvas } from '@/components/ui/Nexus3DCanvas';
+import { ProtocolAssetFlowDiagram } from '@/components/home/ProtocolAssetFlowDiagram';
 
 export default function HomePage() {
   const [addingSku, setAddingSku] = useState<string | null>(null);
@@ -343,6 +344,11 @@ export default function HomePage() {
                 Track your order and open a receipt backed by double-entry ledger entries and verifiable on-chain hashes.
               </p>
             </div>
+          </div>
+
+          {/* Interactive Animated End-to-End Smart Contract & Asset Movement Flowchart */}
+          <div id="protocol-flow" className="pt-2">
+            <ProtocolAssetFlowDiagram />
           </div>
         </div>
       </section>
