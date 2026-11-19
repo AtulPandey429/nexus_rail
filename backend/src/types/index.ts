@@ -321,6 +321,13 @@ export interface SmartContractDTO {
   status: 'ACTIVE' | 'PAUSED' | 'DEPRECATED';
   deployedAt: string;
   explorerUrl: string;
+  upgrades?: Array<{
+    wasm_hash: string;
+    upgraded_at: string;
+    admin_id?: string;
+    tx_hash?: string;
+    notes?: string;
+  }>;
 }
 
 export interface OnChainTokenDTO {

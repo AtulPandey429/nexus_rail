@@ -25,6 +25,7 @@ import {
   Layers,
   ArrowUpRight,
   X,
+  Cpu,
 } from 'lucide-react';
 import { readSession, clearSession, notifySession, SessionUser } from '@/lib/shop';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
@@ -83,6 +84,77 @@ export default function ProfilePage() {
   const [cashoutSubmitting, setCashoutSubmitting] = useState(false);
   const [cashoutSuccessMsg, setCashoutSuccessMsg] = useState('');
   const [cashoutErrorMsg, setCashoutErrorMsg] = useState('');
+
+  // On-Chain Stellar $NR Withdrawal State (Module 4)
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [withdrawNrHolding, setWithdrawNrHolding] = useState<HydratedHolding | null>(null);
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [withdrawStellarAddress, setWithdrawStellarAddress] = useState<string>('');
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
+  const [withdrawErrorMsg, setWithdrawErrorMsg] = useState('');
+  const [withdrawSuccessData, setWithdrawSuccessData] = useState<{
+    txHash: string;
+    ledgerSeq: number;
+    amountNr: number;
+    explorerUrl: string;
+    destinationStellarAddress: string;
+  } | null>(null);
+
+  const handleOpenWithdrawNr = (holding: HydratedHolding) => {
+    setWithdrawNrHolding(holding);
+    setWithdrawAmount(String(holding.quantity));
+    setWithdrawStellarAddress(profile?.stellarAddress || '');
+    setWithdrawErrorMsg('');
+    setWithdrawSuccessData(null);
+    setWithdrawModalOpen(true);
+  };
+
+  const handleWithdrawNrSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const session = readSession();
+    if (!session.token) return;
+
+    const numAmount = Number(withdrawAmount);
+    if (!numAmount || numAmount <= 0) {
+      setWithdrawErrorMsg('Please specify a positive amount of $NR to withdraw.');
+      return;
+    }
+    if (!withdrawStellarAddress.trim() || !withdrawStellarAddress.startsWith('G') || withdrawStellarAddress.trim().length !== 56) {
+      setWithdrawErrorMsg('Please provide a valid 56-character Stellar public address starting with "G".');
+      return;
+    }
+
+    setWithdrawSubmitting(true);
+    setWithdrawErrorMsg('');
+    setWithdrawSuccessData(null);
+
+    try {
+      const res = await fetch('/api/v1/crypto/nr/withdraw', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({
+          amount: numAmount,
+          destinationStellarAddress: withdrawStellarAddress.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'On-chain withdrawal failed');
+      }
+
+      setWithdrawSuccessData(data.data);
+      await fetchPortfolio();
+      await fetchProfile();
+    } catch (err: any) {
+      setWithdrawErrorMsg(err.message || 'On-chain withdrawal failed');
+    } finally {
+      setWithdrawSubmitting(false);
+    }
+  };
 
   const fetchPortfolio = async () => {
     const session = readSession();
@@ -452,6 +524,165 @@ export default function ProfilePage() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* On-Chain Stellar $NR Withdrawal Modal (Module 4) */}
+      {withdrawModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-[var(--card)] border border-[var(--border-highlight)] p-6 sm:p-8 space-y-6 shadow-2xl relative text-left">
+            <button
+              type="button"
+              onClick={() => {
+                setWithdrawModalOpen(false);
+                setWithdrawSuccessData(null);
+                setWithdrawErrorMsg('');
+              }}
+              className="absolute top-5 right-5 p-2 rounded-xl text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-subtle)] transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs font-mono text-[#00E5FF]">
+                <Cpu className="w-3.5 h-3.5" />
+                <span>Stellar Protocol 22 On-Chain Settlement</span>
+              </div>
+              <h3 className="text-xl font-bold text-[var(--foreground)]">
+                Withdraw $NR to Stellar Testnet
+              </h3>
+              <p className="text-xs text-[var(--muted)]">
+                Broadcast and mint your internal <strong className="text-[var(--gold)]">$NR</strong> tokens onto the official Stellar Testnet via the Issuer Account (<code className="text-[#00E5FF]">GDO6N...</code>).
+              </p>
+            </div>
+
+            {withdrawSuccessData ? (
+              <div className="space-y-4 font-mono text-xs">
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>On-Chain Stellar Transfer Confirmed!</span>
+                  </div>
+                  <p className="text-[var(--foreground)]">
+                    Successfully minted and transferred <strong className="text-emerald-300">{withdrawSuccessData.amountNr} $NR</strong> tokens to your external Stellar address.
+                  </p>
+                  <div className="pt-2 border-t border-emerald-500/20 space-y-1 text-[11px] text-[var(--muted)]">
+                    <p>Ledger Sequence: #{withdrawSuccessData.ledgerSeq}</p>
+                    <p className="truncate">Destination: {withdrawSuccessData.destinationStellarAddress}</p>
+                    <p className="truncate">Tx Hash: {withdrawSuccessData.txHash}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <a
+                    href={withdrawSuccessData.explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-3 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-center text-[#00E5FF] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <span>View on Stellar.Expert</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWithdrawModalOpen(false);
+                      setWithdrawSuccessData(null);
+                    }}
+                    className="flex-1 py-3 px-4 rounded-xl bg-[var(--gold)] text-black font-bold transition-colors cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleWithdrawNrSubmit} className="space-y-4 font-mono text-xs">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[var(--muted)]">
+                    <label>Destination Stellar Address (G...)</label>
+                    {profile?.stellarAddress && (
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawStellarAddress(profile.stellarAddress || '')}
+                        className="text-[#00E5FF] hover:underline text-[11px] cursor-pointer"
+                      >
+                        Use Verified Wallet
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC"
+                    value={withdrawStellarAddress}
+                    onChange={(e) => setWithdrawStellarAddress(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] font-mono text-xs focus:outline-none focus:border-[#00E5FF]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[var(--muted)]">
+                    <label>Withdrawal Amount ($NR)</label>
+                    <span className="text-[var(--gold)]">
+                      Available: {withdrawNrHolding ? withdrawNrHolding.quantity : 0} $NR
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      required
+                      min="0.000001"
+                      step="any"
+                      max={withdrawNrHolding ? withdrawNrHolding.quantity : undefined}
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      className="flex-1 px-4 py-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--foreground)] font-mono text-xs focus:outline-none focus:border-[#00E5FF]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawAmount(String(withdrawNrHolding?.quantity || ''))}
+                      className="px-4 py-3 rounded-2xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-[var(--foreground)] text-xs font-bold cursor-pointer"
+                    >
+                      MAX
+                    </button>
+                  </div>
+                </div>
+
+                {withdrawErrorMsg && (
+                  <p className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+                    {withdrawErrorMsg}
+                  </p>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawModalOpen(false)}
+                    className="flex-1 py-3 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--card-hover)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={withdrawSubmitting || !withdrawAmount || Number(withdrawAmount) <= 0}
+                    className="flex-1 py-3 rounded-xl bg-[#00E5FF] hover:bg-[#00E5FF]/80 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {withdrawSubmitting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Broadcasting to Stellar...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                        <span>Confirm Stellar Withdrawal</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -848,15 +1079,28 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  {/* Cashout Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenCashout(h)}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--gold)]/20 border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono font-bold text-[var(--foreground)] hover:text-[var(--gold)] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                  >
-                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--gold)]" />
-                    <span>1-Click Cashout / Sell</span>
-                  </button>
+                  {/* Action Buttons: Cashout & On-Chain Withdrawal for $NR */}
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCashout(h)}
+                      className="w-full py-2.5 px-4 rounded-xl bg-[var(--card-subtle)] hover:bg-[var(--gold)]/20 border border-[var(--border)] hover:border-[var(--gold)] text-xs font-mono font-bold text-[var(--foreground)] hover:text-[var(--gold)] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5 text-[var(--gold)]" />
+                      <span>1-Click Cashout / Sell</span>
+                    </button>
+
+                    {h.symbol === 'NR' && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenWithdrawNr(h)}
+                        className="w-full py-2.5 px-4 rounded-xl bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 text-xs font-mono font-bold text-[#00E5FF] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                      >
+                        <Cpu className="w-3.5 h-3.5" />
+                        <span>Withdraw to Stellar Testnet</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
