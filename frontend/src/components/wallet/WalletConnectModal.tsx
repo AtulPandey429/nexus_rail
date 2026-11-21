@@ -566,10 +566,10 @@ export function WalletConnectModal({
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--gold)] font-bold">
+                      <span className="text-[11px] font-mono uppercase tracking-widest text-[var(--gold)] font-bold">
                         Recently Used
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--card-subtle)] text-[var(--muted)] font-mono uppercase">
+                      <span className="text-[11px] px-1.5 py-0.2 rounded bg-[var(--card-subtle)] text-[var(--muted)] font-mono uppercase">
                         {lastWallet.network}
                       </span>
                     </div>
@@ -615,7 +615,7 @@ export function WalletConnectModal({
                 }`}
               >
                 <span>Stellar</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-solid)] opacity-80">
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--surface-solid)] opacity-80">
                   XLM
                 </span>
               </button>
@@ -634,7 +634,7 @@ export function WalletConnectModal({
                 }`}
               >
                 <span>XRP Ledger</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-solid)] opacity-80">
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--surface-solid)] opacity-80">
                   XRP
                 </span>
               </button>
@@ -654,7 +654,7 @@ export function WalletConnectModal({
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] cursor-pointer"
                 >
                   Clear
                 </button>
@@ -683,12 +683,12 @@ export function WalletConnectModal({
                             {wallet.name}
                           </h4>
                           {wallet.type === 'mobile' && (
-                            <span className="text-[10px] font-mono text-[var(--muted)] px-1.5 py-0.2 rounded bg-[var(--card)] border border-[var(--border)]">
+                            <span className="text-[11px] font-mono text-[var(--muted)] px-1.5 py-0.2 rounded bg-[var(--card)] border border-[var(--border)]">
                               QR / App
                             </span>
                           )}
                           {wallet.type === 'web' && (
-                            <span className="text-[10px] font-mono text-emerald-400 px-1.5 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20">
+                            <span className="text-[11px] font-mono text-emerald-400 px-1.5 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20">
                               Instant Web
                             </span>
                           )}

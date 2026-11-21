@@ -381,7 +381,7 @@ export function OrdersTab({ model }: { model: AdminModel }) {
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.06] font-admin-mono text-[10px] font-semibold text-slate-300">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.06] font-admin-mono text-[11px] font-semibold text-slate-300">
                           {initialsFor(order.buyerEmail)}
                         </span>
                         <span className="max-w-[200px] truncate text-[13px] text-slate-200">{order.buyerEmail}</span>

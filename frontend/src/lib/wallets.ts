@@ -903,13 +903,36 @@ export async function setCrossmarkTrustline(params?: {
 }
 
 /**
- * Claims a pending swap deposit once trustline is confirmed
+ * Reads the live on-chain native balance for a connected account.
+ * Returns null when no address is available or the network cannot be reached,
+ * so callers can render an honest "unavailable" state instead of a fake number.
  */
-export async function claimPendingXrplSwap(params: {
-  depositTxHash: string;
-  destinationAddress: string;
-  swapId?: string;
-}): Promise<{
+export async function fetchOnChainBalance(
+  chain: 'stellar' | 'xrpl',
+  address?: string
+): Promise<{ balance: number; currency: string } | null> {
+  if (!address) return null;
+  try {
+    const res = await fetch(
+      `/api/v1/crypto/balance/${chain}?address=${encodeURIComponent(address)}`,
+      { cache: 'no-store' }
+    );
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success || !json?.data) return null;
+    return {
+      balance: Number(json.data.balance) || 0,
+      currency: json.data.currency || (chain === 'xrpl' ? 'XRP' : 'XLM'),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Claims a pending swap deposit for a swap owned by the signed-in user.
+ * The backend derives the deposit hash and payout destination from the swap.
+ */
+export async function claimPendingXrplSwap(params: { swapId: string }): Promise<{
   success: boolean;
   payoutTxHash?: string;
   explorerUrl?: string;
@@ -919,7 +942,12 @@ export async function claimPendingXrplSwap(params: {
 }> {
   const res = await fetch('/api/v1/swap/xrpl/claim-pending', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(typeof window !== 'undefined' && localStorage.getItem('nexus_token')
+        ? { Authorization: `Bearer ${localStorage.getItem('nexus_token')}` }
+        : {}),
+    },
     body: JSON.stringify(params),
   });
 

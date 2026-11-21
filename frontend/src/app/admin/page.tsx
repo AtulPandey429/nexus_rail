@@ -942,7 +942,7 @@ export default function AdminConsolePage() {
                 <AdminBrandMark size={36} />
                 <div>
                   <p className="text-sm font-semibold tracking-tight text-white">nexusrail</p>
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-admin-faint">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-admin-faint">
                     Operator console
                   </p>
                 </div>
@@ -969,7 +969,7 @@ export default function AdminConsolePage() {
               </ul>
             </div>
             <div className="relative mt-10 rounded-xl border border-admin-border bg-black/20 px-4 py-3">
-              <p className="flex items-start gap-2 text-[10px] leading-relaxed text-admin-faint">
+              <p className="flex items-start gap-2 text-[11px] leading-relaxed text-admin-faint">
                 <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400/80" aria-hidden="true" />
                 Restricted environment. All operator actions are recorded and reviewed against on-chain receipts.
               </p>
@@ -981,12 +981,12 @@ export default function AdminConsolePage() {
               <AdminBrandMark size={32} />
               <div>
                 <p className="text-sm font-semibold text-white">nexusrail</p>
-                <p className="text-[9px] uppercase tracking-[0.18em] text-admin-faint">Operator console</p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-admin-faint">Operator console</p>
               </div>
             </div>
 
             <div className="mt-6 lg:mt-0">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-admin-border bg-white/[0.03] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-admin-muted">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-admin-border bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-admin-muted">
                 <Lock className="h-3 w-3 text-admin-gold" aria-hidden="true" />
                 Restricted access
               </span>
@@ -1043,7 +1043,7 @@ export default function AdminConsolePage() {
             </form>
 
             <div className="mt-5 rounded-xl border border-admin-border bg-[#090C12] px-3.5 py-3">
-              <p className="text-[10px] leading-relaxed text-admin-faint">
+              <p className="text-[11px] leading-relaxed text-admin-faint">
                 Testnet demo access: <code className="font-admin-mono text-admin-gold-soft">admin@nexusrail.com</code>{' '}
                 / <code className="font-admin-mono text-admin-gold-soft">admin123</code>
               </p>
@@ -1057,7 +1057,7 @@ export default function AdminConsolePage() {
                 Return to storefront
                 <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
-              <span className="flex items-center gap-1.5 text-[10px] text-admin-faint">
+              <span className="flex items-center gap-1.5 text-[11px] text-admin-faint">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
                 Stellar + XRPL online
               </span>

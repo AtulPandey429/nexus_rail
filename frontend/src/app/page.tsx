@@ -182,11 +182,11 @@ export default function HomePage() {
                 {/* Floating Order Badge */}
                 <div className="relative z-10 p-4 rounded-xl nexus-glass-surface border border-[var(--border)] flex items-center justify-between font-mono text-xs shadow-md">
                   <div>
-                    <span className="text-[11px] text-[var(--muted)] uppercase block">Sample order</span>
+                    <span className="text-[11px] text-[var(--muted)] uppercase block">Example order</span>
                     <span className="font-bold text-[var(--foreground)]">#NR8K2P9X</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[11px] text-[var(--muted)] uppercase block">Total settled</span>
+                    <span className="text-[11px] text-[var(--muted)] uppercase block">Example total</span>
                     <span className="font-extrabold text-[var(--gold)] text-sm sm:text-base">$200.02 USD</span>
                   </div>
                 </div>

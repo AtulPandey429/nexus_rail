@@ -141,11 +141,11 @@ export function AmmTab({ model }: { model: AdminModel }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-medium text-slate-200">Reserve backing ratio</p>
               <p className="font-admin-mono text-xs font-semibold text-sky-300">
-                {backingRatio.toFixed(1)}% <span className="font-sans text-[10px] font-normal text-admin-faint">of market cap</span>
+                {backingRatio.toFixed(1)}% <span className="font-sans text-[11px] font-normal text-admin-faint">of market cap</span>
               </p>
             </div>
             <ProgressBar value={backingRatio} tone="cyan" className="mt-2.5" label="Reserve backing ratio" />
-            <p className="mt-2.5 text-[10px] leading-relaxed text-admin-faint">
+            <p className="mt-2.5 text-[11px] leading-relaxed text-admin-faint">
               The platform reserve backs {formatUsd(reserveUsd)} of the {formatUsd(marketCap)} circulating market value.
               Automated buybacks deepen liquidity after every settled fee event.
             </p>
@@ -153,12 +153,12 @@ export function AmmTab({ model }: { model: AdminModel }) {
 
           <div className="mt-3 flex items-center justify-between rounded-xl border border-dashed border-admin-gold/20 bg-admin-gold/[0.035] px-4 py-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-gold/80">Bonding curve</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-admin-gold/80">Bonding curve</p>
               <p className="mt-1 font-admin-mono text-sm font-semibold text-admin-gold-soft">
                 x · y = k
               </p>
             </div>
-            <p className="max-w-[52%] text-right text-[10px] leading-relaxed text-admin-faint">
+            <p className="max-w-[52%] text-right text-[11px] leading-relaxed text-admin-faint">
               Reserve and token supply are adjusted together so the pool invariant remains constant.
             </p>
           </div>
@@ -208,7 +208,7 @@ export function AmmTab({ model }: { model: AdminModel }) {
               Inject liquidity
             </Button>
             {reserveFeedback && <Feedback tone={reserveFeedbackTone}>{reserveFeedback}</Feedback>}
-            <p className="text-[10px] leading-relaxed text-admin-faint">
+            <p className="text-[11px] leading-relaxed text-admin-faint">
               Reserve changes are recorded in the treasury ledger and reflected in the pool status endpoint.
             </p>
           </div>
@@ -236,21 +236,21 @@ export function AmmTab({ model }: { model: AdminModel }) {
                 <div className="flex items-center gap-3 rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
                   <AssetAvatar symbol="XRP" size={30} />
                   <div className="min-w-0">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">XRP reserve</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">XRP reserve</p>
                     <p className="mt-1 truncate font-admin-mono text-[13px] font-semibold text-white admin-tabular">
                       {formatNumber(dualRailSummary.xrpl.reserveXrp, 2)}
                     </p>
-                    <p className="truncate text-[10px] text-admin-faint">Native XRP</p>
+                    <p className="truncate text-[11px] text-admin-faint">Native XRP</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
                   <AssetAvatar symbol="NXL" size={30} />
                   <div className="min-w-0">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">NXL reserve</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">NXL reserve</p>
                     <p className="mt-1 truncate font-admin-mono text-[13px] font-semibold text-white admin-tabular">
                       {formatNumber(dualRailSummary.xrpl.reserveNr, 2)}
                     </p>
-                    <p className="truncate text-[10px] text-admin-faint">Issued NXL</p>
+                    <p className="truncate text-[11px] text-admin-faint">Issued NXL</p>
                   </div>
                 </div>
                 <MiniStat
@@ -261,7 +261,7 @@ export function AmmTab({ model }: { model: AdminModel }) {
                 <MiniStat label="AMM status" value={dualRailSummary.xrpl.status || 'ACTIVE'} hint="XLS-30d" />
               </div>
               <div className="mt-3 rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-3">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">AMM account</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">AMM account</p>
                 <div className="mt-1.5">
                   <CopyValue
                     value={dualRailSummary.xrpl.ammAccount}
@@ -341,7 +341,7 @@ export function AmmTab({ model }: { model: AdminModel }) {
           )}
           <TableWrap className="mt-4">
             <div className="rounded-xl border border-admin-border bg-[#0A0E15] px-4 py-3">
-              <p className="text-[10px] leading-relaxed text-admin-faint">
+              <p className="text-[11px] leading-relaxed text-admin-faint">
                 Both assets are deposited in proportion to the current pool reserves. The operation is signed by the
                 operator hot wallet and recorded in the chain audit trail.
               </p>

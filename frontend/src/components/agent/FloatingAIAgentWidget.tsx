@@ -266,7 +266,7 @@ export function FloatingAIAgentWidget({ onOpen, isOpen = false }: FloatingAIAgen
 
         {/* Footer Action */}
         <div className="flex items-center justify-between pt-1.5 border-t border-[var(--border)]/60 text-[11px] font-mono">
-          <span className="text-[var(--muted)] text-[9.5px]">Hover / Drag ↔</span>
+          <span className="text-[var(--muted)] text-[11px]">Hover / Drag ↔</span>
           <button
             type="button"
             onClick={onOpen}

@@ -595,6 +595,47 @@ paths:
         '200':
           description: List of ledger credit and debit entries
 
+  /api/v1/swap/nr-pool:
+    get:
+      summary: $NXL AMM Pool Snapshot
+      responses:
+        '200':
+          description: Spot price, reserve, supply, fee, and recent price history
+
+  /api/v1/swap/xrpl/pending-claims:
+    get:
+      summary: List the Caller's Pending XRP to NXL Claims
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Up to five swaps owned by the caller with a deposit and no payout
+
+  /api/v1/swap/xrpl/claim-pending:
+    post:
+      summary: Claim a Pending XRP to NXL Payout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [swapId]
+              properties:
+                swapId:
+                  type: string
+      responses:
+        '200':
+          description: Payout hash and explorer URL, or alreadyProcessed when replayed
+        '400':
+          description: Missing swapId, deposit, destination, or trustline
+        '403':
+          description: Swap belongs to another user
+        '404':
+          description: Swap not found
+
   /api/v1/agent/chat:
     post:
       summary: Send Prompt to AI Commerce Desk

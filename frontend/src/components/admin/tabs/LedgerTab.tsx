@@ -93,7 +93,7 @@ export function LedgerTab({ model }: { model: AdminModel }) {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <AssetAvatar symbol={asset.symbol} size={32} />
-                    <span className="font-admin-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-admin-faint">
+                    <span className="font-admin-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-admin-faint">
                       {asset.symbol.replace('_G', '')} · {formatNumber(asset.user_count)}{' '}
                       {asset.user_count === 1 ? 'holder' : 'holders'}
                     </span>
@@ -102,7 +102,7 @@ export function LedgerTab({ model }: { model: AdminModel }) {
                   <p className="mt-1 truncate font-admin-mono text-[16px] font-semibold text-white admin-tabular">
                     {formatQuantity(asset.total_quantity, asset.symbol)}
                   </p>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-admin-faint">
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-admin-faint">
                     <span className="font-admin-mono">{formatUsd(usdValue)}</span>
                     <span className="font-admin-mono">@ {formatMoney(asset.current_price_cents)}</span>
                   </div>
@@ -152,9 +152,9 @@ export function LedgerTab({ model }: { model: AdminModel }) {
             <div className="flex flex-col justify-center rounded-xl border border-dashed border-emerald-400/20 bg-emerald-400/[0.035] p-5 text-center">
               <ShieldCheck className="mx-auto h-6 w-6 text-emerald-400" aria-hidden="true" />
               <p className="mt-3 font-admin-mono text-sm font-semibold text-emerald-200">Σ assets</p>
-              <p className="my-1 font-admin-mono text-[10px] uppercase tracking-[0.2em] text-admin-faint">equals</p>
+              <p className="my-1 font-admin-mono text-[11px] uppercase tracking-[0.2em] text-admin-faint">equals</p>
               <p className="font-admin-mono text-sm font-semibold text-emerald-200">liabilities + equity</p>
-              <p className="mt-3 text-[10px] leading-relaxed text-admin-faint">
+              <p className="mt-3 text-[11px] leading-relaxed text-admin-faint">
                 No unreconciled balance detected across Stellar or XRPL custody accounts.
               </p>
             </div>
@@ -169,7 +169,7 @@ export function LedgerTab({ model }: { model: AdminModel }) {
             <CoverageItem label="Cross-chain settlement" assets="Stellar ↔ XRPL bridge" tone="emerald" />
           </div>
           <div className="mt-5 rounded-xl border border-admin-border bg-[#0A0E15] px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-admin-faint">Custody policy</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-admin-faint">Custody policy</p>
             <p className="mt-1 text-[11px] leading-relaxed text-admin-muted">
               Hot vault balances are capped for settlement liquidity. Remaining collateral is held in cold custody.
             </p>
@@ -199,7 +199,7 @@ function CoverageItem({
       <span className={cn('h-2 w-2 shrink-0 rounded-full', tones[tone])} aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium text-slate-200">{label}</p>
-        <p className="mt-0.5 truncate text-[10px] text-admin-faint">{assets}</p>
+        <p className="mt-0.5 truncate text-[11px] text-admin-faint">{assets}</p>
       </div>
       <Badge tone="success" dot>Live</Badge>
     </div>

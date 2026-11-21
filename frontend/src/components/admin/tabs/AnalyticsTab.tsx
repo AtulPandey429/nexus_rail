@@ -114,7 +114,7 @@ export function AnalyticsTab({ model }: { model: AdminModel }) {
       <Card className="p-4 sm:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-admin-faint">Reporting period</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-admin-faint">Reporting period</p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {RANGES.map((range) => (
                 <FilterChip
@@ -128,7 +128,7 @@ export function AnalyticsTab({ model }: { model: AdminModel }) {
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-admin-faint">Group by</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-admin-faint">Group by</p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {GRANULARITIES.map((item) => (
                 <FilterChip
@@ -142,7 +142,7 @@ export function AnalyticsTab({ model }: { model: AdminModel }) {
             </div>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-admin-border/70 pt-3 text-[10px] text-admin-faint">
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-admin-border/70 pt-3 text-[11px] text-admin-faint">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-admin-gold" aria-hidden="true" />
             {analytics.range.label}
@@ -306,7 +306,7 @@ export function AnalyticsTab({ model }: { model: AdminModel }) {
             />
           </div>
           <div className="mt-3 rounded-xl border border-sky-400/15 bg-sky-400/[0.04] px-3.5 py-2.5">
-            <p className="text-[10px] leading-relaxed text-sky-200/80">
+            <p className="text-[11px] leading-relaxed text-sky-200/80">
               No external fiat deposit ledger exists yet, so wallet credits are not presented as deposits. See the data notes below.
             </p>
           </div>
@@ -350,7 +350,7 @@ export function AnalyticsTab({ model }: { model: AdminModel }) {
             ].map(([label, description]) => (
               <div key={label} className="rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-2.5">
                 <p className="text-[11px] font-semibold text-slate-200">{label}</p>
-                <p className="mt-0.5 text-[10px] leading-relaxed text-admin-faint">{description}</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-admin-faint">{description}</p>
               </div>
             ))}
           </div>
@@ -375,7 +375,7 @@ export function AnalyticsTab({ model }: { model: AdminModel }) {
         />
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-muted">Accounting notes</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-admin-muted">Accounting notes</p>
             <ul className="mt-2 space-y-2">
               {dataQuality.notes.map((note) => (
                 <li key={note} className="flex gap-2 text-[11px] leading-relaxed text-admin-muted">
@@ -386,13 +386,13 @@ export function AnalyticsTab({ model }: { model: AdminModel }) {
             </ul>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-muted">Not yet available</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-admin-muted">Not yet available</p>
             <div className="mt-2 space-y-2">
               {dataQuality.unavailableMetrics.map((item) => (
                 <details key={item.metric} className="rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-2.5">
                   <summary className="cursor-pointer text-[11px] font-semibold text-slate-200">{item.metric}</summary>
-                  <p className="mt-2 text-[10px] leading-relaxed text-admin-muted">{item.reason}</p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-admin-faint">
+                  <p className="mt-2 text-[11px] leading-relaxed text-admin-muted">{item.reason}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-admin-faint">
                     <span className="font-semibold text-slate-300">Required backend change:</span> {item.requiredChange}
                   </p>
                 </details>
@@ -452,7 +452,7 @@ function TrendChart({ points }: { points: AdminAnalyticsBucket[] }) {
     <div className="mt-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
         {series.map((item) => (
-          <span key={item.key} className="inline-flex items-center gap-1.5 text-[10px] text-admin-muted">
+          <span key={item.key} className="inline-flex items-center gap-1.5 text-[11px] text-admin-muted">
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.color }} aria-hidden="true" />
             {item.label}
           </span>
@@ -551,7 +551,7 @@ function UsersBarChart({ points }: { points: AdminAnalyticsBucket[] }) {
           </div>
         ))}
       </div>
-      <div className="mt-2 flex items-center justify-between text-[9px] text-admin-faint">
+      <div className="mt-2 flex items-center justify-between text-[10px] text-admin-faint">
         <span>{points[0]?.label}</span>
         <span>{points[points.length - 1]?.label}</span>
       </div>
@@ -582,7 +582,7 @@ function BreakdownCard({
             <div key={row.key}>
               <div className="flex items-center justify-between gap-3">
                 {renderLabel(row)}
-                <span className="font-admin-mono text-[10px] font-semibold text-slate-300 admin-tabular">
+                <span className="font-admin-mono text-[11px] font-semibold text-slate-300 admin-tabular">
                   {formatNumber(row.count)} · {formatMoney(row.volumeCents)}
                 </span>
               </div>
@@ -631,7 +631,7 @@ function RevenueComposition({ rows }: { rows: AdminAnalyticsRevenueRow[] }) {
           />
         </div>
       ))}
-      <div className="flex items-center justify-between border-t border-admin-border/70 pt-3 text-[10px] text-admin-faint">
+      <div className="flex items-center justify-between border-t border-admin-border/70 pt-3 text-[11px] text-admin-faint">
         <span>Gross value behind this revenue</span>
         <span className="font-admin-mono text-slate-300">
           {formatMoney(rows.reduce((sum, row) => sum + row.grossCents, 0))}
@@ -660,13 +660,13 @@ function TopProductsTable({ rows }: { rows: AdminAnalyticsTopProduct[] }) {
             <tr key={row.sku} className="transition-colors hover:bg-white/[0.022]">
               <Td>
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.05] font-admin-mono text-[9px] font-bold text-admin-muted">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.05] font-admin-mono text-[10px] font-bold text-admin-muted">
                     {index + 1}
                   </span>
                   <ProductThumb sku={row.sku} title={row.title} size={30} />
                   <div className="min-w-0">
                     <p className="max-w-[220px] truncate text-xs font-medium text-slate-200">{row.title}</p>
-                    <p className="font-admin-mono text-[10px] text-admin-faint">{row.sku}</p>
+                    <p className="font-admin-mono text-[11px] text-admin-faint">{row.sku}</p>
                   </div>
                 </div>
               </Td>
@@ -710,7 +710,7 @@ function CustodyTable({ assets, totalCents }: { assets: PlatformAUCResponse['ass
                   <AssetAvatar symbol={asset.symbol} size={28} />
                   <div>
                     <p className="text-xs font-medium text-slate-200">{asset.label}</p>
-                    <p className="font-admin-mono text-[10px] text-admin-faint">{asset.symbol}</p>
+                    <p className="font-admin-mono text-[11px] text-admin-faint">{asset.symbol}</p>
                   </div>
                 </div>
               </Td>
@@ -773,12 +773,12 @@ function RecentOrdersTable({ rows }: { rows: AdminAnalyticsRecentOrder[] }) {
               </Td>
               <Td>
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[9px] font-bold text-slate-300">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[10px] font-bold text-slate-300">
                     {initialsFor(row.buyerName || row.buyerEmail)}
                   </span>
                   <div className="min-w-0">
                     <p className="max-w-[190px] truncate text-xs text-slate-300">{row.buyerEmail || '—'}</p>
-                    {row.buyerName && <p className="truncate text-[10px] text-admin-faint">{row.buyerName}</p>}
+                    {row.buyerName && <p className="truncate text-[11px] text-admin-faint">{row.buyerName}</p>}
                   </div>
                 </div>
               </Td>

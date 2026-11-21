@@ -139,7 +139,7 @@ export function AuditTab({ model }: { model: AdminModel }) {
                         {(log.action || 'CONTRACT_SPLIT').replaceAll('_', ' ')}
                       </span>
                       {log.reference_id && (
-                        <p className="mt-0.5 max-w-[200px] truncate font-admin-mono text-[10px] text-admin-faint">
+                        <p className="mt-0.5 max-w-[200px] truncate font-admin-mono text-[11px] text-admin-faint">
                           {log.reference_id}
                         </p>
                       )}
@@ -211,7 +211,7 @@ export function AuditTab({ model }: { model: AdminModel }) {
 
         <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-admin-border bg-[#0A0E15] px-4 py-3">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400/80" aria-hidden="true" />
-          <p className="text-[10px] leading-relaxed text-admin-muted">
+          <p className="text-[11px] leading-relaxed text-admin-muted">
             Audit records are append-only. Each entry links to its on-chain transaction receipt and remains
             verifiable independently of the console.
             {lastSyncedAt && (

@@ -71,3 +71,7 @@ This document catalogs all verified limitations, stubbed routes, partial impleme
 2. **External fiat deposits**: `wallet_ledger` credits reflect internal cashout proceeds, cashback, and settlements rather than an external fiat deposit provider ledger. Requires persisting Stripe/bank deposit events in a dedicated deposits collection.
 3. **Gross profit / COGS**: Product cost basis (`cost_cents`) is not stored per product or order line item. Requires adding `cost_cents` at catalog/order-item level and recording COGS upon settlement.
 4. **Refund-adjusted net revenue**: Order refunds are not currently written as reversing negative revenue entries in `platform_treasury`. Requires emitting negative reversal records on refund transitions.
+
+### Parity and AMM reserve reporting
+
+`DualRailTokenService.getDualRailSummary()` derives `parity.stellarCirculating` and `parity.xrplCirculating` from the recorded `initial_mint_amount` of each `platform_tokens` document and reports `isBalanced` only when both values are present and equal. When XRPL is unreachable, AMM reserves report `0` rather than a placeholder value, so the console may briefly show empty reserves until the next successful sync.

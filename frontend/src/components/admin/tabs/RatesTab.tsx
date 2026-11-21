@@ -147,7 +147,7 @@ export function RatesTab({ model }: { model: AdminModel }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-medium text-slate-200">{oracle.name}</p>
-                  <p className="mt-0.5 truncate text-[10px] text-admin-faint">{oracle.detail}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-admin-faint">{oracle.detail}</p>
                 </div>
                 <Badge tone={oracle.tone} dot>
                   {oracle.status}
@@ -156,7 +156,7 @@ export function RatesTab({ model }: { model: AdminModel }) {
             ))}
           </div>
           <div className="mt-4 rounded-xl border border-admin-border bg-[#0A0E15] px-4 py-3">
-            <p className="flex items-start gap-2 text-[10px] leading-relaxed text-admin-faint">
+            <p className="flex items-start gap-2 text-[11px] leading-relaxed text-admin-faint">
               <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-admin-gold/70" aria-hidden="true" />
               Pricing is resolved from the backend aggregator first. Public exchange fallbacks keep checkout
               available if the primary oracle is unreachable.
@@ -185,14 +185,14 @@ export function RatesTab({ model }: { model: AdminModel }) {
           </div>
           <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-3">
             <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-admin-gold/70" aria-hidden="true" />
-            <p className="text-[10px] leading-relaxed text-admin-muted">
+            <p className="text-[11px] leading-relaxed text-admin-muted">
               Quotes are cached for 30 minutes. Use <span className="text-slate-200">Refresh quotes</span> to force a
               live fetch before executing a large settlement.
             </p>
           </div>
           <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-3">
             <Database className="mt-0.5 h-4 w-4 shrink-0 text-sky-400/70" aria-hidden="true" />
-            <p className="text-[10px] leading-relaxed text-admin-muted">
+            <p className="text-[11px] leading-relaxed text-admin-muted">
               Prices are display and settlement references only. On-chain execution always uses the quoted ledger
               rate at transaction time.
             </p>

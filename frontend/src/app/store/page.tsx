@@ -18,7 +18,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  FIGMA_CATALOG,
   CatalogItem,
   fetchCatalog,
   getCachedCatalog,
@@ -102,9 +101,11 @@ export default function StoreCatalogPage() {
   // Dynamic API Catalog with 30-minute caching
   const [catalog, setCatalog] = useState<CatalogItem[]>(() => {
     const cached = getCachedCatalog();
-    return cached && cached.products.length > 0 ? cached.products : FIGMA_CATALOG;
+    return cached && cached.products.length > 0 ? cached.products : [];
   });
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
   const [catalogSource, setCatalogSource] = useState<'api' | 'cache'>('cache');
 
   // Live Conversion Rates with 30-minute caching
@@ -129,11 +130,13 @@ export default function StoreCatalogPage() {
         refreshRates().catch(() => {}),
       ]);
       setCatalog(items);
+      setCatalogError('');
       setCatalogSource('api');
-    } catch {
-      // keep existing catalog on transient error
+    } catch (err) {
+      setCatalogError(err instanceof Error ? err.message : 'Live catalog is temporarily unavailable.');
     } finally {
       setCatalogLoading(false);
+      setCatalogReady(true);
     }
   };
 
@@ -141,10 +144,14 @@ export default function StoreCatalogPage() {
     fetchCatalog()
       .then((items) => {
         setCatalog(items);
+        setCatalogError('');
         const updated = getCachedCatalog();
         if (updated) setCatalogSource(updated.source);
       })
-      .catch(() => {});
+      .catch((err) => {
+        setCatalogError(err instanceof Error ? err.message : 'Live catalog is temporarily unavailable.');
+      })
+      .finally(() => setCatalogReady(true));
 
     const onCatalogUpdate = (e: Event) => {
       const custom = e as CustomEvent;
@@ -156,7 +163,12 @@ export default function StoreCatalogPage() {
     window.addEventListener('nexus-catalog-updated', onCatalogUpdate);
 
     const interval = setInterval(() => {
-      fetchCatalog(true).then(setCatalog).catch(() => {});
+      fetchCatalog(true)
+        .then((items) => {
+          setCatalog(items);
+          setCatalogError('');
+        })
+        .catch(() => {});
     }, 60 * 1000);
 
     return () => {
@@ -189,8 +201,7 @@ export default function StoreCatalogPage() {
 
   // Normalized live-asset category grouping + unrestricted full catalog visibility
   const resolvedCatalog = useMemo(() => {
-    const items = catalog && catalog.length > 0 ? catalog : FIGMA_CATALOG;
-    return items.map((p) => {
+    return catalog.map((p) => {
       const cat = p.category === 'crypto' ? 'live-assets' : p.category;
       return { ...p, normalizedCategory: cat };
     });
@@ -519,7 +530,9 @@ export default function StoreCatalogPage() {
             {/* Header info */}
             <div className="flex items-center justify-between text-[11px] font-mono text-[var(--muted)]">
               <span>
-                SHOWING {totalProducts === 0 ? 0 : startIndex + 1}–{endIndex} OF {totalProducts} PRODUCTS &bull; PAGE {safeCurrentPage}/{totalPages}
+                {!catalogReady && catalog.length === 0
+                  ? 'LOADING LIVE CATALOG…'
+                  : `SHOWING ${totalProducts === 0 ? 0 : startIndex + 1}–${endIndex} OF ${totalProducts} PRODUCTS • PAGE ${safeCurrentPage}/${totalPages}`}
               </span>
               <span>NexusRail Live Catalog / 2026</span>
             </div>
@@ -674,8 +687,44 @@ export default function StoreCatalogPage() {
               })}
             </div>
 
+            {/* Loading skeleton while the real catalog is fetched */}
+            {!catalogReady && catalog.length === 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" aria-busy="true" aria-label="Loading catalog">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl nexus-glass-card border border-[var(--border)] overflow-hidden animate-pulse">
+                    <div className="aspect-[16/10] w-full bg-white/5" />
+                    <div className="p-5 space-y-3">
+                      <div className="h-3 w-20 rounded bg-white/10" />
+                      <div className="h-4 w-3/4 rounded bg-white/10" />
+                      <div className="h-3 w-full rounded bg-white/5" />
+                      <div className="h-9 w-full rounded-xl bg-white/5" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Honest error state when the real catalog cannot be reached and no cache exists */}
+            {catalogReady && catalog.length === 0 && catalogError && (
+              <div className="text-center py-16 px-4 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-3">
+                <Box className="w-10 h-10 mx-auto text-[var(--muted)] opacity-50" />
+                <h3 className="text-sm font-semibold font-mono text-[var(--foreground)]">Live catalog unavailable</h3>
+                <p className="text-xs font-mono text-[var(--muted)] max-w-sm mx-auto">
+                  We could not load products and prices from the server. No fallback prices are shown.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void syncLivePrices()}
+                  disabled={catalogLoading}
+                  className="px-3.5 py-1.5 rounded-xl bg-[var(--gold)] text-black font-mono text-xs font-bold hover:bg-[var(--gold-bright)] transition-colors mt-2 disabled:opacity-50"
+                >
+                  {catalogLoading ? 'Retrying…' : 'Retry'}
+                </button>
+              </div>
+            )}
+
             {/* Empty state when 0 products match */}
-            {totalProducts === 0 && (
+            {catalog.length > 0 && totalProducts === 0 && (
               <div className="text-center py-16 px-4 rounded-2xl nexus-glass-card border border-[var(--border)] space-y-3">
                 <Box className="w-10 h-10 mx-auto text-[var(--muted)] opacity-50" />
                 <h3 className="text-sm font-semibold font-mono text-[var(--foreground)]">No products match your filters</h3>

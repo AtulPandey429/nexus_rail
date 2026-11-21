@@ -193,9 +193,9 @@ function CredentialGroup({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-[13px] font-semibold text-white">{title}</h3>
-          <p className="mt-0.5 text-[10px] text-admin-faint">{subtitle}</p>
+          <p className="mt-0.5 text-[11px] text-admin-faint">{subtitle}</p>
         </div>
-        <span className={`rounded-md border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] ${toneClasses}`}>
+        <span className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${toneClasses}`}>
           {badge}
         </span>
       </div>
@@ -214,7 +214,7 @@ function CredentialGroup({
           return (
             <div key={field.label} className="py-2.5">
               <div className="flex items-center gap-2">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.13em] text-admin-faint">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-admin-faint">
                   {field.label}
                 </p>
                 {field.secret && <Badge tone="warning">Sensitive</Badge>}

@@ -50,10 +50,10 @@ export function EffectsSwitcher() {
       {isOpen && (
         <div className="absolute right-0 top-12 z-50 flex w-60 flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface-solid)] p-2.5 shadow-2xl backdrop-blur-2xl animate-fade-in-up">
           <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-[var(--border)] mb-1">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--gold)] font-bold">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--gold)] font-bold">
               Background Effects
             </span>
-            <span className="text-[10px] font-mono text-[var(--muted)]">Canvas 2D</span>
+            <span className="text-[11px] font-mono text-[var(--muted)]">Canvas 2D</span>
           </div>
 
           {FX_MODES.map((item) => {
@@ -73,7 +73,7 @@ export function EffectsSwitcher() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-[var(--foreground)] font-semibold">{item.label}</span>
                   </div>
-                  <p className="text-[10px] text-[var(--muted)] font-sans font-normal leading-tight mt-0.5">
+                  <p className="text-[11px] text-[var(--muted)] font-sans font-normal leading-tight mt-0.5">
                     {item.desc}
                   </p>
                 </div>

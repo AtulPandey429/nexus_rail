@@ -193,3 +193,47 @@ To eliminate CORS configuration issues, header stripping, and browser origin con
 2. **`KeepAliveWorker` (`apps/api/src/workers/keepAlive.ts`)**:
    - Checks for `RENDER_EXTERNAL_URL` in the environment.
    - Pings `/api/v1/health` every 10 minutes (600,000 ms) to keep the Render free-tier dyno awake and prevent cold-start latency.
+
+---
+
+## 7. Admin Console & Analytics Pipeline
+
+The operator console is a scoped sub-application that shares the Next.js app but not the storefront theme.
+
+### Frontend structure
+- `frontend/src/app/admin/page.tsx` — authenticated shell entry point and tab router.
+- `frontend/src/app/admin/orders/page.tsx` — standalone order operations view.
+- `frontend/src/components/admin/AdminShell.tsx` — sidebar, mobile drawer, header, skip link, footer.
+- `frontend/src/components/admin/AdminUI.tsx` — scoped primitives (`Card`, `Button`, `Badge`, `Table`, `TableWrap`, `EmptyState`, inputs).
+- `frontend/src/components/admin/AdminBits.tsx` — admin-only display helpers (KPI tiles, sparklines, address chips).
+- `frontend/src/components/admin/tabs/*` — one component per console tab (`Overview`, `Orders`, `Catalog`, `Analytics`, `Treasury`, `Vaults`, `Amm`, `Rates`, `Ledger`, `Audit`, `Agent`).
+- `frontend/src/components/admin/CredentialsModal.tsx` — vault credential viewer.
+
+Styling is isolated through the `.admin-scope` class and the `admin-*` Tailwind tokens (Obsidian + Champagne Gold), so storefront theme changes never leak into the console.
+
+### Analytics data flow
+```
+AnalyticsTab (range + granularity controls)
+        │  GET /api/v1/admin/analytics?range=30d&granularity=day
+        ▼
+requireAuth → requireAdmin → zod query validation
+        ▼
+AdminAnalyticsService.getAnalytics()
+        ├── orders            (volume, counts, status, rail mix, top products)
+        ├── platform_treasury (fee / spread / gas-surplus revenue, owner split)
+        ├── users             (totals, new users, activity)
+        ├── holdings          (custody valuation at oracle prices)
+        └── token_pool        (NXL reserve state)
+        ▼
+{ overview, series, railBreakdown, revenueBreakdown, topProducts, dataQuality }
+```
+
+`dataQuality.notes` explains how each figure is derived, and `dataQuality.unavailableMetrics` lists financial metrics that cannot be computed from stored records yet, together with the backend change required to produce them.
+
+### Performance measures
+- Every dashboard aggregate is server-side (`$facet`, `$group`, `$lookup`); no collection is streamed to the browser for client-side math.
+- `/api/v1/admin/products` and the dual-rail summary are Redis-cached with explicit invalidation on catalog/token writes.
+- Supporting indexes: `orders.created_at`, `orders.status + created_at`, `orders.payment_rail + created_at`, `users.created_at`, `wallet_ledger.created_at`, `wallet_ledger.type + created_at`, `holdings.symbol + quantity`, `token_withdrawals.created_at`, `platform_chain_logs.created_at`.
+
+### Data-integrity policy
+User-facing pages render only records returned by the API. When a record is missing, the UI shows an explicit empty or unavailable state rather than a placeholder order, balance, transaction hash, or wallet address.

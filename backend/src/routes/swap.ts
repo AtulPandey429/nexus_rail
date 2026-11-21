@@ -384,21 +384,76 @@ swapRouter.get('/xrpl/trustline-status', async (req: Request, res: Response) => 
 });
 
 /**
- * POST /api/v1/swap/xrpl/claim-pending
- * Validates a confirmed XRP deposit and triggers the on-chain NXL payout to user's wallet
- * once trustline is verified.
+ * GET /api/v1/swap/xrpl/pending-claims
+ * Lists the signed-in user's XRPL→NXL swaps that have a recorded deposit and
+ * still need a payout. Returns only records owned by the caller.
  */
-swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
+swapRouter.get('/xrpl/pending-claims', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { depositTxHash, destinationAddress, swapId } = req.body || {};
-    if (!depositTxHash || !destinationAddress) {
-      return res.status(400).json({ success: false, error: 'depositTxHash and destinationAddress are required' });
+    const swapsCol = await MongoService.getCollection<any>('swap_orders');
+    const rows = await swapsCol
+      .find({
+        user_id: req.user!.id,
+        fromAsset: 'XRP',
+        toAsset: 'NXL',
+        status: { $in: ['PENDING_DEPOSIT', 'DEPOSIT_CONFIRMED'] },
+        depositTxHash: { $exists: true, $nin: ['', null] },
+        payoutTxHash: { $in: ['', null, undefined] },
+      })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .toArray();
+
+    const claims = rows.map((row) => ({
+      swapId: String(row.swapId),
+      depositTxHash: String(row.depositTxHash),
+      amountXrp: Number(row.payAmount || 0),
+      amountNxl: Number(row.receiveAmount || 0),
+      destinationAddress: String(row.userDestinationAddress || ''),
+      createdAt: row.createdAt,
+    }));
+
+    return res.json({ success: true, data: claims });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Could not load pending claims' });
+  }
+});
+
+/**
+ * POST /api/v1/swap/xrpl/claim-pending
+ * Validates a confirmed XRP deposit for a swap owned by the caller and triggers
+ * the on-chain NXL payout to that swap's recorded destination address.
+ */
+swapRouter.post('/xrpl/claim-pending', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { swapId } = req.body || {};
+    if (!swapId) {
+      return res.status(400).json({ success: false, error: 'swapId is required' });
     }
 
-    const cleanHash = String(depositTxHash).trim().toUpperCase();
-    const cleanDest = String(destinationAddress).trim();
+    // 1. Load the swap and confirm the caller owns it.
+    const swapsCol = await MongoService.getCollection<any>('swap_orders');
+    const swap = await swapsCol.findOne({ swapId: String(swapId) });
+    if (!swap) {
+      return res.status(404).json({ success: false, error: 'Swap order not found' });
+    }
+    if (!swap.user_id || swap.user_id !== req.user!.id) {
+      return res.status(403).json({ success: false, error: 'This swap does not belong to your account' });
+    }
+    if (swap.payoutTxHash) {
+      return res.json({ success: true, alreadyProcessed: true, payoutTxHash: swap.payoutTxHash });
+    }
+    if (!swap.depositTxHash) {
+      return res.status(400).json({ success: false, error: 'No deposit transaction is recorded for this swap yet' });
+    }
 
-    // 1. Verify trustline on destination
+    const cleanHash = String(swap.depositTxHash).trim().toUpperCase();
+    const cleanDest = String(swap.userDestinationAddress || '').trim();
+    if (!cleanDest) {
+      return res.status(400).json({ success: false, error: 'This swap has no destination address on record' });
+    }
+
+    // 2. Verify trustline on destination
     const trustline = await DualRailTokenService.checkXrplTrustline(cleanDest, 'NXL');
     if (!trustline.hasTrustline) {
       return res.status(400).json({
@@ -410,7 +465,7 @@ swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
       });
     }
 
-    // 2. Check if this deposit was already paid out to prevent duplicate claims
+    // 3. Check if this deposit was already paid out to prevent duplicate claims
     const logsCol = await MongoService.getCollection<any>('platform_chain_logs');
     const existingPayout = await logsCol.findOne({
       reference_id: cleanHash,
@@ -427,7 +482,7 @@ swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
       });
     }
 
-    // 3. Verify deposit tx on XRPL Testnet
+    // 4. Verify deposit tx on XRPL Testnet
     const client = new Client(env.XRPL_WSS || env.XRPL_TESTNET_WSS || 'wss://s.altnet.rippletest.net:51233');
     await client.connect();
 
@@ -451,6 +506,14 @@ swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Transaction destination does not match NexusRail vault' });
     }
 
+    // 5. Bind the deposit to this swap via its destination tag.
+    if (swap.paymentIdentifierType === 'destination_tag' && swap.paymentIdentifier !== undefined) {
+      const expectedTag = Number(swap.paymentIdentifier);
+      if (!Number.isFinite(expectedTag) || Number(txData.DestinationTag) !== expectedTag) {
+        return res.status(400).json({ success: false, error: 'Deposit destination tag does not match this swap' });
+      }
+    }
+
     const meta: any = txData.meta || txData.metaData;
     if (meta?.TransactionResult !== 'tesSUCCESS') {
       return res.status(400).json({ success: false, error: `Deposit transaction did not succeed (Result: ${meta?.TransactionResult})` });
@@ -463,7 +526,7 @@ swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Delivered XRP amount must be greater than zero' });
     }
 
-    // 4. Compute NXL amount using AMM curve
+    // 6. Compute NXL amount using AMM curve
     const quote = await NrTokenService.quoteSwap({
       fromAsset: 'XRP',
       toAsset: 'NXL',
@@ -471,12 +534,23 @@ swapRouter.post('/xrpl/claim-pending', async (req: Request, res: Response) => {
     });
     const receiveNxl = quote.receiveAmount;
 
-    // 5. Broadcast on-chain NXL payout from distributor vault
-    const userId = extractOptionalUserId(req) || `wallet_${cleanDest}`;
+    // 7. Broadcast on-chain NXL payout from distributor vault
     const payout = await DualRailTokenService.withdrawNrToXrplAddress(
-      userId,
+      req.user!.id,
       receiveNxl,
       cleanDest
+    );
+
+    await swapsCol.updateOne(
+      { swapId: String(swapId) },
+      {
+        $set: {
+          payoutTxHash: payout.txHash,
+          payoutExplorerUrl: payout.explorerUrl,
+          status: 'COMPLETED',
+          updatedAt: new Date().toISOString(),
+        },
+      }
     );
 
     // Record reference linking to deposit tx to prevent double-claim

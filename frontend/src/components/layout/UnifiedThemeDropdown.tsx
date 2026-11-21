@@ -152,7 +152,7 @@ export function UnifiedThemeDropdown() {
 
           {/* Section 1: Themes with Side Toggle Switches */}
           <div className="space-y-1.5 mb-3.5">
-            <p className="px-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--muted)] font-semibold">
+            <p className="px-1 text-[11px] font-mono uppercase tracking-wider text-[var(--muted)] font-semibold">
               Color Preset
             </p>
             {THEME_OPTIONS.map((themeOpt) => {
@@ -214,7 +214,7 @@ export function UnifiedThemeDropdown() {
 
           {/* Section 2: Background Effects with Side Toggle Switches */}
           <div className="space-y-1.5 mb-2.5 pt-2.5 border-t border-[var(--border)]">
-            <p className="px-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--muted)] font-semibold">
+            <p className="px-1 text-[11px] font-mono uppercase tracking-wider text-[var(--muted)] font-semibold">
               Background Canvas FX
             </p>
             <div className="space-y-1 pt-0.5">

@@ -45,6 +45,7 @@ import {
   openAlbedoTrustline,
   setStellarTrustlineSecret,
   claimPendingXrplSwap,
+  fetchOnChainBalance,
   XrplTrustlineStatus,
   StellarTrustlineStatus,
   XRPL_NR_ISSUER_ADDRESS,
@@ -98,7 +99,7 @@ export default function SwapPage() {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
   // User destination address on the target ledger (defaults to user's verified XRPL testnet account)
-  const [destinationAddress, setDestinationAddress] = useState('r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt');
+  const [destinationAddress, setDestinationAddress] = useState('');
 
   // Wallet extension detection
   const [hasFreighter, setHasFreighter] = useState(false);
@@ -263,29 +264,65 @@ export default function SwapPage() {
   const [stellarSecretInput, setStellarSecretInput] = useState('');
   const [showStellarSecretBox, setShowStellarSecretBox] = useState(false);
 
-  // Dedicated constant for user's confirmed XRPL deposit recovery (5 XRP)
-  const XRPL_PENDING_ACCOUNT = 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';
+  // Pending XRPL→NXL claims are loaded from the API for the signed-in user.
   const [pendingAccountTrustline, setPendingAccountTrustline] = useState<XrplTrustlineStatus | null>(null);
   const [checkingPendingTrustline, setCheckingPendingTrustline] = useState(false);
-  const [pendingClaimStatus, setPendingClaimStatus] = useState<'idle' | 'checking' | 'ready' | 'claiming' | 'claimed' | 'error'>('ready');
+  const [pendingClaimStatus, setPendingClaimStatus] = useState<'idle' | 'checking' | 'ready' | 'claiming' | 'claimed' | 'error'>('idle');
   const [pendingClaimData, setPendingClaimData] = useState<{
-    txHash: string;
+    swapId: string;
+    depositTxHash: string;
     amountXrp: number;
     amountNxl: number;
+    destinationAddress: string;
     payoutHash?: string;
     explorerUrl?: string;
-  } | null>({
-    txHash: '66489352D012ED48BF48982A466416BEC38B907C031D10E3ED4206AD881295EB',
-    amountXrp: 5,
-    amountNxl: 4.688037,
-  });
+  } | null>(null);
   const [claimError, setClaimError] = useState('');
 
-  // Check pending account's trustline status on mount & refresh
+  // Load the user's real pending claims and check the destination trustline.
+  useEffect(() => {
+    const { token } = readSession();
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/swap/xrpl/pending-claims', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success || !Array.isArray(json.data)) return;
+        const claim = json.data[0];
+        if (cancelled || !claim) return;
+        setPendingClaimData({
+          swapId: claim.swapId,
+          depositTxHash: claim.depositTxHash,
+          amountXrp: Number(claim.amountXrp || 0),
+          amountNxl: Number(claim.amountNxl || 0),
+          destinationAddress: claim.destinationAddress,
+        });
+        setPendingClaimStatus('ready');
+        if (claim.destinationAddress) {
+          setCheckingPendingTrustline(true);
+          const st = await checkXrplTrustline(claim.destinationAddress, 'NXL').catch(() => null);
+          if (!cancelled && st) setPendingAccountTrustline(st);
+          if (!cancelled) setCheckingPendingTrustline(false);
+        }
+      } catch {
+        // No pending claims is a normal state.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Re-check the trustline for the pending claim's destination account.
   const handleRefreshPendingTrustline = async () => {
+    if (!pendingClaimData?.destinationAddress) return;
     setCheckingPendingTrustline(true);
     try {
-      const st = await checkXrplTrustline(XRPL_PENDING_ACCOUNT, 'NXL');
+      const st = await checkXrplTrustline(pendingClaimData.destinationAddress, 'NXL');
       setPendingAccountTrustline(st);
     } catch {
       // Graceful fallback
@@ -294,11 +331,10 @@ export default function SwapPage() {
     }
   };
 
-  // Detect extensions on mount & check XRPL pending account trustline
+  // Detect installed wallet extensions on mount
   useEffect(() => {
     checkFreighterInstalled().then(setHasFreighter);
     checkGemWalletInstalled().then(setHasGemWallet);
-    handleRefreshPendingTrustline();
   }, []);
 
   // Synchronize session and auto-fill destination wallet based on Swap Mode
@@ -387,7 +423,11 @@ export default function SwapPage() {
 
   // Manual trigger to re-query XRPL ledger for trustline
   const handleRefreshTrustline = async () => {
-    const target = destinationAddress || XRPL_PENDING_ACCOUNT;
+    const target = destinationAddress;
+    if (!target) {
+      setTrustlineActionMsg({ type: 'error', text: 'Enter a destination address first.' });
+      return;
+    }
     setCheckingTrustline(true);
     setTrustlineActionMsg(null);
     try {
@@ -449,7 +489,8 @@ export default function SwapPage() {
       let pollCount = 0;
       const intervalId = setInterval(async () => {
         pollCount++;
-        const target = destinationAddress || XRPL_PENDING_ACCOUNT;
+        const target = destinationAddress || pendingClaimData?.destinationAddress;
+        if (!target) return;
         try {
           const updated = await checkXrplTrustline(target, 'NXL');
           if (updated.hasTrustline) {
@@ -483,10 +524,7 @@ export default function SwapPage() {
     setClaimError('');
 
     try {
-      const res = await claimPendingXrplSwap({
-        depositTxHash: pendingClaimData.txHash,
-        destinationAddress: XRPL_PENDING_ACCOUNT,
-      });
+      const res = await claimPendingXrplSwap({ swapId: pendingClaimData.swapId });
 
       setPendingClaimData((prev) => ({
         ...prev!,
@@ -614,8 +652,8 @@ export default function SwapPage() {
   }, [refreshRates]);
 
   // Balances & $NR AMM Pool State
-  const [xrpBalance, setXrpBalance] = useState(500.0);
-  const [xlmBalance, setXlmBalance] = useState(3480.5);
+  const [xrpBalance, setXrpBalance] = useState(0);
+  const [xlmBalance, setXlmBalance] = useState(0);
   const [nrBalance, setNrBalance] = useState(0);
   const [usdBalance, setUsdBalance] = useState(0);
   const [nrPool, setNrPool] = useState<NrPoolSnapshot | null>(null);
@@ -630,7 +668,7 @@ export default function SwapPage() {
       }
     } catch {}
 
-    const { token } = readSession();
+    const { token, user: sessionUser } = readSession();
     if (token) {
       try {
         const balRes = await fetch('/api/v1/wallet/balance', {
@@ -644,6 +682,22 @@ export default function SwapPage() {
         }
       } catch {}
     }
+
+    // Live on-chain native balances for the signed-in user's verified wallets.
+    // Missing addresses or unreachable nodes leave the balance at 0 (shown as unavailable).
+    const xrplAddress =
+      sessionUser?.xrplAddress ||
+      (sessionUser?.walletAddress?.startsWith('r') ? sessionUser.walletAddress : '');
+    const stellarAddress =
+      sessionUser?.stellarAddress ||
+      (sessionUser?.walletAddress?.startsWith('G') ? sessionUser.walletAddress : '');
+
+    const [xrp, xlm] = await Promise.all([
+      fetchOnChainBalance('xrpl', xrplAddress),
+      fetchOnChainBalance('stellar', stellarAddress),
+    ]);
+    setXrpBalance(xrp?.balance ?? 0);
+    setXlmBalance(xlm?.balance ?? 0);
   };
 
   useEffect(() => {
@@ -1128,12 +1182,12 @@ export default function SwapPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-[var(--foreground)]">Pending XRPL Swap Deposit Detected</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400">
-                      ON-CHAIN VERIFIED
+                    <span className="px-2 py-0.5 rounded bg-amber-400/15 border border-amber-400/30 text-[11px] font-mono font-bold text-amber-300">
+                      AWAITING CLAIM
                     </span>
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    Found {pendingClaimData.amountXrp} XRP deposited from account <span className="text-[var(--gold)] font-bold">{XRPL_PENDING_ACCOUNT}</span> (Tx: {pendingClaimData.txHash.slice(0, 10)}...). Output due: <strong className="text-emerald-400">{pendingClaimData.amountNxl} $NXL</strong>.
+                    Found {pendingClaimData.amountXrp} XRP deposited for your swap (Tx: {pendingClaimData.depositTxHash.slice(0, 10)}...). Output due: <strong className="text-emerald-400">{pendingClaimData.amountNxl} $NXL</strong> to <span className="text-[var(--gold)] font-bold">{pendingClaimData.destinationAddress}</span>.
                   </p>
                 </div>
               </div>
@@ -1465,7 +1519,7 @@ export default function SwapPage() {
                         </button>
                       </div>
 
-                      <p className="text-[10.5px] font-mono text-[var(--muted)]">
+                      <p className="text-[11px] font-mono text-[var(--muted)]">
                         {toToken === 'NXL'
                           ? `Both tokens settle on ${fromToken === 'XRP' || destinationAddress.startsWith('r') ? 'XRPL Testnet' : 'Stellar Testnet'}. $NXL tokens will disburse directly to this account.`
                           : `Direct same-ledger swap. Payout will disburse directly to your connected wallet address.`}
@@ -1556,7 +1610,7 @@ export default function SwapPage() {
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                             <span>XRPL $NXL Trustline Active (Balance: {trustlineStatus.balance} NXL)</span>
                           </span>
-                          <span className="text-[9.5px] text-[var(--muted)]">Issuer: {trustlineStatus.issuer.slice(0, 6)}...</span>
+                          <span className="text-[11px] text-[var(--muted)]">Issuer: {trustlineStatus.issuer.slice(0, 6)}...</span>
                         </div>
                       ) : (
                         <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-2">
@@ -1567,7 +1621,7 @@ export default function SwapPage() {
                             </span>
                             <span className="text-[11px] text-[var(--muted)]">Account: {destinationAddress.slice(0, 6)}...{destinationAddress.slice(-4)}</span>
                           </div>
-                          <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
+                          <p className="text-[11px] text-[var(--muted)] leading-relaxed">
                             XRPL consensus protocol strictly requires account <strong className="text-[var(--gold)]">{destinationAddress}</strong> to create a trustline to issuer <strong className="text-[var(--foreground)]">{XRPL_NR_ISSUER_ADDRESS.slice(0, 8)}...</strong> before receiving $NXL tokens.
                           </p>
                           <div className="flex items-center gap-2 pt-0.5">
@@ -1613,7 +1667,7 @@ export default function SwapPage() {
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                             <span>Stellar $NXL Trustline Active (Balance: {stellarTrustlineStatus.balance} NXL)</span>
                           </span>
-                          <span className="text-[9.5px] text-[var(--muted)]">Issuer: {stellarTrustlineStatus.issuer.slice(0, 6)}...</span>
+                          <span className="text-[11px] text-[var(--muted)]">Issuer: {stellarTrustlineStatus.issuer.slice(0, 6)}...</span>
                         </div>
                       ) : stellarTrustlineStatus?.isValidAddress === false ? (
                         <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono space-y-1.5">
@@ -1621,7 +1675,7 @@ export default function SwapPage() {
                             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                             <span>Invalid Stellar Address Checksum</span>
                           </div>
-                          <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
+                          <p className="text-[11px] text-[var(--muted)] leading-relaxed">
                             The Stellar address entered has an invalid checksum or character format. Stellar public keys must start with <strong className="text-white font-mono">&quot;G&quot;</strong> and have exactly 56 characters. Please verify your address.
                           </p>
                         </div>
@@ -1634,7 +1688,7 @@ export default function SwapPage() {
                             </span>
                             <span className="text-[11px] text-[var(--muted)]">Issuer: {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}...</span>
                           </div>
-                          <p className="text-[10.5px] text-[var(--muted)] leading-relaxed">
+                          <p className="text-[11px] text-[var(--muted)] leading-relaxed">
                             Stellar protocol requires account ({destinationAddress.slice(0, 8)}...{destinationAddress.slice(-4)}) to add a Trustline to Issuer {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}... for asset &quot;NXL&quot; before receiving tokens.
                           </p>
 
@@ -1794,7 +1848,7 @@ export default function SwapPage() {
                         href={sorobanPool.explorerUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-[10px] text-sky-300 hover:underline inline-flex items-center gap-1"
+                        className="font-mono text-[11px] text-sky-300 hover:underline inline-flex items-center gap-1"
                       >
                         {sorobanPool.reserveXlm.toFixed(0)} XLM / {sorobanPool.reserveNxl.toFixed(0)} NXL
                         <ExternalLink className="w-3 h-3" />
@@ -2001,11 +2055,11 @@ export default function SwapPage() {
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-[var(--muted)]">Stellar vault</span>
-                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_STELLAR_VAULT}</span>
+                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_STELLAR_VAULT || 'Not configured'}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-[var(--muted)]">XRPL vault</span>
-                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_XRPL_VAULT}</span>
+                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_XRPL_VAULT || 'Not configured'}</span>
                 </div>
               </div>
 
@@ -2288,7 +2342,7 @@ export default function SwapPage() {
                     {/* Sub-inputs based on method */}
                     {depositMethod === 'manual' && (
                       <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-2">
-                        <p className="text-[10.5px] text-[var(--muted)]">
+                        <p className="text-[11px] text-[var(--muted)]">
                           Send <strong className="text-[var(--foreground)]">{payAmount} {fromToken}</strong> to vault address <strong className="text-[var(--gold)]">{activeSwapOrder.depositAddress}</strong> with tag <strong className="text-[var(--gold)]">{activeSwapOrder.identifier}</strong>. Then enter the transaction hash:
                         </p>
                         <input
@@ -2303,7 +2357,7 @@ export default function SwapPage() {
 
                     {depositMethod === 'secret' && (
                       <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-2">
-                        <p className="text-[10.5px] text-[var(--muted)]">
+                        <p className="text-[11px] text-[var(--muted)]">
                           Enter your {fromToken} Testnet Secret Key / Seed to sign and broadcast the transfer from your account to the server vault:
                         </p>
                         <input

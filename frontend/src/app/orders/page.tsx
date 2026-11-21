@@ -135,7 +135,7 @@ function OrdersListContent() {
         {/* 3 Metric Tiles in Glassmorphic Finish */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 sm:p-5 rounded-2xl nexus-glass-surface space-y-1">
-            <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <p className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               TOTAL ORDERS PLACED
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--gold-bright)] tracking-tight">
@@ -147,7 +147,7 @@ function OrdersListContent() {
           </div>
 
           <div className="p-4 sm:p-5 rounded-2xl nexus-glass-surface space-y-1">
-            <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <p className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               TOTAL SPENT (USD)
             </p>
             <p className="text-2xl sm:text-3xl font-mono font-bold text-[var(--foreground)] tracking-tight">
@@ -162,7 +162,7 @@ function OrdersListContent() {
           </div>
 
           <div className="p-4 sm:p-5 rounded-2xl nexus-glass-surface space-y-1">
-            <p className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)]">
+            <p className="text-[11px] font-mono tracking-widest uppercase text-[var(--muted)]">
               SETTLEMENT NETWORKS
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
@@ -170,7 +170,7 @@ function OrdersListContent() {
                 railsPresent.map((rail) => (
                   <span
                     key={rail}
-                    className="px-2 py-0.5 rounded-lg bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] text-[10px] font-mono font-bold"
+                    className="px-2 py-0.5 rounded-lg bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold)] text-[11px] font-mono font-bold"
                   >
                     {rail}
                   </span>
@@ -179,7 +179,7 @@ function OrdersListContent() {
                 <span className="text-[11px] font-mono text-[var(--muted)]">No settlements yet</span>
               )}
             </div>
-            <p className="text-[10px] font-mono text-[var(--muted)] pt-1">
+            <p className="text-[11px] font-mono text-[var(--muted)] pt-1">
               {railsPresent.length > 1 ? 'Dual-rail ledger' : 'Single-rail ledger'}
             </p>
           </div>
@@ -293,7 +293,7 @@ function OrdersListContent() {
                       )}
                     </button>
 
-                    <span className={`px-2.5 py-0.5 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${statusTone}`}>
+                    <span className={`px-2.5 py-0.5 rounded-full border font-mono text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ${statusTone}`}>
                       <CheckCircle2 className="w-3 h-3" />
                       <span>{status}</span>
                     </span>

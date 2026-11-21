@@ -412,7 +412,7 @@ export function Field({
     <div className={cn('space-y-1.5', className)}>
       <label
         htmlFor={htmlFor}
-        className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-muted"
+        className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-admin-muted"
       >
         {label}
       </label>
@@ -480,7 +480,7 @@ export function Th({
     <th
       scope="col"
       className={cn(
-        'border-b border-admin-border px-3 py-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-admin-muted',
+        'border-b border-admin-border px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.13em] text-admin-muted',
         align === 'right' && 'text-right',
         align === 'center' && 'text-center',
         className
@@ -772,7 +772,7 @@ export function MetricRow({
     <div className={cn('flex items-center justify-between gap-3 py-2.5', className)}>
       <div className="min-w-0">
         <p className="text-xs text-admin-muted">{label}</p>
-        {hint && <p className="mt-0.5 text-[10px] text-admin-faint">{hint}</p>}
+        {hint && <p className="mt-0.5 text-[11px] text-admin-faint">{hint}</p>}
       </div>
       <div className="shrink-0 text-right font-admin-mono text-xs font-semibold text-slate-200 admin-tabular">
         {value}

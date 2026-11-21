@@ -122,7 +122,7 @@ export function FilterChip({
       {typeof count === 'number' && (
         <span
           className={cn(
-            'rounded px-1 font-admin-mono text-[10px]',
+            'rounded px-1 font-admin-mono text-[11px]',
             active ? 'bg-admin-gold/15 text-admin-gold-soft' : 'bg-white/[0.06] text-admin-faint'
           )}
         >
@@ -189,7 +189,7 @@ export function RailSplitDonut({
         <span className="font-admin-mono text-2xl font-semibold tracking-tight text-white">
           {otherPct > 0 ? 3 : 2}
         </span>
-        <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-admin-faint">rails</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-admin-faint">rails</span>
       </div>
     </div>
   );
@@ -217,9 +217,9 @@ export function MiniStat({
 }) {
   return (
     <div className="rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
-      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">{label}</p>
       <p className={cn('mt-1.5 truncate font-admin-mono text-[13px] font-semibold admin-tabular', tone)}>{value}</p>
-      {hint && <p className="mt-0.5 truncate text-[10px] text-admin-faint">{hint}</p>}
+      {hint && <p className="mt-0.5 truncate text-[11px] text-admin-faint">{hint}</p>}
     </div>
   );
 }
@@ -288,7 +288,7 @@ export function AssetAvatar({
             className="h-full w-full object-contain p-0.5"
           />
         ) : (
-          <span className="font-admin-mono text-[9px] font-bold text-admin-gold-soft">NXL</span>
+          <span className="font-admin-mono text-[10px] font-bold text-admin-gold-soft">NXL</span>
         )}
       </span>
     );
@@ -357,7 +357,7 @@ export function AssetAvatar({
     return (
       <span
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-lg border border-emerald-400/25 bg-emerald-400/10 text-emerald-300 font-admin-mono text-[9px] font-bold',
+          'flex shrink-0 items-center justify-center rounded-lg border border-emerald-400/25 bg-emerald-400/10 text-emerald-300 font-admin-mono text-[10px] font-bold',
           className
         )}
         style={{ width: size, height: size }}
@@ -406,7 +406,7 @@ export function AssetAvatar({
   return (
     <span
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] font-admin-mono text-[9px] font-bold text-slate-300',
+        'flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] font-admin-mono text-[10px] font-bold text-slate-300',
         className
       )}
       style={{ width: size, height: size }}
@@ -488,7 +488,7 @@ export function ProductThumb({
 
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] font-admin-mono text-[10px] font-bold text-slate-300"
+      className="flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] font-admin-mono text-[11px] font-bold text-slate-300"
       style={{ width: size, height: size }}
     >
       {initials || 'NR'}

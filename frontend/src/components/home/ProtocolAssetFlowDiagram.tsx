@@ -638,7 +638,7 @@ export function ProtocolAssetFlowDiagram() {
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs sm:text-sm font-bold tracking-tight text-white">NEXUS v2.0</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-400 border border-slate-700/70">
+          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-400 border border-slate-700/70">
             SOROBAN ↔ XRPL
           </span>
         </div>
@@ -704,7 +704,7 @@ export function ProtocolAssetFlowDiagram() {
         }}
       >
         {/* Column Headers Aligned Exactly Above Node Columns */}
-        <div className="grid grid-cols-[215px_minmax(120px,1fr)_310px_minmax(130px,1fr)_245px] text-[10px] font-mono font-semibold tracking-widest uppercase text-slate-500 mb-3 px-1">
+        <div className="grid grid-cols-[215px_minmax(120px,1fr)_310px_minmax(130px,1fr)_245px] text-[11px] font-mono font-semibold tracking-widest uppercase text-slate-500 mb-3 px-1">
           <div>01 · USER</div>
           <div />
           <div className="text-amber-400/85">02 · SOROBAN CONTRACTS</div>
@@ -791,7 +791,7 @@ export function ProtocolAssetFlowDiagram() {
             return (
               <div
                 key={`pill-${wire.id}`}
-                className="absolute -translate-x-1/2 -translate-y-1/2 px-2 py-[2px] rounded-full font-mono text-[9.5px] font-bold tracking-[0.02em] whitespace-nowrap shadow-[0_3px_10px_rgba(0,0,0,0.8)] transition-opacity duration-300"
+                className="absolute -translate-x-1/2 -translate-y-1/2 px-2 py-[2px] rounded-full font-mono text-[11px] font-bold tracking-[0.02em] whitespace-nowrap shadow-[0_3px_10px_rgba(0,0,0,0.8)] transition-opacity duration-300"
                 style={{
                   left: `${pillPos.x + (wire.dx || 0)}px`,
                   top: `${pillPos.y + wire.dy}px`,
@@ -828,7 +828,7 @@ export function ProtocolAssetFlowDiagram() {
                 <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
                   <Wallet className="w-4 h-4" />
                 </div>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-mono font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
                   <Lock className="w-2.5 h-2.5" />
                   XDR
                 </span>
@@ -838,13 +838,13 @@ export function ProtocolAssetFlowDiagram() {
               <p className="text-[11px] text-slate-400 mt-0.5">1-Click Wallet Sign</p>
 
               <div className="flex flex-wrap gap-1.5 mt-3">
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
                   XLM
                 </span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                   $NXL
                 </span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
                   XRP
                 </span>
               </div>
@@ -884,17 +884,17 @@ export function ProtocolAssetFlowDiagram() {
                       <ArrowUpRight className="w-3 h-3 text-slate-500" />
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
                         VAULT
                       </span>
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-mono text-slate-300 bg-slate-800/90 border border-slate-700/70">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-300 bg-slate-800/90 border border-slate-700/70">
                         <Code2 className="w-2.5 h-2.5 text-amber-400" />
                         settle_order
                       </span>
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono text-slate-500">{CONTRACTS.vault.short}</span>
+                <span className="text-[11px] font-mono text-slate-500">{CONTRACTS.vault.short}</span>
               </div>
             </a>
 
@@ -926,13 +926,13 @@ export function ProtocolAssetFlowDiagram() {
                       <ArrowUpRight className="w-3 h-3 text-slate-500" />
                     </div>
                     <div className="mt-1">
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                         SAC · 2M CAP
                       </span>
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono text-slate-500">{CONTRACTS.nxlSac.short}</span>
+                <span className="text-[11px] font-mono text-slate-500">{CONTRACTS.nxlSac.short}</span>
               </div>
             </a>
 
@@ -965,13 +965,13 @@ export function ProtocolAssetFlowDiagram() {
                       <ArrowUpRight className="w-3 h-3 text-slate-500" />
                     </div>
                     <div className="mt-1">
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
                         AMM · {Math.round(poolStats.reserveXlm / 1000)}K:{Math.round(poolStats.reserveNxl / 1000)}K
                       </span>
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono text-slate-500">{CONTRACTS.swap.short}</span>
+                <span className="text-[11px] font-mono text-slate-500">{CONTRACTS.swap.short}</span>
               </div>
             </a>
           </div>
@@ -999,7 +999,7 @@ export function ProtocolAssetFlowDiagram() {
                 </div>
                 <span className="text-xs font-bold text-white">Treasury</span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
+              <span className="text-[11px] font-mono font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
                 99.5% + 0.25%
               </span>
             </div>
@@ -1021,7 +1021,7 @@ export function ProtocolAssetFlowDiagram() {
                 </div>
                 <span className="text-xs font-bold text-white">Buyback Pool</span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/25">
+              <span className="text-[11px] font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/25">
                 0.5% Fee
               </span>
             </div>
@@ -1043,7 +1043,7 @@ export function ProtocolAssetFlowDiagram() {
                 </div>
                 <span className="text-xs font-bold text-white">Burned</span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-rose-300 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25">
+              <span className="text-[11px] font-mono font-bold text-rose-300 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25">
                 −$NXL
               </span>
             </div>
@@ -1065,7 +1065,7 @@ export function ProtocolAssetFlowDiagram() {
                 </div>
                 <span className="text-xs font-bold text-white">XRPL Wallet</span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/25">
+              <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/25">
                 XRP · 15m Lock
               </span>
             </div>
@@ -1094,7 +1094,7 @@ export function ProtocolAssetFlowDiagram() {
                 <span className="h-2.5 w-2.5 rounded-full bg-white ring-4 ring-sky-400/30 animate-pulse" />
                 {step.from}
               </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${step.badgeColor}`}>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold border ${step.badgeColor}`}>
                 {step.badge}
               </span>
             </div>
@@ -1134,7 +1134,7 @@ export function ProtocolAssetFlowDiagram() {
           }}
         >
           <div className="font-bold text-sky-300">{tooltip.addr}</div>
-          <div className="text-slate-300 text-[10px] mt-0.5">{tooltip.formula}</div>
+          <div className="text-slate-300 text-[11px] mt-0.5">{tooltip.formula}</div>
         </div>
       )}
     </div>

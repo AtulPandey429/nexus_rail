@@ -752,3 +752,41 @@
 ### `ALL /api/v1/superplatform/*`
 - **Status:** Planned (501 Stub)
 - **Response (501):** `{ "success": false, "error": "This provider is not connected. Risk scores, UPI, TRON, and perpetuals quotes are not issued by this API." }`
+
+---
+
+## 15. Swap & Cross-Rail Bridging (`/api/v1/swap`)
+
+### `GET /api/v1/swap/nr-pool`
+- **Status:** Implemented
+- **Auth:** None
+- **Response (200):** `$NXL` AMM snapshot: `spotPriceUsd`, `reserveUsd`, `poolNrSupply`, `circulatingNr`, `marketCapUsd`, `cumulativeFeeInjectedUsd`, `swapFeePercent`, and recent `history`.
+
+### `GET /api/v1/swap/xrpl/pending-claims`
+- **Status:** Implemented
+- **Auth:** Required (`Bearer <token>`)
+- **Description:** Returns up to five XRP → NXL swaps owned by the caller that have a recorded deposit but no payout yet. Only the caller's own swaps are returned; no other user's deposit hashes or addresses are exposed.
+- **Response (200):**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "swapId": "swap_...",
+        "depositTxHash": "66489352...",
+        "amountXrp": 5,
+        "amountNxl": 4.688037,
+        "destinationAddress": "r...",
+        "createdAt": "2026-11-17T10:00:00.000Z"
+      }
+    ]
+  }
+  ```
+
+### `POST /api/v1/swap/xrpl/claim-pending`
+- **Status:** Implemented
+- **Auth:** Required (`Bearer <token>`)
+- **Request Body:** `{ "swapId": "swap_..." }`
+- **Behavior:** The backend loads the swap, confirms `swap.user_id === caller`, verifies the deposit transaction on XRPL, checks the destination trustline, and pays NXL only to the swap's recorded `userDestinationAddress`. Replaying a claim returns `alreadyProcessed: true` instead of paying twice.
+- **Response (200):** `{ "success": true, "payoutTxHash": "...", "explorerUrl": "...", "amountNxl": 4.688037, "xrpDeposited": 5 }`
+- **Errors:** `400` missing/invalid `swapId`, no deposit recorded, no destination, or missing trustline (`trustlineRequired: true`); `403` swap owned by another user; `404` swap not found.

@@ -267,7 +267,7 @@ export default function AdminOrdersPage() {
                       </Td>
                       <Td>
                         <div className="flex items-center gap-2.5">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[9px] font-bold text-slate-300">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[10px] font-bold text-slate-300">
                             {initialsFor(order.buyerEmail)}
                           </span>
                           <span className="max-w-[220px] truncate text-xs text-slate-300">
@@ -366,7 +366,7 @@ export default function AdminOrdersPage() {
 
         <div className="flex items-start gap-2.5 rounded-xl border border-admin-border bg-[#0A0E15] px-4 py-3">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-admin-gold/80" aria-hidden="true" />
-          <p className="text-[10px] leading-relaxed text-admin-muted">
+          <p className="text-[11px] leading-relaxed text-admin-muted">
             Transition guard: PENDING → PAID (payment webhook) → FULFILLING → FULFILLED. The server rejects any
             transition outside this sequence; the console only exposes actions that are currently valid.
           </p>

@@ -74,8 +74,8 @@ export function VaultsTab({ model }: { model: AdminModel }) {
           balance={stellarBalanceText}
           reachable={Boolean(stellarVault)}
           loading={vaultBalancesLoading}
-          address={PLATFORM_STELLAR_VAULT}
-          explorerUrl={`https://stellar.expert/explorer/testnet/account/${PLATFORM_STELLAR_VAULT}`}
+          address={PLATFORM_STELLAR_VAULT || 'Not configured'}
+          explorerUrl={PLATFORM_STELLAR_VAULT ? `https://stellar.expert/explorer/testnet/account/${PLATFORM_STELLAR_VAULT}` : ''}
           explorerLabel="Stellar Expert"
           tone="sky"
         />
@@ -87,8 +87,8 @@ export function VaultsTab({ model }: { model: AdminModel }) {
           balance={xrplBalanceText}
           reachable={Boolean(xrplVault)}
           loading={vaultBalancesLoading}
-          address={PLATFORM_XRPL_VAULT}
-          explorerUrl={`https://testnet.xrpl.org/accounts/${PLATFORM_XRPL_VAULT}`}
+          address={PLATFORM_XRPL_VAULT || 'Not configured'}
+          explorerUrl={PLATFORM_XRPL_VAULT ? `https://testnet.xrpl.org/accounts/${PLATFORM_XRPL_VAULT}` : ''}
           explorerLabel="XRPL explorer"
           tone="violet"
         />
@@ -143,7 +143,7 @@ export function VaultsTab({ model }: { model: AdminModel }) {
                 </div>
                 <ProgressBar value={utilization} tone="gold" className="mt-2.5" label="Supply utilization" />
                 {parity?.invariantString && (
-                  <p className="mt-3 break-all rounded-lg border border-white/[0.05] bg-black/20 px-3 py-2 font-admin-mono text-[10px] text-admin-faint">
+                  <p className="mt-3 break-all rounded-lg border border-white/[0.05] bg-black/20 px-3 py-2 font-admin-mono text-[11px] text-admin-faint">
                     {parity.invariantString}
                   </p>
                 )}
@@ -199,7 +199,7 @@ export function VaultsTab({ model }: { model: AdminModel }) {
             rails. Secrets stay masked until explicitly revealed.
           </p>
           <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[0.05] px-3.5 py-3">
-            <p className="flex items-start gap-2 text-[10px] leading-relaxed text-amber-200/80">
+            <p className="flex items-start gap-2 text-[11px] leading-relaxed text-amber-200/80">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               Restricted operator material. Never share vault credentials outside the operations team.
             </p>
@@ -315,7 +315,7 @@ function VaultCard({
             <AssetAvatar symbol={symbol} size={40} />
             <div>
               <h3 className="text-[15px] font-semibold tracking-tight text-white">{chain} platform vault</h3>
-              <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-admin-faint">{network}</p>
+              <p className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-admin-faint">{network}</p>
             </div>
           </div>
           <Badge tone="info" dot>Testnet</Badge>
@@ -325,7 +325,7 @@ function VaultCard({
 
         <div className="mt-5 flex items-end justify-between gap-3">
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-admin-faint">Vault balance</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-admin-faint">Vault balance</p>
             <p className="mt-1 font-admin-mono text-[24px] font-semibold tracking-tight text-white admin-tabular">
               {balance}
             </p>
@@ -336,7 +336,7 @@ function VaultCard({
         </div>
 
         <div className="mt-4 rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-3">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">
             {tone === 'sky' ? 'Public account key' : 'Classic address'}
           </p>
           <div className="mt-1.5">
@@ -344,15 +344,17 @@ function VaultCard({
           </div>
         </div>
 
-        <a
-          href={explorerUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-4 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-admin-border bg-admin-raised text-[11px] font-semibold text-slate-300 transition-colors hover:border-white/15 hover:bg-admin-hover hover:text-white"
-        >
-          Inspect on {explorerLabel}
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        </a>
+        {explorerUrl && (
+          <a
+            href={explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-admin-border bg-admin-raised text-[11px] font-semibold text-slate-300 transition-colors hover:border-white/15 hover:bg-admin-hover hover:text-white"
+          >
+            Inspect on {explorerLabel}
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        )}
       </div>
     </Card>
   );
@@ -361,9 +363,9 @@ function VaultCard({
 function ParityTile({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div className="rounded-xl border border-admin-border bg-[#0A0E15] px-3.5 py-3">
-      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">{label}</p>
       <p className="mt-1.5 font-admin-mono text-[11px] text-slate-200">{value}</p>
-      <p className="mt-0.5 text-[10px] text-admin-faint">{hint}</p>
+      <p className="mt-0.5 text-[11px] text-admin-faint">{hint}</p>
     </div>
   );
 }

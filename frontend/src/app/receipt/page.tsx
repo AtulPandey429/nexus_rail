@@ -411,7 +411,8 @@ function ReceiptContent() {
       ? PLATFORM_STELLAR_VAULT
       : receiptData.rail === 'XRPL'
       ? PLATFORM_XRPL_VAULT
-      : '—');
+      : '') ||
+    '—';
 
   return (
     <div className="receipt-outer min-h-screen bg-transparent text-[#E0D8C3] font-sans antialiased selection:bg-[#D4AF37]/30 selection:text-[#F8F7F2] py-6 sm:py-10 px-3 sm:px-6 print:py-0 print:px-0 print:min-h-0 print:bg-transparent">
@@ -660,8 +661,8 @@ function ReceiptContent() {
                     <p className="text-[11px] font-bold uppercase tracking-wider text-[#E8CE90]">
                       SCAN TO VERIFY
                     </p>
-                    <p className="text-[8.5px] text-[#A69E8D] leading-tight">
-                      Instant mobile camera scan to live on-chain explorer consensus.
+                    <p className="text-[10px] text-[#A69E8D] leading-tight">
+                      Scan to open the live transaction on the block explorer.
                     </p>
                   </div>
                 </div>
@@ -726,7 +727,7 @@ function ReceiptContent() {
                                 <p className="font-serif italic text-xs sm:text-sm text-[#F5EADB] tracking-wide">
                                   {item.title}
                                 </p>
-                                <span className="text-[8.5px] font-mono px-1 py-0.2 rounded bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#D4AF37]">
+                                <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#D4AF37]">
                                   {item.sku}
                                 </span>
                               </div>

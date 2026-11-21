@@ -177,7 +177,7 @@ export function AgentTab() {
               <p className="mt-1.5 text-[11px] leading-relaxed text-admin-muted">{capability.description}</p>
               <div className="mt-4 flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300/80">Enabled</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-300/80">Enabled</span>
               </div>
             </Card>
           );
@@ -195,15 +195,15 @@ export function AgentTab() {
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {loop.map((item) => (
               <div key={item.step} className="rounded-xl border border-admin-border bg-[#0A0E15] p-4">
-                <span className="font-admin-mono text-[10px] font-semibold text-admin-gold/70">{item.step}</span>
+                <span className="font-admin-mono text-[11px] font-semibold text-admin-gold/70">{item.step}</span>
                 <h4 className="mt-2 text-xs font-semibold text-white">{item.title}</h4>
-                <p className="mt-1 text-[10px] leading-relaxed text-admin-muted">{item.description}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-admin-muted">{item.description}</p>
               </div>
             ))}
           </div>
           <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-admin-border bg-[#0A0E15] px-4 py-3">
             <Activity className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400/80" aria-hidden="true" />
-            <p className="text-[10px] leading-relaxed text-admin-muted">
+            <p className="text-[11px] leading-relaxed text-admin-muted">
               Settlement actions are idempotent. If a rail is unavailable, the agent pauses execution and keeps the
               remaining balances untouched until connectivity returns.
             </p>
@@ -239,7 +239,7 @@ export function AgentTab() {
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium text-white">{p.title}</p>
-                    <p className="font-admin-mono text-[10px] text-admin-faint">
+                    <p className="font-admin-mono text-[11px] text-admin-faint">
                       {p.action} · ${(p.priceCents / 100).toFixed(2)}
                     </p>
                   </div>
@@ -278,9 +278,9 @@ export function AgentTab() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate font-medium text-slate-200">{t.prompt}</p>
-                    <span className="shrink-0 font-admin-mono text-[10px] text-admin-faint">{t.latencyMs}ms</span>
+                    <span className="shrink-0 font-admin-mono text-[11px] text-admin-faint">{t.latencyMs}ms</span>
                   </div>
-                  <p className="font-admin-mono text-[10px] text-admin-muted">
+                  <p className="font-admin-mono text-[11px] text-admin-muted">
                     Tools: {t.toolsInvoked.length > 0 ? t.toolsInvoked.join(', ') : 'direct chat'}
                   </p>
                 </div>
@@ -301,7 +301,7 @@ function Guardrail({ title, detail }: { title: string; detail: string }) {
       <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400/80" aria-hidden="true" />
       <div>
         <p className="text-[11px] font-medium text-slate-200">{title}</p>
-        <p className="mt-0.5 text-[10px] leading-relaxed text-admin-faint">{detail}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-admin-faint">{detail}</p>
       </div>
     </div>
   );

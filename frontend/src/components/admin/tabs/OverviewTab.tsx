@@ -321,7 +321,7 @@ export function OverviewTab({ model }: { model: AdminModel }) {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-medium text-slate-200">{row.name}</p>
-                    <p className="mt-0.5 truncate text-[10px] text-admin-faint">{row.detail}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-admin-faint">{row.detail}</p>
                   </div>
                   <span
                     className={cn(
@@ -377,11 +377,11 @@ export function OverviewTab({ model }: { model: AdminModel }) {
                   <tr key={order.id} className="transition-colors hover:bg-white/[0.022]">
                     <Td>
                       <span className="font-admin-mono text-xs font-semibold text-white">{order.orderNumber}</span>
-                      <p className="mt-0.5 text-[10px] text-admin-faint">{order.createdAt}</p>
+                      <p className="mt-0.5 text-[11px] text-admin-faint">{order.createdAt}</p>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[9px] font-bold text-slate-300">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-admin-mono text-[10px] font-bold text-slate-300">
                           {initialsFor(order.buyerEmail)}
                         </span>
                         <span className="max-w-[190px] truncate text-xs text-slate-300">{order.buyerEmail}</span>
@@ -424,7 +424,7 @@ export function OverviewTab({ model }: { model: AdminModel }) {
             </tbody>
           </Table>
         </TableWrap>
-        <p className="mt-3 text-[10px] text-admin-faint">
+        <p className="mt-3 text-[11px] text-admin-faint">
           {lastSyncedAt ? `Telemetry synced at ${lastSyncedAt.toLocaleTimeString()}.` : 'Telemetry awaiting first sync.'}
         </p>
       </Card>
@@ -454,12 +454,12 @@ function RailLegend({
           <span className={cn('h-2 w-2 rounded-full', color)} aria-hidden="true" />
           <div>
             <p className="text-xs font-medium text-slate-200">{label}</p>
-            <p className="mt-0.5 text-[10px] text-admin-faint">{assets}</p>
+            <p className="mt-0.5 text-[11px] text-admin-faint">{assets}</p>
           </div>
         </div>
         <div className="text-right">
           <p className="font-admin-mono text-xs font-semibold text-white admin-tabular">{amount}</p>
-          <p className="mt-0.5 font-admin-mono text-[10px] text-admin-muted">{share.toFixed(1)}%</p>
+          <p className="mt-0.5 font-admin-mono text-[11px] text-admin-muted">{share.toFixed(1)}%</p>
         </div>
       </div>
       <ProgressBar value={share} tone={bar} className="mt-2.5" label={`${label} share`} />
@@ -487,7 +487,7 @@ function VaultRow({
           <AssetAvatar symbol={symbol} size={28} />
           <div>
             <p className="text-[11px] font-medium text-slate-200">{chain} platform vault</p>
-            <p className="text-[10px] text-admin-faint">{network}</p>
+            <p className="text-[11px] text-admin-faint">{network}</p>
           </div>
         </div>
         <span className="font-admin-mono text-[11px] font-semibold text-slate-100 admin-tabular">{balance}</span>

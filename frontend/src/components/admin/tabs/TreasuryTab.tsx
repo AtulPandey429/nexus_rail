@@ -291,7 +291,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
           )}
 
           <div className="mt-5 flex flex-col-reverse gap-2 border-t border-admin-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[10px] text-admin-faint">
+            <p className="text-[11px] text-admin-faint">
               {treasuryConfig?.updated_at
                 ? `Last updated ${formatDateTime(treasuryConfig.updated_at)}`
                 : 'Configuration is stored in the platform treasury collection.'}
@@ -310,7 +310,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
             action={<Badge tone={balanced ? 'success' : 'danger'} dot>{balanced ? 'Balanced' : 'Variance'}</Badge>}
           />
           <div className="mt-5 rounded-xl border border-admin-border bg-[#0A0E15] p-4">
-            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.13em] text-admin-muted">
+            <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.13em] text-admin-muted">
               <span className="text-admin-gold-soft">Owner share</span>
               <span className="text-sky-300">Buyback reserve</span>
             </div>
@@ -364,7 +364,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
           >
             Trigger 50/50 split on-chain
           </Button>
-          <p className="mt-2 text-center text-[10px] text-admin-faint">
+          <p className="mt-2 text-center text-[11px] text-admin-faint">
             Executes a manual treasury split and records an audit event.
           </p>
         </Card>
@@ -394,7 +394,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
         {smartContract ? (
           <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">Contract ID</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">Contract ID</p>
               <div className="mt-1.5">
                 <CopyValue
                   value={contractId}
@@ -417,7 +417,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
               tone="text-admin-gold-soft"
             />
             <div className="rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3 sm:col-span-2">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">WASM hash</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">WASM hash</p>
               <div className="mt-1.5">
                 <CopyValue
                   value={currentWasmHash}
@@ -427,7 +427,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
               </div>
             </div>
             <div className="rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">Treasury address</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">Treasury address</p>
               <div className="mt-1.5">
                 <CopyValue
                   value={treasuryAddress}
@@ -437,7 +437,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
               </div>
             </div>
             <div className="rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-admin-faint">NXL reserve</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">NXL reserve</p>
               <div className="mt-1.5">
                 <CopyValue
                   value={nrReserveAddress}
@@ -463,7 +463,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
         <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-gold-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-admin-gold-soft">
                 Live Soroban RPC State
               </p>
               <p className="text-xs text-admin-muted mt-0.5">
@@ -702,7 +702,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
           />
         </div>
         {lastSyncedAt && (
-          <p className="mt-3 text-[10px] text-admin-faint">
+          <p className="mt-3 text-[11px] text-admin-faint">
             Ledger synced at {formatDateTime(lastSyncedAt)}.
           </p>
         )}
@@ -744,7 +744,7 @@ function RateField({
           onChange={(event) => onChange(Number(event.target.value))}
           className={cn(inputClassName, 'pr-14 font-admin-mono admin-tabular')}
         />
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold uppercase tracking-wider text-admin-faint">
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-wider text-admin-faint">
           {unit}
         </span>
       </div>

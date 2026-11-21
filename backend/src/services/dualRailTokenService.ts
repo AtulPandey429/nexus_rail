@@ -887,8 +887,8 @@ export class DualRailTokenService {
 
     // 2. XRPL Live AMM Status
     let xrplAmmAccount = xrplToken?.amm_account || env.XRPL_NR_AMM_ACCOUNT || 'rDPpHaLKbyDwcuR5HupxE2KyEj3G6i9RaE';
-    let reserveXrp = 10;
-    let reserveNr = 10;
+    let reserveXrp = 0;
+    let reserveNr = 0;
     let tradingFeeBps = 50;
 
     const client = this.getXrplClient();
@@ -926,8 +926,17 @@ export class DualRailTokenService {
     const logsCol = await MongoService.getCollection<MongoChainActionLogDoc>('platform_chain_logs');
     const recentLogs = await logsCol.find({}).sort({ created_at: -1 }).limit(20).toArray();
 
-    const summary: DualRailTokenSummaryDTO = {
-      stellar: {
+    // Parity is derived from the recorded mint amount on each chain. When a
+    // chain has no recorded mint, the balance cannot be asserted and the UI is
+    // told the rails are not reconciled instead of showing a fabricated figure.
+    const stellarCirculating = Number(stellarToken?.initial_mint_amount ?? 0);
+    const xrplCirculating = Number(xrplToken?.initial_mint_amount ?? 0);
+    const isBalanced =
+      stellarCirculating > 0 &&
+      xrplCirculating > 0 &&
+      Math.abs(stellarCirculating - xrplCirculating) < 0.01;
+
+    const summary: DualRailTokenSummaryDTO = {      stellar: {
         assetCode: STELLAR_NR_ASSET_CODE,
         issuerAddress: stellarToken?.issuer_address || STELLAR_NR_ISSUER,
         contractId: stellarToken?.contract_id || STELLAR_NR_CONTRACT_ID,
@@ -950,10 +959,10 @@ export class DualRailTokenService {
         status: 'ACTIVE_NATIVE_AMM',
       },
       parity: {
-        stellarCirculating: 100_000,
-        xrplCirculating: reserveNr,
+        stellarCirculating: stellarCirculating,
+        xrplCirculating: xrplCirculating,
         totalSupplyCap: TOTAL_SUPPLY_CAP,
-        isBalanced: true,
+        isBalanced: isBalanced,
         invariantString: '1 $NXL (Stellar) ≡ 1 $NXL (XRPL) · Fixed 1,000,000 Cap',
       },
       recentLogs: recentLogs.map((l) => ({

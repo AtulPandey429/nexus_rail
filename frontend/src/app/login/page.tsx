@@ -251,7 +251,7 @@ function LoginFormContent() {
             {/* Dual-Rail Convergence Hub Card */}
             <div className="nexus-glass-card p-5 sm:p-6 rounded-3xl border border-[var(--border)] space-y-5 relative overflow-hidden group hover:border-[var(--border-highlight)] transition-all">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3 text-xs font-mono">
-                <span className="text-[var(--muted)] uppercase tracking-wider text-[10px]">
+                <span className="text-[var(--muted)] uppercase tracking-wider text-[11px]">
                   Cross-Ledger Architecture
                 </span>
                 <span className="text-emerald-400 font-bold flex items-center gap-1.5 text-[11px]">
@@ -268,7 +268,7 @@ function LoginFormContent() {
                     <span className="w-2 h-2 rounded-full bg-[#0081F2]" />
                     <span>XRP Ledger</span>
                   </div>
-                  <p className="text-[10px] font-mono text-[var(--muted)]">XLS-30d AMM Rail</p>
+                  <p className="text-[11px] font-mono text-[var(--muted)]">XLS-30d AMM Rail</p>
                   <p className="text-[11px] font-mono text-emerald-400 font-bold">~3.8s Finality</p>
                   <div className="flex justify-center gap-1.5 pt-1 opacity-80">
                     <GemWalletIcon className="w-4 h-4" />
@@ -280,10 +280,10 @@ function LoginFormContent() {
                 {/* Central Nexus Rail Bridge Core */}
                 <div className="p-3.5 rounded-2xl nexus-glass-surface border border-[var(--gold)]/30 text-center space-y-1 relative">
                   <NexusLogo size={32} glow className="mx-auto" />
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--gold)] font-bold block">
+                  <span className="text-[11px] font-mono uppercase tracking-widest text-[var(--gold)] font-bold block">
                     NEXUS CORE
                   </span>
-                  <p className="text-[9.5px] font-mono text-[var(--muted)]">
+                  <p className="text-[11px] font-mono text-[var(--muted)]">
                     1:1 Parity Bridge
                   </p>
                 </div>
@@ -294,7 +294,7 @@ function LoginFormContent() {
                     <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
                     <span>Stellar Network</span>
                   </div>
-                  <p className="text-[10px] font-mono text-[var(--muted)]">Protocol 22 Soroban</p>
+                  <p className="text-[11px] font-mono text-[var(--muted)]">Protocol 22 Soroban</p>
                   <p className="text-[11px] font-mono text-emerald-400 font-bold">~5.0s Finality</p>
                   <div className="flex justify-center gap-1.5 pt-1 opacity-80">
                     <FreighterIcon className="w-4 h-4" />
@@ -311,7 +311,7 @@ function LoginFormContent() {
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     <span>Non-Custodial</span>
                   </div>
-                  <p className="text-[10px] text-[var(--muted)] leading-tight">
+                  <p className="text-[11px] text-[var(--muted)] leading-tight">
                     Zero private key exposure. Cryptographic wallet signatures only.
                   </p>
                 </div>
@@ -321,7 +321,7 @@ function LoginFormContent() {
                     <Cpu className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
                     <span>Dual Identity</span>
                   </div>
-                  <p className="text-[10px] text-[var(--muted)] leading-tight">
+                  <p className="text-[11px] text-[var(--muted)] leading-tight">
                     Link XRPL (r...) &amp; Stellar (G...) under a single unified profile.
                   </p>
                 </div>
@@ -331,7 +331,7 @@ function LoginFormContent() {
                     <Globe className="w-3.5 h-3.5 text-[var(--gold)] shrink-0" />
                     <span>Atomic Parity</span>
                   </div>
-                  <p className="text-[10px] text-[var(--muted)] leading-tight">
+                  <p className="text-[11px] text-[var(--muted)] leading-tight">
                     Guaranteed 1:1 cross-chain liquidity and instant cashout.
                   </p>
                 </div>
@@ -454,9 +454,9 @@ function LoginFormContent() {
                 <div className="space-y-5 animate-in fade-in duration-200">
                   {/* Blockchain Network Selector */}
                   <div className="space-y-2">
-                    <label className="text-[10px] font-mono tracking-wider uppercase text-[var(--gold)] font-semibold flex items-center justify-between">
+                    <label className="text-[11px] font-mono tracking-wider uppercase text-[var(--gold)] font-semibold flex items-center justify-between">
                       <span>Choose Blockchain Network</span>
-                      <span className="text-[var(--muted)] normal-case font-normal text-[10px]">Dual-Rail Active</span>
+                      <span className="text-[var(--muted)] normal-case font-normal text-[11px]">Dual-Rail Active</span>
                     </label>
 
                     <div className="grid grid-cols-2 gap-2.5">
@@ -479,7 +479,7 @@ function LoginFormContent() {
                             <Check className="w-3.5 h-3.5 text-[#0081F2]" />
                           )}
                         </div>
-                        <p className="text-[10px] font-mono text-[var(--muted)]">
+                        <p className="text-[11px] font-mono text-[var(--muted)]">
                           GemWallet &bull; Crossmark &bull; Xaman
                         </p>
                       </button>
@@ -503,7 +503,7 @@ function LoginFormContent() {
                             <Check className="w-3.5 h-3.5 text-[#00E5FF]" />
                           )}
                         </div>
-                        <p className="text-[10px] font-mono text-[var(--muted)]">
+                        <p className="text-[11px] font-mono text-[var(--muted)]">
                           Varial &bull; Freighter &bull; Albedo
                         </p>
                       </button>
@@ -534,7 +534,7 @@ function LoginFormContent() {
 
                   {/* Supported Wallets Row */}
                   <div className="p-3 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)] block text-center">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--muted)] block text-center">
                       Supported Multi-Rail Signers
                     </span>
                     <div className="flex items-center justify-center gap-4 text-xs font-mono text-[var(--foreground)]">
@@ -597,7 +597,7 @@ function LoginFormContent() {
                     <div className="absolute inset-0 flex items-center">
                       <div className="w-full border-t border-[var(--border)]" />
                     </div>
-                    <div className="relative flex justify-center text-[10px] uppercase font-mono tracking-wider">
+                    <div className="relative flex justify-center text-[11px] uppercase font-mono tracking-wider">
                       <span className="bg-[var(--surface-solid)] px-3 text-[var(--muted)]">OR SIGN IN WITH EMAIL</span>
                     </div>
                   </div>
@@ -669,7 +669,7 @@ function LoginFormContent() {
               </div>
 
               {/* Terms of Service Caption */}
-              <p className="text-[10px] text-[var(--muted)]/70 text-center leading-relaxed font-mono">
+              <p className="text-[11px] text-[var(--muted)]/70 text-center leading-relaxed font-mono">
                 By continuing, you agree to the Terms of Service &amp; Privacy Policy. New accounts are generated seamlessly upon first connection.
               </p>
             </div>
