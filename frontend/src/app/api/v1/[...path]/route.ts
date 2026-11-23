@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_SERVER_URL =
-  process.env.API_SERVER_URL ||
-  process.env.NEXT_PUBLIC_API_SERVER_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  '';
+function getApiServerUrl(): string {
+  return (
+    process.env.API_SERVER_URL ||
+    process.env.NEXT_PUBLIC_API_SERVER_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://nexus-rail.onrender.com' : 'http://localhost:4000')
+  );
+}
 
 async function proxy(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
-  if (!API_SERVER_URL) {
+  const apiServerUrl = getApiServerUrl();
+  if (!apiServerUrl) {
     return NextResponse.json(
       { success: false, error: 'API_SERVER_URL is not set. The web app does not answer API calls itself.' },
       { status: 503 }
     );
   }
   const { path } = await context.params;
-  const target = `${API_SERVER_URL.replace(/\/$/, '')}/api/v1/${(path || []).join('/')}${req.nextUrl.search}`;
+  const target = `${apiServerUrl.replace(/\/$/, '')}/api/v1/${(path || []).join('/')}${req.nextUrl.search}`;
   const headers = new Headers();
   req.headers.forEach((value, key) => {
     if (!['host', 'connection', 'content-length', 'origin'].includes(key.toLowerCase())) {
