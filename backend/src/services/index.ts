@@ -9,3 +9,4 @@ export * from './portfolio.service.js';
 export * from './treasury.service.js';
 export * from './underpaidOrder.service.js';
 export * from './platformSettings.service.js';
+export * from './vaultEncryption.service.js';

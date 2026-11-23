@@ -28,9 +28,31 @@ export class LedgerWatcherWorker {
         return { reconciledCount: 0 };
       }
 
-      console.log(`🔍 [LedgerWatcherWorker] Scanning on-chain ledgers for ${pendingCryptoOrders.length} pending orders...`);
+      const now = Date.now();
+      const MAX_PENDING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+      const activeCryptoOrders: MongoOrderDoc[] = [];
 
       for (const order of pendingCryptoOrders) {
+        const createdAtTime = order.created_at ? new Date(order.created_at).getTime() : 0;
+        const expiresAtTime = order.expires_at ? new Date(order.expires_at).getTime() : (createdAtTime + MAX_PENDING_WINDOW_MS);
+
+        // Auto-expire orders whose payment window has elapsed
+        if (now > expiresAtTime || (createdAtTime > 0 && now - createdAtTime > MAX_PENDING_WINDOW_MS)) {
+          await ordersCol.updateOne(
+            { id: order.id, status: 'PENDING' },
+            { $set: { status: 'CANCELLED', updated_at: new Date().toISOString() } }
+          );
+          console.log(`⏱️ [LedgerWatcher] Auto-expired stale unpaid order ${order.order_number || order.id}`);
+        } else {
+          activeCryptoOrders.push(order);
+        }
+      }
+
+      if (activeCryptoOrders.length === 0) {
+        return { reconciledCount: 0 };
+      }
+
+      for (const order of activeCryptoOrders) {
         try {
           const isStellarUsdc = order.payment_rail === 'STELLAR_USDC' || order.payment_rail === 'USDC';
           const isStellar = order.payment_rail === 'STELLAR' || order.payment_rail === 'XLM' || isStellarUsdc;

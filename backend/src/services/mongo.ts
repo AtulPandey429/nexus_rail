@@ -114,6 +114,7 @@ export interface MongoOrderDoc {
   nr_spot_rate_usd?: number;
   portfolio_credited?: boolean;
   portfolio_credited_at?: string;
+  expires_at?: string;
   created_at: string;
   updated_at: string;
 }

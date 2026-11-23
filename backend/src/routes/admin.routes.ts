@@ -13,6 +13,10 @@ adminRouter.get('/analytics', AdminController.getAnalytics);
 adminRouter.get('/platform/settings', AdminController.getPlatformSettings);
 adminRouter.patch('/platform/settings', AdminController.updatePlatformSettings);
 
+// Encrypted Secrets Vault (AES-256-GCM in MongoDB, Admin-only)
+adminRouter.get('/platform/secrets', AdminController.getPlatformSecrets);
+adminRouter.patch('/platform/secrets', AdminController.updatePlatformSecrets);
+
 // Orders & Swaps
 adminRouter.get('/orders', AdminController.getOrders);
 adminRouter.patch('/orders/:id', AdminController.patchOrder);

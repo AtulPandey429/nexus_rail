@@ -81,6 +81,7 @@ export interface DbOrder {
   payment_memo?: string;
   status: OrderStatus;
   ipfs_cid?: string;
+  expires_at?: string;
   created_at: string;
 }
 

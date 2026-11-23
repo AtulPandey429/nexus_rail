@@ -22,6 +22,7 @@ import { CouponService } from '../services/coupon.service.js';
 import { AgentToolRegistry } from '../agent/toolRegistry.js';
 import { env } from '../config/env.js';
 import { PlatformSettingsService } from '../services/platformSettings.service.js';
+import { VaultEncryptionService } from '../services/vaultEncryption.service.js';
 import { z } from 'zod';
 
 const AnalyticsQuerySchema = z.object({
@@ -864,6 +865,38 @@ export class AdminController {
       res.json({
         success: true,
         message: 'Platform settings updated successfully',
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * GET /api/v1/admin/platform/secrets
+   * Retrieve decrypted sensitive environment secrets from MongoDB (Admin-only)
+   */
+  static async getPlatformSecrets(_req: AuthenticatedRequest, res: Response) {
+    try {
+      const secrets = await VaultEncryptionService.getDecryptedSecrets();
+      res.json({ success: true, data: secrets });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * PATCH /api/v1/admin/platform/secrets
+   * Encrypt and update sensitive secrets in MongoDB Atlas (Admin-only)
+   */
+  static async updatePlatformSecrets(req: AuthenticatedRequest, res: Response) {
+    try {
+      const updates = req.body;
+      const adminId = req.user?.id || 'admin';
+      const updated = await VaultEncryptionService.updateSecrets(updates, adminId);
+      res.json({
+        success: true,
+        message: 'Secrets encrypted and stored in database successfully',
         data: updated,
       });
     } catch (error: any) {
