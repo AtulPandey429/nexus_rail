@@ -25,6 +25,7 @@ import {
 } from '@/components/admin/AdminUI';
 import { CredentialsModal, type CredentialsData } from '@/components/admin/CredentialsModal';
 import { AdminBrandMark } from '@/components/admin/AdminBits';
+import { TESTNET_CONFIG } from '@/utils/constants';
 import {
   ADMIN_TABS,
   formatDateTime,
@@ -48,6 +49,7 @@ import { CatalogTab } from '@/components/admin/tabs/CatalogTab';
 import { RatesTab } from '@/components/admin/tabs/RatesTab';
 import { AgentTab } from '@/components/admin/tabs/AgentTab';
 import { AuditTab } from '@/components/admin/tabs/AuditTab';
+import { SettingsTab } from '@/components/admin/tabs/SettingsTab';
 import { readSession, type SessionUser, onSessionChange, saveSession, clearSession } from '@/lib/shop';
 import { useLiveExchangeRates } from '@/lib/rates';
 import type {
@@ -83,6 +85,11 @@ const TAB_META: Record<AdminTab, { title: string; description: string; eyebrow: 
     eyebrow: 'Treasury',
     title: 'Treasury & profit split',
     description: 'Autonomous 50/50 distribution between owner earnings and the $NXL buyback reserve.',
+  },
+  settings: {
+    eyebrow: 'System & Fee Controls',
+    title: 'Platform & Network Configuration',
+    description: 'Manage active blockchain network mode, dynamic fee structures, contract IDs, and RPC endpoints directly from database.',
   },
   orders: {
     eyebrow: 'Operations',
@@ -141,11 +148,13 @@ function feedbackMessage(json: any, fallback: string) {
 function explorerUrlFor(rail: string | undefined, txHash: string | undefined) {
   if (!txHash) return '';
   const value = (rail || '').toUpperCase();
+  const xrplBase = process.env.NEXT_PUBLIC_XRPL_EXPLORER_URL || TESTNET_CONFIG.xrpl.explorerTxBase;
+  const stellarBase = process.env.NEXT_PUBLIC_STELLAR_EXPLORER_URL || TESTNET_CONFIG.stellar.explorerTxBase;
   if (value.includes('XRPL') || value.includes('XRP') || value.includes('RLUSD')) {
-    return `https://testnet.xrpl.org/transactions/${txHash}`;
+    return `${xrplBase.replace(/\/$/, '')}/${txHash}`;
   }
   if (value.includes('STELLAR') || value.includes('XLM') || value.includes('USDC')) {
-    return `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+    return `${stellarBase.replace(/\/$/, '')}/${txHash}`;
   }
   return '';
 }
@@ -209,10 +218,10 @@ export default function AdminConsolePage() {
   const [treasurySearch, setTreasurySearch] = useState('');
   const TREASURY_PER_PAGE = 6;
 
-  const [orderFeeBpsInput, setOrderFeeBpsInput] = useState(100);
-  const [swapSpreadBpsInput, setSwapSpreadBpsInput] = useState(50);
-  const [cashoutSpreadBpsInput, setCashoutSpreadBpsInput] = useState(50);
-  const [buybackSharePctInput, setBuybackSharePctInput] = useState(50);
+  const [orderFeeBpsInput, setOrderFeeBpsInput] = useState(0);
+  const [swapSpreadBpsInput, setSwapSpreadBpsInput] = useState(0);
+  const [cashoutSpreadBpsInput, setCashoutSpreadBpsInput] = useState(0);
+  const [buybackSharePctInput, setBuybackSharePctInput] = useState(0);
   const [isPausedInput, setIsPausedInput] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [configFeedback, setConfigFeedback] = useState('');
@@ -229,8 +238,8 @@ export default function AdminConsolePage() {
   const [dualRailLoading, setDualRailLoading] = useState(false);
   const [dualRailFeedback, setDualRailFeedback] = useState('');
   const [dualRailFeedbackTone, setDualRailFeedbackTone] = useState<FeedbackTone>('success');
-  const [ammDepositXrp, setAmmDepositXrp] = useState('5');
-  const [ammDepositNr, setAmmDepositNr] = useState('5');
+  const [ammDepositXrp, setAmmDepositXrp] = useState('');
+  const [ammDepositNr, setAmmDepositNr] = useState('');
   const [ammDepositing, setAmmDepositing] = useState(false);
 
   /* Audit */
@@ -422,10 +431,10 @@ export default function AdminConsolePage() {
         const json = await configRes.json();
         if (json?.success && json.data) {
           setTreasuryConfig(json.data);
-          setOrderFeeBpsInput(json.data.order_fee_bps ?? 100);
-          setSwapSpreadBpsInput(json.data.swap_spread_bps ?? 50);
-          setCashoutSpreadBpsInput(json.data.cashout_spread_bps ?? 50);
-          setBuybackSharePctInput(json.data.nr_buyback_share_pct ?? 50);
+          setOrderFeeBpsInput(json.data.order_fee_bps ?? 0);
+          setSwapSpreadBpsInput(json.data.swap_spread_bps ?? 0);
+          setCashoutSpreadBpsInput(json.data.cashout_spread_bps ?? 0);
+          setBuybackSharePctInput(json.data.nr_buyback_share_pct ?? 0);
           setIsPausedInput(json.data.is_paused ?? false);
         }
       }
@@ -1042,13 +1051,6 @@ export default function AdminConsolePage() {
               </Button>
             </form>
 
-            <div className="mt-5 rounded-xl border border-admin-border bg-[#090C12] px-3.5 py-3">
-              <p className="text-[11px] leading-relaxed text-admin-faint">
-                Testnet demo access: <code className="font-admin-mono text-admin-gold-soft">admin@nexusrail.com</code>{' '}
-                / <code className="font-admin-mono text-admin-gold-soft">admin123</code>
-              </p>
-            </div>
-
             <div className="mt-5 flex items-center justify-between gap-3 border-t border-admin-border/70 pt-4">
               <Link
                 href="/"
@@ -1169,6 +1171,7 @@ export default function AdminConsolePage() {
         {activeTab === 'overview' && <OverviewTab model={model} />}
         {activeTab === 'analytics' && <AnalyticsTab model={model} />}
         {activeTab === 'treasury' && <TreasuryTab model={model} />}
+        {activeTab === 'settings' && <SettingsTab />}
         {activeTab === 'orders' && <OrdersTab model={model} />}
         {activeTab === 'ledger' && <LedgerTab model={model} />}
         {activeTab === 'amm' && <AmmTab model={model} />}

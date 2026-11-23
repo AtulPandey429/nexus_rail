@@ -325,7 +325,50 @@ export interface MongoPlatformConfigDoc {
   gas_flat_cents: number; // e.g. 10 cents = $0.10
   nr_buyback_share_pct: number; // e.g. 50%
   cashback_pct: number; // e.g. 2%
+  nxl_checkout_discount_pct: number; // e.g. 10%
   is_paused: boolean;
+  updated_at: string;
+  updated_by?: string;
+}
+
+export interface MongoPlatformSettingsDoc {
+  _id?: any;
+  id: 'global_platform_settings';
+  network_mode: 'testnet' | 'mainnet';
+  fees: {
+    swap_fee_bps: number;             // e.g. 30 (0.30%)
+    platform_order_fee_bps: number;    // e.g. 100 (1.00%)
+    cashback_rate_bps: number;         // e.g. 150 (1.50%)
+    slippage_tolerance_bps: number;    // e.g. 150 (1.50%)
+    cashout_spread_bps: number;        // e.g. 50 (0.50%)
+    nxl_discount_bps: number;          // e.g. 1000 (10.00%)
+  };
+  stellar: {
+    networkPassphrase: string;
+    horizonUrl: string;
+    rpcUrl: string;
+    merchantVault: string;
+    distributorVault: string;
+    nxlAssetCode: string;
+    nxlIssuerPublic: string;
+    nxlContractId: string;
+    nexusVaultContractId: string;
+    nexusSwapContractId: string;
+    xlmSacContractId: string;
+    explorerBase: string;
+    explorerTxBase: string;
+  };
+  xrpl: {
+    wss: string;
+    merchantVault: string;
+    distributorVault: string;
+    nxlCurrencyCode: string;
+    nxlCurrencyHex: string;
+    nxlIssuerAddress: string;
+    nxlAmmAccount: string;
+    explorerBase: string;
+    explorerTxBase: string;
+  };
   updated_at: string;
   updated_by?: string;
 }

@@ -20,6 +20,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { fetchLiveSorobanSwapPool } from '@/lib/soroban';
+import { usePlatformConfig } from '@/lib/platformConfig';
+import { TESTNET_CONFIG } from '@/utils/constants';
 
 type FlowMode = 'all' | 'checkout' | 'swap' | 'bridge' | 'supply';
 type NodeKey = 'wallet' | 'vault' | 'token' | 'swap' | 'treasury' | 'buyback' | 'burn' | 'xrpl';
@@ -280,7 +282,7 @@ const WIRES: WireDef[] = [
   },
 ];
 
-const CONTRACTS = {
+const DEFAULT_CONTRACTS = {
   vault: {
     short: 'CBTDO…RJVB',
     url: 'https://stellar.expert/explorer/testnet/contract/CBTDO4EKCQNUZRYSNK6LXB7AOQUNCY7FOV6AYDICSAH7CY6N57CQRJVB',
@@ -379,6 +381,27 @@ function evalBezier(b: BezierCurve, t: number): Point {
 export function ProtocolAssetFlowDiagram() {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const pulsesGroupRef = useRef<SVGGElement | null>(null);
+
+  const { config } = usePlatformConfig();
+  const contractBase = config?.explorers?.stellarContract || 'https://stellar.expert/explorer/testnet/contract/';
+  const vaultId = config?.contracts?.nexusVault || TESTNET_CONFIG.stellar.nexusVaultContractId;
+  const swapId = config?.contracts?.nexusSwap || TESTNET_CONFIG.stellar.nexusSwapContractId;
+  const nxlSacId = config?.assets?.nxl?.stellarContractId || TESTNET_CONFIG.stellar.nxlContractId;
+
+  const CONTRACTS = React.useMemo(() => ({
+    vault: {
+      short: vaultId ? `${vaultId.slice(0, 5)}…${vaultId.slice(-4)}` : DEFAULT_CONTRACTS.vault.short,
+      url: vaultId ? `${contractBase}${vaultId}` : DEFAULT_CONTRACTS.vault.url,
+    },
+    swap: {
+      short: swapId ? `${swapId.slice(0, 5)}…${swapId.slice(-4)}` : DEFAULT_CONTRACTS.swap.short,
+      url: swapId ? `${contractBase}${swapId}` : DEFAULT_CONTRACTS.swap.url,
+    },
+    nxlSac: {
+      short: nxlSacId ? `${nxlSacId.slice(0, 5)}…${nxlSacId.slice(-4)}` : DEFAULT_CONTRACTS.nxlSac.short,
+      url: nxlSacId ? `${contractBase}${nxlSacId}` : DEFAULT_CONTRACTS.nxlSac.url,
+    },
+  }), [contractBase, vaultId, swapId, nxlSacId]);
 
   const [activeFlow, setActiveFlow] = useState<FlowMode>('all');
   const [hoveredNode, setHoveredNode] = useState<NodeKey | null>(null);

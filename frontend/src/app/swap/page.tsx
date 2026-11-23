@@ -92,7 +92,7 @@ import { executeSorobanSwapOrBridge, fetchLiveSorobanSwapPool } from '@/lib/soro
 export default function SwapPage() {
   const [fromToken, setFromToken] = useState<SwapToken>('XRP');
   const [toToken, setToToken] = useState<SwapToken>('XLM');
-  const [payAmount, setPayAmount] = useState('100.00');
+  const [payAmount, setPayAmount] = useState('');
   const [slippage, setSlippage] = useState<'0.1%' | '0.5%' | '1.0%'>('0.5%');
   const [showSlippageMenu, setShowSlippageMenu] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -108,9 +108,9 @@ export default function SwapPage() {
   // Live Exchange Rates Hook with 30-minute caching
   const { xlmUsd, xrpUsd, refreshRates, fromCache, ttlMinutes, loading: ratesLoading } = useLiveExchangeRates();
 
-  // Quote Expiry Timer (45 seconds countdown)
-  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(42);
-  const [quoteUpdatedSecondsAgo, setQuoteUpdatedSecondsAgo] = useState(18);
+  // Quote Expiry Timer (countdown)
+  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(0);
+  const [quoteUpdatedSecondsAgo, setQuoteUpdatedSecondsAgo] = useState(0);
 
   // Review Cross-Chain Swap Modal
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -713,7 +713,7 @@ export default function SwapPage() {
     }
   }, []);
 
-  const nrSpotUsd = nrPool?.spotPriceUsd || 1.0;
+  const nrSpotUsd = nrPool?.spotPriceUsd ?? null;
   const involvesNrOrUsd =
     fromToken === 'NXL' || toToken === 'NXL' || fromToken === 'USD' || toToken === 'USD';
 
@@ -741,11 +741,14 @@ export default function SwapPage() {
           setAmmQuote({
             receiveAmount: Number(json.receiveAmount || 0),
             exchangeRate: Number(json.exchangeRate || 0),
-            spotPriceBeforeUsd: Number(json.spotPriceBeforeUsd || nrSpotUsd),
-            spotPriceAfterUsd: Number(json.spotPriceAfterUsd || nrSpotUsd),
+            spotPriceBeforeUsd: Number(json.spotPriceBeforeUsd || (nrSpotUsd ?? 0)),
+            spotPriceAfterUsd: Number(json.spotPriceAfterUsd || (nrSpotUsd ?? 0)),
             priceImpactPercent: Number(json.priceImpactPercent || 0),
             feeUsd: Number(json.feeUsd || 0),
           });
+          if (json.expiresInSeconds) {
+            setQuoteSecondsLeft(Number(json.expiresInSeconds));
+          }
         }
       } catch {}
     }, 250);
@@ -753,11 +756,12 @@ export default function SwapPage() {
     return () => clearTimeout(timer);
   }, [fromToken, toToken, payAmount, involvesNrOrUsd, nrSpotUsd]);
 
-  const tokenUsdPrice = (tok: SwapToken) => {
+  const tokenUsdPrice = (tok: SwapToken): number => {
     if (tok === 'XRP') return xrpUsd;
     if (tok === 'XLM') return xlmUsd;
-    if (tok === 'NXL') return nrSpotUsd;
-    return 1.0;
+    if (tok === 'NXL') return nrSpotUsd ?? 0;
+    if (tok === 'USD') return 1.0;
+    return 0;
   };
 
   // Dynamic live rate calculation
@@ -767,7 +771,7 @@ export default function SwapPage() {
     }
     const fromUsd = tokenUsdPrice(fromToken);
     const toUsd = tokenUsdPrice(toToken);
-    if (toUsd <= 0) return 2.50;
+    if (toUsd <= 0 || fromUsd <= 0) return 0;
     return fromUsd / toUsd;
   }, [fromToken, toToken, xlmUsd, xrpUsd, nrSpotUsd, ammQuote, involvesNrOrUsd]);
 
@@ -809,7 +813,7 @@ export default function SwapPage() {
     const prevTo = toToken;
     setFromToken(prevTo);
     setToToken(prevFrom);
-    setPayAmount(receiveAmount === '0.00' ? '100.00' : receiveAmount);
+    setPayAmount(receiveAmount === '0.00' ? '' : receiveAmount);
   };
 
   const handleSelectFromToken = (next: SwapToken) => {
@@ -858,6 +862,11 @@ export default function SwapPage() {
   // Open Review Modal -> Initiates Real Escrow Order
   const handleOpenReview = async () => {
     setSwapError('');
+    const parsedAmount = parseFloat(payAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setSwapError('Enter a valid swap amount greater than 0.');
+      return;
+    }
     if (!effectiveDestination) {
       setSwapError('Enter the destination wallet address for this swap.');
       return;
@@ -876,7 +885,7 @@ export default function SwapPage() {
         body: JSON.stringify({
           fromAsset: fromToken,
           toAsset: toToken,
-          amount: parseFloat(payAmount) || 100,
+          amount: parsedAmount,
           userDestinationAddress: effectiveDestination,
         }),
       });
@@ -1035,7 +1044,7 @@ export default function SwapPage() {
           swapId: activeSwapOrder.swapId,
           fromAsset: fromToken,
           toAsset: toToken,
-          amount: parseFloat(payAmount) || 100,
+          amount: parseFloat(payAmount),
           userDestinationAddress: effectiveDestination,
           depositTxHash: resolvedDepositHash || undefined,
           userSourceSecret: !isInternalIngress && depositMethod === 'secret' ? userTestnetSecret.trim() : undefined,
@@ -1131,7 +1140,7 @@ export default function SwapPage() {
             <div className="px-3 py-2 rounded-xl nexus-glass-surface border border-[var(--border)]">
               <span className="text-[11px] text-[var(--muted)] uppercase block">Spot price</span>
               <span className="text-sm font-bold text-[var(--gold-bright)]">
-                {nrPool ? `$${nrSpotUsd.toFixed(4)}` : '—'}
+                {nrSpotUsd !== null ? `$${nrSpotUsd.toFixed(4)}` : '—'}
               </span>
               {nrPool && (
                 <span
@@ -1418,7 +1427,7 @@ export default function SwapPage() {
                             : fromToken === 'NXL'
                             ? nrBalance
                             : usdBalance;
-                        setPayAmount(maxVal > 0 ? maxVal.toFixed(2) : '100.00');
+                        setPayAmount(maxVal > 0 ? maxVal.toFixed(2) : '');
                       }}
                       className="text-[11px] font-bold text-[var(--gold)] hover:underline uppercase cursor-pointer"
                     >
@@ -1504,7 +1513,7 @@ export default function SwapPage() {
                             setDestinationAddress(val);
                             if (val.startsWith('r')) localStorage.setItem('nexus_xrpl_address', val);
                           }}
-                          placeholder={fromToken === 'XRP' || toToken === 'XRP' ? 'Your XRPL r... address (e.g. r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt)' : 'Your Stellar G... address'}
+                          placeholder={fromToken === 'XRP' || toToken === 'XRP' ? 'Your XRPL classic address (r...)' : 'Your Stellar public key (G...)'}
                           className="flex-1 px-3 py-2 rounded-xl bg-[var(--surface-solid)] border border-[var(--border)] text-xs font-mono text-[var(--gold-bright)] placeholder-[var(--muted)]/40 focus:border-[var(--border-focus)] focus:outline-none"
                         />
                         <button
@@ -1802,7 +1811,7 @@ export default function SwapPage() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>AMM Fee (0.5% · 50% to Pool Reserve)</span>
+                      <span>AMM Fee ({nrPool ? `${nrPool.swapFeePercent}%` : 'Pool fee'} · 50% to Pool Reserve)</span>
                       <span className="text-[var(--foreground)] font-medium">${ammQuote.feeUsd.toFixed(2)}</span>
                     </div>
                   </>
@@ -2047,9 +2056,9 @@ export default function SwapPage() {
                   <span className="text-[var(--muted)]">Estimated fee</span>
                   <span className="text-[var(--foreground)] font-medium">
                     {involvesNrOrUsd && ammQuote
-                      ? `$${ammQuote.feeUsd.toFixed(2)} (0.5% pool fee)`
+                      ? `$${ammQuote.feeUsd.toFixed(2)} (${nrPool?.swapFeePercent ?? 0.5}% pool fee)`
                       : fromToken === 'XLM' || fromToken === 'XRP'
-                      ? `≈ 0.00001 ${fromToken} network fee`
+                      ? 'Network fee (paid by your wallet)'
                       : 'No network fee'}
                   </span>
                 </div>

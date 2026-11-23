@@ -14,6 +14,7 @@ import {
 import QRCode from 'qrcode';
 import { CartLine, readSession } from '@/lib/shop';
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
+import { TESTNET_CONFIG } from '@/utils/constants';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -320,11 +321,12 @@ function ReceiptContent() {
     // 4. Live Horizon On-Chain Consensus Verification (100% Genuine Ledger Truth)
     async function verifyOnChainStellar(hash: string) {
       if (!hash || hash.length !== 64 || hash.startsWith('8fa2b7') || hash.startsWith('xrpl_')) return;
+      const horizonUrl = (process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL || TESTNET_CONFIG.stellar.horizonUrl).replace(/\/$/, '');
       try {
-        const txRes = await fetch(`https://horizon-testnet.stellar.org/transactions/${hash}`);
+        const txRes = await fetch(`${horizonUrl}/transactions/${hash}`);
         if (txRes.ok) {
           const txData = await txRes.json();
-          const opsRes = await fetch(`https://horizon-testnet.stellar.org/transactions/${hash}/operations`);
+          const opsRes = await fetch(`${horizonUrl}/transactions/${hash}/operations`);
           const opsData = opsRes.ok ? await opsRes.json() : null;
           const paymentOp = opsData?._embedded?.records?.find((r: any) => r.type === 'payment');
 
@@ -336,7 +338,7 @@ function ReceiptContent() {
             status: 'SETTLED',
             ledgerSequence: txData.ledger ? Number(txData.ledger).toLocaleString('en-US') : prev.ledgerSequence,
             paidFrom: paymentOp?.from || txData.source_account || prev.paidFrom,
-            vaultAddress: paymentOp?.to || 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
+            vaultAddress: paymentOp?.to || prev.vaultAddress || '',
             amountCrypto: paymentOp?.amount ? String(paymentOp.amount) : prev.amountCrypto,
             timestamp: txData.created_at ? new Date(txData.created_at).toUTCString() : prev.timestamp,
           }));

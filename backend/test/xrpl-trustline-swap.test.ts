@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { DualRailTokenService } from '../src/services/dualRailTokenService.js';
-import { NrTokenService } from '../src/services/nrTokenService.js';
+import { DualRailTokenService } from '../src/services/dualRailToken.service.js';
+import { NrTokenService } from '../src/services/nrToken.service.js';
 
 describe('Suite: XRPL Trustline Verification & NXL Dual-Rail Swaps', () => {
   const USER_ACCOUNT_WITH_LINE = 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt';

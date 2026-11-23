@@ -19,6 +19,7 @@ export type AdminTab =
   | 'overview'
   | 'analytics'
   | 'treasury'
+  | 'settings'
   | 'orders'
   | 'ledger'
   | 'amm'
@@ -32,6 +33,7 @@ export const ADMIN_TABS: AdminTab[] = [
   'overview',
   'analytics',
   'treasury',
+  'settings',
   'orders',
   'ledger',
   'amm',

@@ -2,10 +2,10 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'crypto';
 import { MongoService } from '../src/services/mongo.js';
-import { TreasuryService, DEFAULT_TREASURY_CONFIG } from '../src/services/treasuryService.js';
+import { TreasuryService, DEFAULT_TREASURY_CONFIG } from '../src/services/treasury.service.js';
 import { SorobanService } from '../src/services/soroban.js';
 import { StellarTokenIssuerService } from '../src/scripts/deployStellarNrToken.js';
-import { NrTokenService } from '../src/services/nrTokenService.js';
+import { NrTokenService } from '../src/services/nrToken.service.js';
 
 describe('Suite: Module 4 — Platform Owner Profit Engine & Stellar Protocol 22 Smart Contract', () => {
   const testOrderId = `test_ord_${crypto.randomUUID()}`;

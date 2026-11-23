@@ -66,10 +66,16 @@ function LoginFormContent() {
     e.preventDefault();
     if (!email.trim()) return;
 
+    if (!password) {
+      setShowPasswordInput(true);
+      setErrorMsg('Enter your password. A new email address creates an account with this password.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMsg('');
 
-    const authPassword = password || 'NexusRail2026!';
+    const authPassword = password;
 
     try {
       // 1. Try login first
@@ -98,12 +104,8 @@ function LoginFormContent() {
         return;
       }
 
-      if (!showPasswordInput) {
-        setShowPasswordInput(true);
-        setErrorMsg('Please enter your existing password to sign in.');
-      } else {
-        setErrorMsg(loginData.error || regData.error || 'Authentication failed. Please check credentials.');
-      }
+      setShowPasswordInput(true);
+      setErrorMsg(loginData.error || regData.error || 'Authentication failed. Please check your credentials.');
     } catch {
       setErrorMsg('Could not reach the authentication server. Please check your network.');
     } finally {

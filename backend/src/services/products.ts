@@ -1,6 +1,6 @@
 import type { AssetSymbol, DbProduct, ProductAllocation } from '../types/index.js';
 import { MongoService, MongoProductDoc } from './mongo.js';
-import { NrTokenService } from './nrTokenService.js';
+import { NrTokenService } from './nrToken.service.js';
 import { getExtendedMarketSnapshot, type ExtendedMarketSnapshot } from './market.js';
 import crypto from 'crypto';
 

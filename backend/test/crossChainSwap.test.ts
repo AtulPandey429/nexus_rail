@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { CrossChainSwapService } from '../src/services/crossChainSwapService.js';
+import { CrossChainSwapService } from '../src/services/crossChainSwap.service.js';
 
 describe('Suite: Cross-Chain Swap Escrow & Automated Payout Engine', () => {
   it('strictly rejects invalid Stellar destination address', async () => {

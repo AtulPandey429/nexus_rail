@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Lock,
+  RefreshCw,
 } from 'lucide-react';
 import {
   fetchCartLines,
@@ -24,17 +25,44 @@ import {
   SessionUser,
   onSessionChange,
 } from '@/lib/shop';
-import { useLiveExchangeRates } from '@/lib/rates';
 import {
   checkFreighterInstalled,
   checkGemWalletInstalled,
   payWithFreighter,
   payWithGemWallet,
-  deriveAuthoritativeStellarMemo,
-  deriveAuthoritativeXrplTag,
 } from '@/lib/wallets';
 import { WalletConnectModal } from '@/components/wallet/WalletConnectModal';
 import { TransactionSafetyCenter } from '@/components/checkout/TransactionSafetyCenter';
+
+interface CheckoutRailQuote {
+  rail: 'STELLAR' | 'XRPL' | 'NXL';
+  chain: string;
+  assetSymbol: string;
+  amountCrypto: string;
+  fxRateUsd: number;
+  destination: string | null;
+  memo: string | null;
+  destinationTag: number | null;
+  networkIdentifier: string;
+  expiresAt: string;
+  explorerUrl: string | null;
+  totalCents: number;
+  originalTotalCents?: number;
+  discountCents: number;
+  discountPct?: number;
+  swapFeePercent?: number;
+}
+
+interface CheckoutQuote {
+  orderId: string;
+  orderNumber?: string;
+  status: string;
+  subtotalCents: number;
+  discountCents: number;
+  totalCents: number;
+  rails: Partial<Record<'STELLAR' | 'XRPL' | 'NXL', CheckoutRailQuote>>;
+  errors: Record<string, string>;
+}
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -55,13 +83,15 @@ function CheckoutContent() {
   const [selectedRail, setSelectedRail] = useState<'STELLAR' | 'XRPL' | 'NR_TOKEN'>('STELLAR');
   const [customerEmail, setCustomerEmail] = useState('');
   const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(58);
+  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(0);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [showSafetyCenter, setShowSafetyCenter] = useState(false);
   const [reviewMemo, setReviewMemo] = useState<string | number | undefined>(undefined);
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [nrSpotUsd, setNrSpotUsd] = useState(1.0);
   const [nrBalance, setNrBalance] = useState(0);
+  const [quote, setQuote] = useState<CheckoutQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
 
   // Real extension detection
   const [hasFreighter, setHasFreighter] = useState(false);
@@ -87,10 +117,38 @@ function CheckoutContent() {
     }
   }, [showSafetyCenter]);
 
-  // Live Exchange Rates Hook
-  const { xlmUsd, xrpUsd, refreshRates } = useLiveExchangeRates();
+  // Load the server-authoritative checkout quote. Every amount, destination,
+  // memo/tag, fee and discount shown on this page comes from this response.
+  const loadQuote = useCallback(async () => {
+    if (!orderId) return;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    if (!token) {
+      setQuote(null);
+      setQuoteError('Sign in to load checkout pricing.');
+      return;
+    }
 
-  // Load session & cart items
+    setQuoteLoading(true);
+    setQuoteError('');
+    try {
+      const res = await fetch(`/api/v1/checkout/quote/${encodeURIComponent(orderId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || json?.success !== true || !json?.data) {
+        throw new Error(json?.error || 'Checkout pricing is unavailable right now.');
+      }
+      setQuote(json.data as CheckoutQuote);
+    } catch (err) {
+      setQuote(null);
+      setQuoteError(err instanceof Error ? err.message : 'Checkout pricing is unavailable right now.');
+    } finally {
+      setQuoteLoading(false);
+    }
+  }, [orderId]);
+
+  // Load session, wallet balance and cart items
   useEffect(() => {
     const sync = () => {
       const sess = readSession();
@@ -112,15 +170,6 @@ function CheckoutContent() {
     };
     sync();
 
-    fetch('/api/v1/swap/nr-pool', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.success && j.data?.spotPriceUsd) {
-          setNrSpotUsd(Number(j.data.spotPriceUsd));
-        }
-      })
-      .catch(() => {});
-
     fetchCartLines()
       .then((lines) => setItems(lines))
       .catch(() => setItems([]));
@@ -131,90 +180,80 @@ function CheckoutContent() {
     return onSessionChange(sync);
   }, []);
 
-  // 60-second quote expiry countdown timer
   useEffect(() => {
-    const timer = setInterval(() => {
-      setQuoteSecondsLeft((prev) => {
-        if (prev <= 1) {
-          refreshRates();
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [refreshRates]);
+    void loadQuote();
+  }, [loadQuote]);
 
-  // Order financial calculations
-  const rawSubtotalCents = useMemo(() => {
-    return items.reduce((acc, i) => acc + i.priceCents * i.qty, 0);
-  }, [items]);
+  const activeQuote = quote?.rails[selectedRail === 'NR_TOKEN' ? 'NXL' : selectedRail] ?? null;
+  const activeToken =
+    activeQuote?.assetSymbol ??
+    (selectedRail === 'STELLAR' ? 'XLM' : selectedRail === 'XRPL' ? 'XRP' : 'NXL');
+  const activeTotalCrypto = activeQuote?.amountCrypto ?? '—';
+  const activeRateStr = activeQuote
+    ? `1 ${activeQuote.assetSymbol} = $${activeQuote.fxRateUsd.toFixed(4)}`
+    : '—';
 
-  const rawSubtotalUsd = rawSubtotalCents / 100;
-  const nrDiscountUsd = selectedRail === 'NR_TOKEN' ? Number((rawSubtotalUsd * 0.1).toFixed(2)) : 0;
-  const networkFeeUsd = selectedRail === 'NR_TOKEN' ? 0 : 0.02;
-  const totalUsd = Math.max(0, rawSubtotalUsd - nrDiscountUsd + networkFeeUsd);
-
-  // Crypto conversion amounts based on live oracle rate
-  const stellarPricePerToken = xlmUsd > 0 ? xlmUsd : 0.10;
-  const xrplPricePerToken = xrpUsd > 0 ? xrpUsd : 0.58;
-  const nrPricePerToken = nrSpotUsd > 0 ? nrSpotUsd : 1.0;
-
-  const stellarTotalCrypto = (totalUsd / stellarPricePerToken).toFixed(2);
-  const stellarOrderCrypto = (rawSubtotalUsd / stellarPricePerToken).toFixed(2);
-  const stellarFeeCrypto = (0.02 / stellarPricePerToken).toFixed(2);
-
-  const xrplTotalCrypto = (totalUsd / xrplPricePerToken).toFixed(2);
-  const xrplOrderCrypto = (rawSubtotalUsd / xrplPricePerToken).toFixed(2);
-  const xrplFeeCrypto = (0.02 / xrplPricePerToken).toFixed(4);
-
-  const nrDiscountedSubtotalUsd = Math.max(rawSubtotalUsd >= 1 ? 1 : 0.01, Number((rawSubtotalUsd - rawSubtotalUsd * 0.1).toFixed(2)));
-  const nrTotalCrypto = (nrDiscountedSubtotalUsd / nrPricePerToken).toFixed(4);
-
-  // Active rail parameters
-  const activeRateStr = selectedRail === 'STELLAR'
-    ? `1 XLM = $${stellarPricePerToken.toFixed(4)}`
-    : selectedRail === 'XRPL'
-    ? `1 XRP = $${xrplPricePerToken.toFixed(4)}`
-    : `1 NXL = $${nrPricePerToken.toFixed(4)}`;
-
-  const activeTotalCrypto =
-    selectedRail === 'STELLAR' ? stellarTotalCrypto : selectedRail === 'XRPL' ? xrplTotalCrypto : nrTotalCrypto;
-  const activeOrderCrypto =
-    selectedRail === 'STELLAR' ? stellarOrderCrypto : selectedRail === 'XRPL' ? xrplOrderCrypto : nrTotalCrypto;
-  const activeFeeCrypto =
-    selectedRail === 'STELLAR' ? stellarFeeCrypto : selectedRail === 'XRPL' ? xrplFeeCrypto : '0.00';
-  const activeToken = selectedRail === 'STELLAR' ? 'XLM' : selectedRail === 'XRPL' ? 'XRP' : 'NXL';
-
-  // Derive the exact reconciliation memo/tag that will be sent, so the review
-  // screen shows the real value instead of a placeholder.
-  const handleOpenSafetyCenter = async () => {
-    if (selectedRail === 'STELLAR') {
-      setReviewMemo(await deriveAuthoritativeStellarMemo(orderId));
-    } else if (selectedRail === 'XRPL') {
-      setReviewMemo(await deriveAuthoritativeXrplTag(orderId));
-    } else {
-      setReviewMemo(`NXL-${orderId.replace(/-/g, '').slice(0, 25).toUpperCase()}`);
+  // Quote expiry countdown, driven by the backend `expiresAt` value.
+  useEffect(() => {
+    if (!activeQuote?.expiresAt) {
+      setQuoteSecondsLeft(0);
+      return;
     }
+    const tick = () => {
+      const ms = new Date(activeQuote.expiresAt).getTime() - Date.now();
+      setQuoteSecondsLeft(Math.max(0, Math.floor(ms / 1000)));
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [activeQuote?.expiresAt]);
+
+  // Display-only values, all derived from the backend quote.
+  const subtotalUsd = quote ? quote.subtotalCents / 100 : 0;
+  const promoDiscountUsd = quote ? quote.discountCents / 100 : 0;
+  const nxlDiscountUsd =
+    selectedRail === 'NR_TOKEN' && activeQuote ? activeQuote.discountCents / 100 : 0;
+  const totalUsd = activeQuote ? activeQuote.totalCents / 100 : 0;
+  const nxlDiscountPct = quote?.rails.NXL?.discountPct ?? 0;
+  const quoteExpired = Boolean(activeQuote) && quoteSecondsLeft <= 0;
+  const canPay = Boolean(activeQuote) && !quoteExpired && !quoteLoading && !isProcessing;
+
+  // The review screen shows the exact memo/tag returned by the backend invoice.
+  const handleOpenSafetyCenter = () => {
+    if (!activeQuote) {
+      setErrorMsg(quoteError || 'Wait for the checkout quote before paying.');
+      return;
+    }
+    setReviewMemo(activeQuote.memo ?? activeQuote.destinationTag ?? undefined);
     setShowSafetyCenter(true);
   };
 
-  // Handle onchain or $NR native ledger payment submission
+  // Handle on-chain or $NXL native ledger payment submission. The invoice
+  // amount, destination, memo/tag and totals all come from the backend quote.
   const handleConfirmAndPay = async () => {
+    if (!activeQuote || !quote) {
+      setErrorMsg('Wait for the checkout quote before paying.');
+      return;
+    }
+    if (quoteExpired) {
+      setErrorMsg('This quote expired. Refresh the quote and try again.');
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMsg('');
 
     try {
       let txHash = '';
       let ledgerSeq = '';
-      let finalPaidUsd = totalUsd;
-      let finalPaidCrypto = activeTotalCrypto;
+      let finalPaidUsd = activeQuote.totalCents / 100;
+      let finalPaidCrypto = activeQuote.amountCrypto;
       let sourceWallet = '';
       const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
 
       if (selectedRail === 'NR_TOKEN') {
         if (!token) {
-          throw new Error('Please sign in to pay with your $NXL Protocol Token wallet balance.');
+          throw new Error('Sign in to pay with your $NXL wallet balance.');
         }
         const nrRes = await fetch('/api/v1/checkout/nxl/pay', {
           method: 'POST',
@@ -229,21 +268,19 @@ function CheckoutContent() {
           throw new Error(nrJson?.error || '$NXL checkout failed');
         }
         txHash = nrJson.data.txHash;
-        finalPaidUsd = (nrJson.data.finalPaidCents || 0) / 100;
-        finalPaidCrypto = String(nrJson.data.paidNrAmount ?? nrTotalCrypto);
-        sourceWallet = user?.walletAddress || 'NXL-NATIVE-BALANCE';
+        finalPaidUsd = (nrJson.data.finalPaidCents ?? activeQuote.totalCents) / 100;
+        finalPaidCrypto = String(nrJson.data.paidNrAmount ?? activeQuote.amountCrypto);
+        sourceWallet = user?.walletAddress || '$NXL wallet balance';
       } else if (selectedRail === 'STELLAR') {
         if (!hasFreighter) {
           throw new Error('Install or unlock the Freighter wallet to pay with Stellar.');
         }
-        // Authoritative 28-byte HMAC-SHA256 memo derivation (NR<HMAC>)
-        const authoritativeMemo = await deriveAuthoritativeStellarMemo(orderId);
+        if (!token) {
+          throw new Error('Sign in to load the Stellar invoice before paying.');
+        }
         const res = await payWithFreighter({
-          amount: activeTotalCrypto,
-          destination: 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
-          memo: authoritativeMemo,
           orderId,
-          authToken: token || undefined,
+          authToken: token,
         });
         if (!res.txHash) {
           throw new Error('Freighter did not return a transaction hash. Please try again.');
@@ -255,12 +292,13 @@ function CheckoutContent() {
         if (!hasGemWallet) {
           throw new Error('Install or unlock the GemWallet extension to pay with XRPL.');
         }
-        // Authoritative 32-bit HMAC-SHA256 destination tag derivation
-        const authoritativeTag = await deriveAuthoritativeXrplTag(orderId);
+        if (!activeQuote.destination || activeQuote.destinationTag == null) {
+          throw new Error('The XRPL invoice is incomplete. Refresh the quote and try again.');
+        }
         const res = await payWithGemWallet({
-          amountXrp: activeTotalCrypto,
-          destination: 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW',
-          destinationTag: authoritativeTag,
+          amountXrp: activeQuote.amountCrypto,
+          destination: activeQuote.destination,
+          destinationTag: activeQuote.destinationTag,
         });
         if (!res.txHash) {
           throw new Error('GemWallet did not return a transaction hash. Please try again.');
@@ -283,7 +321,7 @@ function CheckoutContent() {
             (user?.walletAddress?.startsWith('r') ? user.walletAddress : '') ||
             (user?.lastConnectedWallet?.address?.startsWith('r') ? user.lastConnectedWallet.address : '');
         } else {
-          sourceWallet = user?.walletAddress || 'NXL-NATIVE-BALANCE';
+          sourceWallet = user?.walletAddress || '$NXL wallet balance';
         }
         if (!sourceWallet) {
           throw new Error('Connect a wallet before paying.');
@@ -307,15 +345,15 @@ function CheckoutContent() {
         }
       }
 
-      // Persist completed order details for Receipt Screen 8
+      // Persist completed order details for the receipt screen
       const receiptData = {
         orderId,
         rail: selectedRail,
         token: activeToken,
         amountCrypto: finalPaidCrypto,
         amountUsd: finalPaidUsd.toFixed(2),
-        subtotalUsd: rawSubtotalUsd.toFixed(2),
-        feeUsd: networkFeeUsd.toFixed(2),
+        subtotalUsd: (quote.subtotalCents / 100).toFixed(2),
+        feeUsd: '0.00',
         rateAtApproval: activeRateStr,
         txHash,
         ledgerSequence: ledgerSeq,
@@ -323,11 +361,8 @@ function CheckoutContent() {
         email: customerEmail || user?.email || '',
         items,
         paidFrom: sourceWallet,
-        vaultAddress: selectedRail === 'STELLAR'
-          ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR'
-          : selectedRail === 'XRPL'
-          ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW'
-          : 'NXL-AMM-TREASURY-VAULT',
+        vaultAddress: activeQuote.destination || '',
+        quoteExpiresAt: activeQuote.expiresAt,
       };
 
       if (typeof window !== 'undefined') {
@@ -337,7 +372,7 @@ function CheckoutContent() {
       // Clear active cart upon confirmed payment verification
       await clearCart();
 
-      // Route to Screen 8 (Receipt)
+      // Route to the receipt screen
       router.push(`/receipt?orderId=${encodeURIComponent(orderId)}`);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Wallet signature failed or rejected.');
@@ -483,11 +518,13 @@ function CheckoutContent() {
                   </div>
 
                   <p className="text-2xl font-mono font-medium text-[var(--foreground)] tracking-tight mt-3">
-                    {stellarTotalCrypto} XLM
+                    {quote?.rails.STELLAR?.amountCrypto ?? '—'} XLM
                   </p>
 
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    {hasFreighter ? 'Freighter detected · Fee $0.02' : 'Freighter not detected · Fee $0.02'}
+                    {hasFreighter
+                      ? 'Freighter detected · Network fee paid by wallet'
+                      : 'Freighter not detected · Network fee paid by wallet'}
                   </p>
 
                   <p
@@ -525,11 +562,13 @@ function CheckoutContent() {
                   </div>
 
                   <p className="text-2xl font-mono font-medium text-[var(--foreground)] tracking-tight mt-3">
-                    {xrplTotalCrypto} XRP
+                    {quote?.rails.XRPL?.amountCrypto ?? '—'} XRP
                   </p>
 
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    {hasGemWallet ? 'GemWallet detected · Fee < $0.01' : 'GemWallet not detected · Fee < $0.01'}
+                    {hasGemWallet
+                      ? 'GemWallet detected · Network fee paid by wallet'
+                      : 'GemWallet not detected · Network fee paid by wallet'}
                   </p>
 
                   <p
@@ -561,22 +600,24 @@ function CheckoutContent() {
                       <span className="text-sm font-semibold text-[var(--foreground)]">$NXL Token</span>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] font-mono font-bold">
-                      SAVE 10%
+                      {nxlDiscountPct > 0 ? `SAVE ${nxlDiscountPct}%` : 'NXL PRICING'}
                     </span>
                   </div>
 
                   <p className="text-2xl font-mono font-medium text-[var(--foreground)] tracking-tight mt-3">
-                    {nrTotalCrypto} NXL
+                    {quote?.rails.NXL?.amountCrypto ?? '—'} NXL
                   </p>
 
                   <p className="text-xs font-mono text-[var(--muted)] mt-1">
-                    Balance {nrBalance.toFixed(4)} NXL · Fee $0.00
+                    Balance {nrBalance.toFixed(4)} NXL · No routing fee
                   </p>
 
-                  {nrBalance >= Number(nrTotalCrypto) ? (
+                  {quote?.rails.NXL && nrBalance >= Number(quote.rails.NXL.amountCrypto) ? (
                     <p className="text-xs font-mono text-emerald-400 mt-3 flex items-center gap-1 font-semibold">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      10% Discount + 0% Fee Active
+                      {nxlDiscountPct > 0
+                        ? `${nxlDiscountPct}% holder discount applied at payment`
+                        : 'Holder pricing applied at payment'}
                     </p>
                   ) : (
                     <Link
@@ -639,24 +680,37 @@ function CheckoutContent() {
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="tracking-widest uppercase text-[var(--muted)]">03 / REVIEW THE QUOTE</span>
                 <span className="px-2 py-0.5 rounded bg-[var(--gold)]/15 border border-[var(--gold)]/40 text-[var(--gold-bright)] text-[11px] font-bold">
-                  LIVE RATE
+                  {quoteLoading ? 'LOADING' : quoteExpired ? 'EXPIRED' : activeQuote ? 'SERVER QUOTE' : 'UNAVAILABLE'}
                 </span>
               </div>
+
+              {quoteError && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono flex items-center justify-between gap-3">
+                  <span>{quoteError}</span>
+                  <button
+                    type="button"
+                    onClick={() => void loadQuote()}
+                    className="shrink-0 underline hover:text-amber-200"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
 
               {/* Rate Breakdown Table */}
               <div className="space-y-3 text-xs font-mono divide-y divide-[var(--border)]">
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-[var(--muted)]">Testnet live exchange rate</span>
+                  <span className="text-[var(--muted)]">Exchange rate</span>
                   <span className="text-[var(--foreground)] font-medium">{activeRateStr}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-[var(--muted)]">Order payment</span>
-                  <span className="text-[var(--foreground)] font-medium">{activeOrderCrypto} {activeToken}</span>
+                  <span className="text-[var(--foreground)] font-medium">{activeTotalCrypto} {activeToken}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-[var(--muted)]">Estimated network fee</span>
+                  <span className="text-[var(--muted)]">Network fee</span>
                   <span className="text-[var(--foreground)] font-medium">
-                    {selectedRail === 'NR_TOKEN' ? '$0.00 (Waived)' : `${activeFeeCrypto} ${activeToken} / $0.02`}
+                    {selectedRail === 'NR_TOKEN' ? 'None (internal ledger)' : 'Paid by your wallet'}
                   </span>
                 </div>
               </div>
@@ -671,18 +725,39 @@ function CheckoutContent() {
 
               {/* Metadata quote expiration line */}
               <p className="text-[11px] font-mono text-[var(--muted)] tracking-wider">
-                RATE LOCKED · REFRESHES IN {quoteSecondsLeft}S
+                {quoteExpired
+                  ? 'QUOTE EXPIRED · REFRESH TO CONTINUE'
+                  : activeQuote
+                  ? `QUOTE VALID · REFRESHES IN ${quoteSecondsLeft}S`
+                  : 'WAITING FOR A SERVER QUOTE'}
               </p>
+
+              {quoteExpired && (
+                <button
+                  type="button"
+                  onClick={() => void loadQuote()}
+                  className="text-xs font-mono text-[var(--gold)] hover:underline inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Refresh quote
+                </button>
+              )}
 
               {/* Confirm & Pay CTA */}
               <button
                 type="button"
-                onClick={() => void handleOpenSafetyCenter()}
-                disabled={isProcessing}
+                onClick={() => handleOpenSafetyCenter()}
+                disabled={!canPay}
                 className="w-full py-4 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold text-sm tracking-wide transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-[var(--gold)]/20 active:scale-[0.99] disabled:opacity-50 mt-2 cursor-pointer"
               >
                 {isProcessing ? (
                   <span>Signing transaction on {selectedRail}...</span>
+                ) : quoteLoading ? (
+                  <span>Loading server quote…</span>
+                ) : !activeQuote ? (
+                  <span>Pricing unavailable</span>
+                ) : quoteExpired ? (
+                  <span>Refresh quote to continue</span>
                 ) : (
                   <>
                     <span>Review & Authorize {activeTotalCrypto} {activeToken}</span>
@@ -737,12 +812,20 @@ function CheckoutContent() {
               <div className="space-y-3 py-4 border-t border-b border-[var(--border)] text-xs font-mono">
                 <div className="flex justify-between text-[var(--muted)]">
                   <span>Subtotal</span>
-                  <span className="text-[var(--foreground)] font-bold">${rawSubtotalUsd.toFixed(2)}</span>
+                  <span className="text-[var(--foreground)] font-bold">
+                    {quote ? `$${subtotalUsd.toFixed(2)}` : '—'}
+                  </span>
                 </div>
-                {nrDiscountUsd > 0 && (
+                {promoDiscountUsd > 0 && (
                   <div className="flex justify-between text-emerald-400">
-                    <span>$NXL Holder Discount (10%)</span>
-                    <span className="font-bold">-${nrDiscountUsd.toFixed(2)}</span>
+                    <span>Promo discount</span>
+                    <span className="font-bold">-${promoDiscountUsd.toFixed(2)}</span>
+                  </div>
+                )}
+                {nxlDiscountUsd > 0 && (
+                  <div className="flex justify-between text-emerald-400">
+                    <span>$NXL holder discount{nxlDiscountPct > 0 ? ` (${nxlDiscountPct}%)` : ''}</span>
+                    <span className="font-bold">-${nxlDiscountUsd.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-[var(--muted)]">
@@ -750,9 +833,9 @@ function CheckoutContent() {
                   <span className="text-[var(--foreground)] font-bold">Free</span>
                 </div>
                 <div className="flex justify-between text-[var(--muted)]">
-                  <span>Estimated network fee</span>
+                  <span>Network fee</span>
                   <span className="text-[var(--foreground)]">
-                    {selectedRail === 'NR_TOKEN' ? '$0.00 (Waived)' : `$${networkFeeUsd.toFixed(2)}`}
+                    {selectedRail === 'NR_TOKEN' ? 'None (internal ledger)' : 'Paid by your wallet'}
                   </span>
                 </div>
               </div>
@@ -761,7 +844,7 @@ function CheckoutContent() {
               <div className="flex justify-between items-baseline">
                 <span className="text-base text-[var(--foreground)] font-medium">Total / USD</span>
                 <span className="text-2xl font-mono font-bold text-[var(--gold-bright)] tracking-tight">
-                  ${totalUsd.toFixed(2)}
+                  {activeQuote ? `$${totalUsd.toFixed(2)}` : '—'}
                 </span>
               </div>
 
@@ -809,15 +892,24 @@ function CheckoutContent() {
                 <TransactionSafetyCenter
                   chain={selectedRail === 'XRPL' ? 'xrpl' : 'stellar'}
                   networkName={selectedRail === 'STELLAR' ? 'STELLAR TESTNET' : selectedRail === 'XRPL' ? 'XRPL TESTNET' : 'NEXUSRAIL NATIVE LEDGER'}
-                  networkIdentifier={selectedRail === 'STELLAR' ? 'Test SDF Network ; September 2015' : selectedRail === 'XRPL' ? 'wss://s.altnet.rippletest.net:51233' : 'Double-Entry AMM $NXL Settlement'}
-                  actionType={selectedRail === 'NR_TOKEN' ? '$NXL Native Token Checkout (10% Off)' : 'Commercial Hardware Settlement'}
-                  recipientAddress={selectedRail === 'STELLAR' ? 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR' : selectedRail === 'XRPL' ? 'rp4Q7LTC8pg5jSprV92jRdoZ9E2rhMNFxW' : 'NXL-AMM-TREASURY-VAULT'}
-                  isMerchantVault={true}
+                  networkIdentifier={activeQuote?.networkIdentifier ?? 'Unavailable'}
+                  actionType={
+                    selectedRail === 'NR_TOKEN'
+                      ? nxlDiscountPct > 0
+                        ? `$NXL token checkout (${nxlDiscountPct}% holder discount)`
+                        : '$NXL token checkout'
+                      : 'Hardware settlement'
+                  }
+                  recipientAddress={
+                    activeQuote?.destination ??
+                    (selectedRail === 'NR_TOKEN' ? 'NXL internal ledger' : 'Unavailable')
+                  }
+                  isMerchantVault={Boolean(activeQuote?.destination)}
                   destinationTagOrMemo={reviewMemo}
                   assetSymbol={activeToken}
                   isNativeAsset={true}
                   amount={activeTotalCrypto}
-                  networkFee={selectedRail === 'NR_TOKEN' ? '$0.00 (Waived)' : `$0.02 (${activeFeeCrypto} ${activeToken})`}
+                  networkFee={selectedRail === 'NR_TOKEN' ? 'None (internal ledger)' : 'Paid by your wallet'}
                   isSigning={isProcessing}
                   onConfirmSign={async () => {
                     await handleConfirmAndPay();

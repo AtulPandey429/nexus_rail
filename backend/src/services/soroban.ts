@@ -19,7 +19,7 @@ import {
   ContractUpgradeEntry,
 } from './mongo.js';
 import { RedisCacheService } from './redis.js';
-import { DualRailTokenService } from './dualRailTokenService.js';
+import { DualRailTokenService } from './dualRailToken.service.js';
 
 export const STROOPS_SCALE = 10_000_000;
 

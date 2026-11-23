@@ -33,6 +33,8 @@ import {
   ArrowDownUp,
 } from 'lucide-react';
 import { readSession, clearSession, notifySession, onSessionChange, SessionUser } from '@/lib/shop';
+import { usePlatformConfig } from '@/lib/platformConfig';
+import { TESTNET_CONFIG } from '@/utils/constants';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
 import type { UserPortfolioResponse, HydratedHolding } from '@/types';
 
@@ -71,6 +73,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const { config } = usePlatformConfig();
 
   // Edit Name state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -863,8 +866,8 @@ export default function ProfilePage() {
                     required
                     placeholder={
                       withdrawChain === 'stellar'
-                        ? 'e.g. GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC'
-                        : 'e.g. rN6Xp... (XRPL Altnet Classic Address)'
+                        ? 'e.g. G... (56-character Stellar Public Key)'
+                        : 'e.g. r... (XRPL Classic Address)'
                     }
                     value={withdrawAddress}
                     onChange={(e) => setWithdrawAddress(e.target.value)}
@@ -872,8 +875,8 @@ export default function ProfilePage() {
                   />
                   <p className="text-[11px] text-[var(--muted)]">
                     {withdrawChain === 'stellar'
-                      ? 'Protocol 22 Asset Contract: CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N'
-                      : 'XRPL XLS-30d Native AMM Token: Hex 4E52000000000000000000000000000000000000'}
+                      ? `Protocol 22 Asset Contract: ${config?.assets?.nxl?.stellarContractId || TESTNET_CONFIG.stellar.nxlContractId}`
+                      : `XRPL Issued Currency: ${config?.assets?.nxl?.xrplCurrency || TESTNET_CONFIG.xrpl.nxlCurrencyCode}`}
                   </p>
                 </div>
 
@@ -1106,7 +1109,7 @@ export default function ProfilePage() {
                         month: 'short',
                         day: 'numeric',
                       })
-                    : '2026'}
+                    : '—'}
                 </span>
               </div>
             </div>
@@ -1428,7 +1431,7 @@ export default function ProfilePage() {
                   <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
                     <span>Compatible with Soroban &amp; SEP-0007</span>
                     <a
-                      href={`https://stellar.expert/explorer/testnet/account/${resolvedStellar}`}
+                      href={config?.explorers.stellarAccount ? `${config.explorers.stellarAccount}${resolvedStellar}` : `https://stellar.expert/explorer/testnet/account/${resolvedStellar}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-cyan-400 hover:underline flex items-center gap-1"
@@ -1518,7 +1521,7 @@ export default function ProfilePage() {
                   <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
                     <span>Compatible with XLS-30d AMM &amp; Escrow</span>
                     <a
-                      href={`https://testnet.xrpl.org/accounts/${resolvedXrpl}`}
+                      href={config?.explorers.xrplAccount ? `${config.explorers.xrplAccount}${resolvedXrpl}` : `https://testnet.xrpl.org/accounts/${resolvedXrpl}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-400 hover:underline flex items-center gap-1"

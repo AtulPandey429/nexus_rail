@@ -1,8 +1,8 @@
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'crypto';
-import { CrossChainSwapService } from '../src/services/crossChainSwapService.js';
-import { resolveUnderpaidOrder } from '../src/services/underpaidOrderService.js';
+import { CrossChainSwapService } from '../src/services/crossChainSwap.service.js';
+import { resolveUnderpaidOrder } from '../src/services/underpaidOrder.service.js';
 import { MongoService, MongoOrderDoc } from '../src/services/mongo.js';
 import { walletService } from '../src/services/wallet.js';
 

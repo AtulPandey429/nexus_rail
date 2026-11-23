@@ -1,32 +1,12 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
-import { productRouter } from './routes/products.js';
-import { authRouter } from './routes/auth.js';
-import { walletRouter } from './routes/wallet.js';
-import { checkoutRouter } from './routes/checkout.js';
-import { cryptoRouter } from './routes/crypto.js';
-import { agentRouter } from './routes/agent.js';
-import { showdownRouter } from './routes/showdowns.js';
-import { reviewRouter } from './routes/reviews.js';
-import { leaderboardRouter } from './routes/leaderboard.js';
-import { analyticsRouter } from './routes/analytics.js';
+import apiRouter from './routes/index.js';
+import { stripeWebhookHandler } from './routes/webhooks.routes.js';
 import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import { SocketService } from './sockets/server.js';
 import { KeepAliveWorker } from './workers/keepAlive.js';
 import { WebhookDlqWorker } from './workers/webhookDlq.js';
-import superPlatformRouter from './routes/superPlatform.js';
-import { cartRouter } from './routes/cart.js';
-import { ordersRouter } from './routes/orders.js';
-import { guideRouter } from './routes/guide.js';
-import { adminRouter } from './routes/admin.js';
-import { stripeWebhookHandler, webhooksRouter } from './routes/webhooks.js';
-import { rwaGoldRouter } from './routes/rwaGold.js';
-import { rwaModularRouter } from './routes/rwa/rwaModularRouter.js';
-import { swapRouter } from './routes/swap.js';
-import { userRouter } from './routes/user.js';
-import { portfolioRouter } from './routes/portfolio.js';
-import { NrTokenService } from './services/nrTokenService.js';
 import type { HealthResponse } from './types/index.js';
 
 const app = express();
@@ -55,41 +35,13 @@ app.use(
     credentials: true,
   })
 );
+
+// Raw body parser specifically for Stripe webhook signature verification
 app.post('/api/v1/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use(express.json());
 
-// Routes
-app.use('/api/v1/products', productRouter);
-app.use('/api/v1/products', reviewRouter);
-app.use('/api/v1/products', leaderboardRouter);
-app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/wallet', walletRouter);
-app.use('/api/v1/checkout', checkoutRouter);
-app.use('/api/v1/crypto', cryptoRouter);
-app.use('/api/v1/agent', agentRouter);
-app.use('/api/v1/showdowns', showdownRouter);
-app.use('/api/v1/analytics', analyticsRouter);
-app.use('/api/v1/superplatform', superPlatformRouter);
-app.use('/api/v1/cart', cartRouter);
-app.use('/api/v1/orders', ordersRouter);
-app.use('/api/v1/guide', guideRouter);
-app.use('/api/v1/admin', adminRouter);
-app.use('/api/v1/webhooks', webhooksRouter);
-app.use('/api/v1/rwa', rwaGoldRouter);
-app.use('/api/v1/rwa-modular', rwaModularRouter);
-app.use('/api/v1/swap', swapRouter);
-app.use('/api/v1/user', userRouter);
-app.use('/api/v1/portfolio', portfolioRouter);
-
-// Public Dual-Rail Token Pool Stats ($NXL / $NR)
-app.get(['/api/v1/nr-token/status', '/api/v1/nxl-token/status'], async (_req: Request, res: Response) => {
-  try {
-    const stats = await NrTokenService.getPoolStats();
-    res.json({ success: true, data: stats });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message || 'Failed to load token pool status' });
-  }
-});
+// Centralized API v1 Routes (GamersGold Architecture)
+app.use('/api/v1', apiRouter);
 
 // Health Check Endpoints
 app.get('/health', (_req: Request, res: Response) => {
@@ -110,36 +62,58 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 // Root welcome route
 app.get('/', (_req: Request, res: Response) => {
   res.json({
-    name: 'NexusRail Core API Engine',
-    status: 'online',
-    healthCheck: '/api/v1/health',
+    status: 'ok',
+    service: 'nexusrail-api',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      apiHealth: '/api/v1/health',
+      platformConfig: '/api/v1/platform/config',
+      products: '/api/v1/products',
+      cryptoRates: '/api/v1/crypto/rates',
+      tokenStatus: '/api/v1/nr-token/status',
+    },
+    uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
   });
-});
-
-// Structured JSON 404 Handler
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ success: false, error: 'API Route Not Found' });
-});
-
-// Structured Global JSON Error Handler (Sanitized for Production)
-app.use((err: any, _req: Request, res: Response, _next: any) => {
-  console.error('❌ [NexusRail API Error]:', err);
-  const isProd = env.NODE_ENV === 'production';
-  const statusCode = typeof err.status === 'number' ? err.status : 500;
-  res.status(statusCode).json({
-    success: false,
-    error: isProd && statusCode >= 500
-      ? 'An unexpected internal error occurred. Please contact system support.'
-      : err.message || 'Internal Server Error',
-  });
-});
-
-app.listen(env.PORT, () => {
-  console.log(`🚀 [NexusRail API] Server listening on http://localhost:${env.PORT}`);
-  LedgerWatcherWorker.startWatchers();
-  SocketService.initializeSockets();
-  KeepAliveWorker.startKeepAlive();
-  WebhookDlqWorker.startWorker();
 });
 
 export default app;
+
+if (process.env.NODE_ENV !== 'test') {
+  const server = app.listen(env.PORT, () => {
+    console.log(`NexusRail Server running on port ${env.PORT}`);
+    console.log(`CORS authorized origins: ${env.CORS_ORIGIN || '*'}`);
+    console.log(`API Platform Config: http://localhost:${env.PORT}/api/v1/platform/config`);
+
+    try {
+      SocketService.initializeSockets();
+    } catch (err: any) {
+      console.warn('⚠️ [SocketService] WebSocket init warning:', err?.message || err);
+    }
+
+    try {
+      LedgerWatcherWorker.startWatchers();
+    } catch (err: any) {
+      console.warn('⚠️ [LedgerWatcherWorker] Worker start warning:', err?.message || err);
+    }
+
+    try {
+      KeepAliveWorker.startKeepAlive();
+    } catch (err: any) {
+      console.warn('⚠️ [KeepAliveWorker] Worker start warning:', err?.message || err);
+    }
+
+    try {
+      WebhookDlqWorker.startWorker();
+    } catch (err: any) {
+      console.warn('⚠️ [WebhookDlqWorker] Worker start warning:', err?.message || err);
+    }
+  });
+
+  process.on('SIGTERM', () => {
+    server.close(() => {
+      console.log('Server gracefully shut down');
+      process.exit(0);
+    });
+  });
+}

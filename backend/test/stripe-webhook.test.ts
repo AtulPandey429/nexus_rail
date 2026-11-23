@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripeWebhookHandler } from '../src/routes/webhooks.js';
+import { stripeWebhookHandler } from '../src/routes/webhooks.routes.js';
 
 describe('Suite: Stripe Webhook Route & Raw Buffer Enforcer', () => {
   test('Strictly rejects parsed JSON object bodies without raw Buffer', async () => {

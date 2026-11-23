@@ -13,9 +13,9 @@ import { computeHydratedProduct } from '../src/services/products.js';
 import { getExtendedMarketSnapshot, type ExtendedMarketSnapshot } from '../src/services/market.js';
 import { MongoService } from '../src/services/mongo.js';
 import { RedisCacheService } from '../src/services/redis.js';
-import { productRouter } from '../src/routes/products.js';
-import { ordersRouter } from '../src/routes/orders.js';
-import { adminRouter } from '../src/routes/admin.js';
+import { productRouter } from '../src/routes/products.routes.js';
+import { ordersRouter } from '../src/routes/orders.routes.js';
+import { adminRouter } from '../src/routes/admin.routes.js';
 import { signToken } from '../src/services/jwt.js';
 
 const MOCK_SNAPSHOT: ExtendedMarketSnapshot = {

@@ -217,157 +217,77 @@ export async function connectMetaMask(): Promise<{ address: string }> {
 }
 
 /**
- * Derives the exact authoritative 28-character Stellar memo_text matching backend HMAC-SHA256 specification
- * format: NR + 26 hex characters
- */
-export async function deriveAuthoritativeStellarMemo(orderId: string): Promise<string> {
-  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-    try {
-      const enc = new TextEncoder();
-      const key = await window.crypto.subtle.importKey(
-        'raw',
-        enc.encode('nexus_rail_settlement_v1_memo'),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
-      const signature = await window.crypto.subtle.sign('HMAC', key, enc.encode(orderId));
-      const hex = Array.from(new Uint8Array(signature))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      return (`NR${hex}`).slice(0, 28).toUpperCase();
-    } catch {
-      // quiet fallback below
-    }
-  }
-  // Deterministic clean fallback if crypto.subtle is unavailable
-  return `NR${orderId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`.padEnd(28, '0').slice(0, 28);
-}
-
-/**
- * Derives the exact authoritative 32-bit unsigned XRPL DestinationTag matching backend HMAC-SHA256 specification
- * within the safe range [100000, 2099999999]
- */
-export async function deriveAuthoritativeXrplTag(orderId: string): Promise<number> {
-  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-    try {
-      const enc = new TextEncoder();
-      const key = await window.crypto.subtle.importKey(
-        'raw',
-        enc.encode('nexus_rail_settlement_v1_tag'),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
-      const signature = new Uint8Array(await window.crypto.subtle.sign('HMAC', key, enc.encode(orderId)));
-      const uint32 = ((signature[0] << 24) | (signature[1] << 16) | (signature[2] << 8) | signature[3]) >>> 0;
-      return (uint32 % 2_000_000_000) + 100_000;
-    } catch {
-      // quiet fallback below
-    }
-  }
-  let hash = 0;
-  for (let i = 0; i < orderId.length; i++) {
-    hash = (hash << 5) - hash + orderId.charCodeAt(i);
-    hash |= 0;
-  }
-  return (Math.abs(hash) % 2_000_000_000) + 100_000;
-}
-
-/**
  * Pay with Freighter Wallet (Prompts Freighter popup to sign and submit genuine transaction)
  */
 export async function payWithFreighter(params: {
-  destination: string;
-  amount: string;
-  memo?: string;
-  orderId?: string;
+  orderId: string;
   authToken?: string;
 }): Promise<{ txHash: string; memoUsed: string; sourceAddress?: string; ledger?: number }> {
+  if (!params.orderId) {
+    throw new Error('An order is required to build the Stellar payment.');
+  }
+
   const { address } = await connectFreighter();
   if (!address) {
     throw new Error('Freighter wallet authorization was cancelled.');
   }
 
-  // Determine authoritative memo
-  let memoToUse: string = params.memo || '';
-  if (!memoToUse && params.orderId) {
-    memoToUse = await deriveAuthoritativeStellarMemo(params.orderId);
-  } else if (!memoToUse) {
-    memoToUse = `NR${address.slice(0, 26).toUpperCase()}`;
+  const token =
+    params.authToken || (typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  // The backend owns the destination, amount and reconciliation memo. The
+  // browser only signs the XDR it receives and submits the signed envelope.
+  const prepRes = await fetch('/api/v1/checkout/stellar/prepare-xdr', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      orderId: params.orderId,
+      sourcePublicKey: address,
+    }),
+  });
+  const prepData = await prepRes.json().catch(() => null);
+  if (!prepRes.ok || !prepData?.success || !prepData?.xdr) {
+    throw new Error(prepData?.error || 'Could not build the Stellar payment transaction.');
   }
 
-  // 1. Prepare genuine Stellar Payment XDR from API if orderId is provided
-  if (params.orderId) {
-    try {
-      const token = params.authToken || (typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null);
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const prepRes = await fetch('/api/v1/checkout/stellar/prepare-xdr', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          orderId: params.orderId,
-          sourcePublicKey: address,
-        }),
-      });
-
-      if (prepRes.ok) {
-        const prepData = await prepRes.json();
-        if (prepData.success && prepData.xdr) {
-          if (prepData.memo && typeof prepData.memo === 'string') {
-            memoToUse = prepData.memo;
-          }
-          // Trigger genuine Freighter signTransaction prompt
-          const signResult = await signFreighterTransaction(prepData.xdr, {
-            networkPassphrase: prepData.networkPassphrase || 'Test SDF Network ; September 2015',
-          });
-
-          const signedXdr = typeof signResult === 'string' ? signResult : (signResult as any)?.signedTxXdr;
-          if (signedXdr) {
-            // Submit signed XDR to Horizon
-            const submitHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) submitHeaders['Authorization'] = `Bearer ${token}`;
-
-            const submitRes = await fetch('/api/v1/checkout/stellar/submit-xdr', {
-              method: 'POST',
-              headers: submitHeaders,
-              body: JSON.stringify({ signedXdr }),
-            });
-
-            if (submitRes.ok) {
-              const submitData = await submitRes.json();
-              if (submitData.success && submitData.txHash) {
-                // Confirm payment directly with backend
-                try {
-                  await fetch('/api/v1/checkout/stellar/verify-payment', {
-                    method: 'POST',
-                    headers: submitHeaders,
-                    body: JSON.stringify({ orderId: params.orderId, txHash: submitData.txHash }),
-                  });
-                } catch {
-                  // Background reconciler will verify
-                }
-                return { txHash: submitData.txHash, memoUsed: memoToUse, sourceAddress: address, ledger: submitData.ledger };
-              }
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      console.warn('⚠️ [Freighter XDR Submission]:', err.message);
-    }
+  const memoToUse = typeof prepData.memo === 'string' ? prepData.memo : '';
+  const signResult = await signFreighterTransaction(prepData.xdr, {
+    networkPassphrase: String(prepData.networkPassphrase || ''),
+  });
+  const signedXdr =
+    typeof signResult === 'string' ? signResult : (signResult as any)?.signedTxXdr;
+  if (!signedXdr) {
+    throw new Error('Freighter did not return a signed transaction.');
   }
 
-  // Fallback direct hash computation with authentic testnet entropy
-  const entropy = new Uint8Array(32);
-  crypto.getRandomValues(entropy);
-  const hash = Array.from(entropy)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  const submitRes = await fetch('/api/v1/checkout/stellar/submit-xdr', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ signedXdr }),
+  });
+  const submitData = await submitRes.json().catch(() => null);
+  if (!submitRes.ok || !submitData?.success || !submitData?.txHash) {
+    throw new Error(submitData?.error || 'Horizon rejected the transaction.');
+  }
 
-  return { txHash: hash, memoUsed: memoToUse, sourceAddress: address };
+  try {
+    await fetch('/api/v1/checkout/stellar/verify-payment', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ orderId: params.orderId, txHash: submitData.txHash }),
+    });
+  } catch {
+    // Background reconciler will verify
+  }
+
+  return {
+    txHash: submitData.txHash,
+    memoUsed: memoToUse,
+    sourceAddress: address,
+    ledger: submitData.ledger,
+  };
 }
 
 /**
@@ -598,11 +518,17 @@ export async function authenticateWalletWithChallenge(params: {
 // Multi-Rail Trustline Operations for $NXL Dual-Rail Architecture (XRPL & Stellar)
 // ============================================================================
 
-export const XRPL_NR_ISSUER_ADDRESS = 'rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU';
-export const XRPL_NR_CURRENCY = 'NXL';
+import { TESTNET_CONFIG } from '../utils/constants';
 
-export const STELLAR_NR_ISSUER_PUBLIC = 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ';
-export const STELLAR_NR_ASSET_CODE = 'NXL';
+export const XRPL_NR_ISSUER_ADDRESS =
+  process.env.NEXT_PUBLIC_XRPL_NR_ISSUER_ADDRESS || TESTNET_CONFIG.xrpl.nxlIssuerAddress;
+export const XRPL_NR_CURRENCY =
+  process.env.NEXT_PUBLIC_XRPL_NR_CURRENCY_CODE || TESTNET_CONFIG.xrpl.nxlCurrencyCode;
+
+export const STELLAR_NR_ISSUER_PUBLIC =
+  process.env.NEXT_PUBLIC_STELLAR_NR_ISSUER_PUBLIC || TESTNET_CONFIG.stellar.nxlIssuerPublic;
+export const STELLAR_NR_ASSET_CODE =
+  process.env.NEXT_PUBLIC_STELLAR_NR_ASSET_CODE || TESTNET_CONFIG.stellar.nxlAssetCode;
 
 export interface XrplTrustlineStatus {
   hasTrustline: boolean;
@@ -752,6 +678,7 @@ export function openAlbedoTrustline(params?: {
 }): Window | null {
   const code = params?.assetCode || STELLAR_NR_ASSET_CODE;
   const issuer = params?.issuer || STELLAR_NR_ISSUER_PUBLIC;
+  if (!code || !issuer) return null;
   const url = `https://albedo.link/confirm?action=trust&asset_code=${encodeURIComponent(code)}&asset_issuer=${encodeURIComponent(issuer)}&network=testnet`;
 
   if (typeof window !== 'undefined') {
@@ -847,8 +774,12 @@ export async function setGemWalletTrustline(params?: {
   value?: string;
 }): Promise<{ txHash: string }> {
   const issuer = params?.issuer || XRPL_NR_ISSUER_ADDRESS;
-  const currency = params?.currency || 'NXL';
+  const currency = params?.currency || XRPL_NR_CURRENCY;
   const value = params?.value || '1000000';
+
+  if (!issuer || !currency) {
+    throw new Error('XRPL NXL issuer is not configured.');
+  }
 
   const isInstalled = await checkGemWalletInstalled();
   if (!isInstalled && !(window as any).gemWallet) {
@@ -882,8 +813,12 @@ export async function setCrossmarkTrustline(params?: {
     throw new Error('Crossmark wallet extension is not installed.');
   }
   const issuer = params?.issuer || XRPL_NR_ISSUER_ADDRESS;
-  const currency = params?.currency || 'NXL';
+  const currency = params?.currency || XRPL_NR_CURRENCY;
   const value = params?.value || '1000000';
+
+  if (!issuer || !currency) {
+    throw new Error('XRPL NXL issuer is not configured.');
+  }
 
   const tx = {
     TransactionType: 'TrustSet',

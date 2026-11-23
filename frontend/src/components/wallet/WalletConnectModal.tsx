@@ -35,6 +35,7 @@ import {
   authenticateWalletWithChallenge,
   buildSep0007Uri,
 } from '@/lib/wallets';
+import { PLATFORM_STELLAR_VAULT } from '@/lib/vault';
 import { notifySession, readSession } from '@/lib/shop';
 
 export interface WalletConnectedAccount {
@@ -339,8 +340,12 @@ export function WalletConnectModal({
         setConnectingWallet(null);
       } else if (wallet.id === 'lobstr') {
         // Stellar Mobile App: Generate SEP-0007 QR code & deep link
+        const destination = PLATFORM_STELLAR_VAULT;
+        if (!destination) {
+          throw new Error('Stellar platform vault address is not configured.');
+        }
         const sep0007Uri = buildSep0007Uri({
-          destination: 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC',
+          destination,
           amount: '0.00001',
           memo: 'NEXUSCONNECT',
         });

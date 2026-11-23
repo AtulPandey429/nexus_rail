@@ -302,6 +302,7 @@ export interface PlatformConfigDTO {
   gas_flat_cents: number;
   nr_buyback_share_pct: number;
   cashback_pct: number;
+  nxl_checkout_discount_pct: number;
   is_paused: boolean;
   updated_at: string;
   updated_by?: string;

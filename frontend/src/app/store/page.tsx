@@ -72,7 +72,7 @@ const ORACLE_LABELS: Record<string, string> = {
 
 export default function StoreCatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
-  const [maxPrice, setMaxPrice] = useState<number>(600);
+  const [maxPrice, setMaxPrice] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('featured');
@@ -85,19 +85,6 @@ export default function StoreCatalogPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [mobileFilterOpen, setMobileFilterOpen] = useState<boolean>(false);
 
-  // Reset pagination to page 1 whenever filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, selectedCategory, maxPrice, sortBy]);
-
-  // Debounce search query to prevent unnecessary re-filtering and input jank
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim().toLowerCase());
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
   // Dynamic API Catalog with 30-minute caching
   const [catalog, setCatalog] = useState<CatalogItem[]>(() => {
     const cached = getCachedCatalog();
@@ -107,6 +94,20 @@ export default function StoreCatalogPage() {
   const [catalogReady, setCatalogReady] = useState(false);
   const [catalogError, setCatalogError] = useState('');
   const [catalogSource, setCatalogSource] = useState<'api' | 'cache'>('cache');
+
+  // Derive maximum catalog price dynamically from real product data
+  const catalogMaxPrice = useMemo(() => {
+    if (!catalog || catalog.length === 0) return 500;
+    const maxVal = Math.max(...catalog.map((p) => p.priceCents / 100));
+    return Math.max(100, Math.ceil(maxVal / 50) * 50);
+  }, [catalog]);
+
+  const effectiveMaxPrice = maxPrice ?? catalogMaxPrice;
+
+  // Reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedCategory, maxPrice, sortBy]);
 
   // Live Conversion Rates with 30-minute caching
   const { xlmUsd, xrpUsd, refreshRates, loading: ratesLoading } = useLiveExchangeRates();
@@ -218,7 +219,7 @@ export default function StoreCatalogPage() {
           product.title.toLowerCase().includes(debouncedSearch) ||
           product.description.toLowerCase().includes(debouncedSearch) ||
           product.sku.toLowerCase().includes(debouncedSearch);
-        const matchesPrice = product.priceCents / 100 <= maxPrice;
+        const matchesPrice = product.priceCents / 100 <= effectiveMaxPrice;
         return matchesCategory && matchesSearch && matchesPrice;
       })
       .sort((a, b) => {
@@ -230,7 +231,7 @@ export default function StoreCatalogPage() {
           (item.isBasket ? 10000 : item.isLiveAsset ? 5000 : 0) + item.upvotes;
         return score(b) - score(a);
       });
-  }, [resolvedCatalog, selectedCategory, debouncedSearch, maxPrice, sortBy]);
+  }, [resolvedCatalog, selectedCategory, debouncedSearch, effectiveMaxPrice, sortBy]);
 
   // Pagination Computations
   const totalProducts = filteredProducts.length;
@@ -359,7 +360,7 @@ export default function StoreCatalogPage() {
               type="button"
               onClick={() => setMobileFilterOpen((prev) => !prev)}
               className={`lg:hidden h-10 px-3.5 rounded-xl nexus-glass-surface border text-xs font-mono flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                mobileFilterOpen || maxPrice < 600
+                mobileFilterOpen || (maxPrice !== null && maxPrice < catalogMaxPrice)
                   ? 'border-[var(--gold)] text-[var(--gold-bright)] bg-[var(--gold)]/10 font-bold'
                   : 'border-[var(--border)] text-[var(--foreground)]'
               }`}
@@ -367,7 +368,7 @@ export default function StoreCatalogPage() {
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>Filters</span>
-              {maxPrice < 600 && (
+              {maxPrice !== null && maxPrice < catalogMaxPrice && (
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
               )}
             </button>
@@ -426,15 +427,15 @@ export default function StoreCatalogPage() {
                 Filter by Max Price
               </span>
               <span className="text-xs font-mono font-bold text-[var(--foreground)]">
-                Up to ${maxPrice}
+                Up to ${effectiveMaxPrice}
               </span>
             </div>
             <input
               type="range"
               min="0"
-              max="600"
+              max={catalogMaxPrice}
               step="10"
-              value={maxPrice}
+              value={effectiveMaxPrice}
               onChange={(e) => setMaxPrice(Number(e.target.value))}
               className="w-full h-1.5 bg-[var(--card)] rounded-lg appearance-none cursor-pointer accent-[var(--gold)]"
             />
@@ -442,12 +443,12 @@ export default function StoreCatalogPage() {
               <span>$0</span>
               <button
                 type="button"
-                onClick={() => setMaxPrice(600)}
+                onClick={() => setMaxPrice(null)}
                 className="text-[11px] text-[var(--gold)] hover:underline cursor-pointer"
               >
                 Reset Price
               </button>
-              <span>$600</span>
+              <span>${catalogMaxPrice}</span>
             </div>
           </div>
         )}
@@ -496,15 +497,15 @@ export default function StoreCatalogPage() {
                 <input
                   type="range"
                   min="0"
-                  max="600"
+                  max={catalogMaxPrice}
                   step="10"
-                  value={maxPrice}
+                  value={effectiveMaxPrice}
                   onChange={(e) => setMaxPrice(Number(e.target.value))}
                   className="w-full h-1 bg-[var(--card)] rounded-lg appearance-none cursor-pointer accent-[var(--gold)]"
                 />
                 <div className="flex justify-between text-xs font-mono text-[var(--muted)]">
                   <span>$0</span>
-                  <span className="text-[var(--foreground)] font-bold">${maxPrice}</span>
+                  <span className="text-[var(--foreground)] font-bold">${effectiveMaxPrice}</span>
                 </div>
               </div>
             </div>
@@ -534,7 +535,7 @@ export default function StoreCatalogPage() {
                   ? 'LOADING LIVE CATALOG…'
                   : `SHOWING ${totalProducts === 0 ? 0 : startIndex + 1}–${endIndex} OF ${totalProducts} PRODUCTS • PAGE ${safeCurrentPage}/${totalPages}`}
               </span>
-              <span>NexusRail Live Catalog / 2026</span>
+              <span>NexusRail Live Catalog / {new Date().getFullYear()}</span>
             </div>
 
             {/* Product & Basket Grid */}
@@ -736,7 +737,7 @@ export default function StoreCatalogPage() {
                   onClick={() => {
                     setSelectedCategory('all');
                     setSearchQuery('');
-                    setMaxPrice(600);
+                    setMaxPrice(null);
                   }}
                   className="px-3.5 py-1.5 rounded-xl bg-[var(--gold)] text-black font-mono text-xs font-bold hover:bg-[var(--gold-bright)] transition-colors mt-2"
                 >

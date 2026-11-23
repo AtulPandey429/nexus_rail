@@ -25,6 +25,11 @@ export interface ExchangeRatesData {
 const RATES_STORAGE_KEY = 'nexus_fx_rates_cache_v1';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes cache window
 
+const BINANCE_API_URL = process.env.NEXT_PUBLIC_BINANCE_API_URL || 'https://api.binance.com';
+const KRAKEN_API_URL = process.env.NEXT_PUBLIC_KRAKEN_API_URL || 'https://api.kraken.com';
+const COINBASE_API_URL = process.env.NEXT_PUBLIC_COINBASE_API_URL || 'https://api.coinbase.com';
+const COINGECKO_API_URL = process.env.NEXT_PUBLIC_COINGECKO_API_URL || 'https://api.coingecko.com';
+
 let inFlightPromise: Promise<ExchangeRatesData> | null = null;
 
 /**
@@ -116,8 +121,8 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
     // 2. Direct Binance Public Ticker API Fallback
     try {
       const [xlmRes, xrpRes] = await Promise.all([
-        fetch('https://api.binance.com/api/v3/ticker/price?symbol=XLMUSDT').then((r) => r.json()),
-        fetch('https://api.binance.com/api/v3/ticker/price?symbol=XRPUSDT').then((r) => r.json()),
+        fetch(`${BINANCE_API_URL}/api/v3/ticker/price?symbol=XLMUSDT`).then((r) => r.json()),
+        fetch(`${BINANCE_API_URL}/api/v3/ticker/price?symbol=XRPUSDT`).then((r) => r.json()),
       ]);
 
       const xlmPrice = parseFloat(xlmRes?.price);
@@ -142,7 +147,7 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
 
     // 3. Direct Kraken Public Ticker API Fallback (US-compliant, CORS enabled, no rate limits)
     try {
-      const res = await fetch('https://api.kraken.com/0/public/Ticker?pair=XRPUSD,XLMUSD');
+      const res = await fetch(`${KRAKEN_API_URL}/0/public/Ticker?pair=XRPUSD,XLMUSD`);
       if (res.ok) {
         const json = await res.json();
         const xrpPrice = parseFloat(json?.result?.XXRPZUSD?.c?.[0]);
@@ -167,7 +172,7 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
 
     // 4. Direct Coinbase Public Exchange Rates API Fallback (CORS enabled, no rate limits)
     try {
-      const res = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD');
+      const res = await fetch(`${COINBASE_API_URL}/v2/exchange-rates?currency=USD`);
       if (res.ok) {
         const json = await res.json();
         const ratesMap = json?.data?.rates;
@@ -193,7 +198,7 @@ export async function fetchLiveRates(forceRefresh = false): Promise<ExchangeRate
 
     // 5. Direct CoinGecko Public API Fallback (Safely guarded against HTTP 429)
     try {
-      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=stellar,ripple&vs_currencies=usd');
+      const res = await fetch(`${COINGECKO_API_URL}/api/v3/simple/price?ids=stellar,ripple&vs_currencies=usd`);
       if (res.ok) {
         const json = await res.json();
         const xlmPrice = json?.stellar?.usd;

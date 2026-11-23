@@ -16,6 +16,7 @@ import {
   Search,
 } from 'lucide-react';
 import { fetchOrders } from '@/lib/shop';
+import { TESTNET_CONFIG } from '@/utils/constants';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -41,8 +42,10 @@ function matchesRailFilter(rail: string, filter: RailFilter) {
 function explorerUrlForRail(rail: string, txHash?: string) {
   if (!txHash) return '';
   const value = rail.toUpperCase();
-  if (/XRPL|XRP|RLUSD/.test(value)) return `https://testnet.xrpl.org/transactions/${txHash}`;
-  if (/STELLAR|XLM|USDC/.test(value)) return `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+  const xrplBase = process.env.NEXT_PUBLIC_XRPL_EXPLORER_URL || TESTNET_CONFIG.xrpl.explorerTxBase;
+  const stellarBase = process.env.NEXT_PUBLIC_STELLAR_EXPLORER_URL || TESTNET_CONFIG.stellar.explorerTxBase;
+  if (/XRPL|XRP|RLUSD/.test(value)) return `${xrplBase.replace(/\/$/, '')}/${txHash}`;
+  if (/STELLAR|XLM|USDC/.test(value)) return `${stellarBase.replace(/\/$/, '')}/${txHash}`;
   return '';
 }
 

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { stellarProvider, stellarUsdcProvider, xrplProvider } from '../services/crypto/index.js';
 import { MongoService, MongoOrderDoc } from '../services/mongo.js';
 import { settlementEmitter } from '../services/settlementEvents.js';
-import { PortfolioService } from '../services/portfolioService.js';
+import { PortfolioService } from '../services/portfolio.service.js';
 
 export class LedgerWatcherWorker {
   private static isRunning = false;

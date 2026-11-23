@@ -1,8 +1,10 @@
 'use client';
 
 import { connectFreighter, signFreighterTransaction } from '@/lib/wallets';
+import { TESTNET_CONFIG } from '@/utils/constants';
 
-const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
+const TESTNET_PASSPHRASE =
+  process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE || TESTNET_CONFIG.stellar.networkPassphrase;
 
 async function signXdrWithFreighter(unsignedXdr: string, address: string): Promise<string> {
   const signed = await signFreighterTransaction(unsignedXdr, {

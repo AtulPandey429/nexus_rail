@@ -23,6 +23,7 @@ import {
   SessionUser,
   onSessionChange,
 } from '@/lib/shop';
+import { usePlatformConfig } from '@/lib/platformConfig';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -40,6 +41,7 @@ export default function CartPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const { config } = usePlatformConfig();
 
   // Promo code state (server-validated)
   const [promoCode, setPromoCode] = useState('');
@@ -114,14 +116,18 @@ export default function CartPage() {
 
   const discountCents = useMemo(() => {
     if (!appliedPromo) return 0;
-    if (appliedDiscountPercent > 0) {
-      return Math.min(Math.max(0, subtotalCents - 100), Math.round((subtotalCents * appliedDiscountPercent) / 100));
+    if (appliedDiscountCents > 0) {
+      return Math.min(subtotalCents, appliedDiscountCents);
     }
-    return appliedDiscountCents;
+    if (appliedDiscountPercent > 0) {
+      return Math.min(subtotalCents, Math.round((subtotalCents * appliedDiscountPercent) / 100));
+    }
+    return 0;
   }, [appliedPromo, appliedDiscountPercent, appliedDiscountCents, subtotalCents]);
 
   const totalCents = Math.max(0, subtotalCents - discountCents);
-  const estimatedCashbackUsd = ((totalCents * 0.02) / 100).toFixed(2);
+  const cashbackPct = config?.fees?.cashbackPct ?? 2;
+  const estimatedCashbackUsd = ((totalCents * (cashbackPct / 100)) / 100).toFixed(2);
   const totalItemCount = items.reduce((acc, i) => acc + i.qty, 0);
 
   // Server-authoritative promo validation
@@ -329,30 +335,6 @@ export default function CartPage() {
                     {applyingPromo ? 'Checking...' : 'Apply code'}
                   </button>
                 </form>
-
-                {/* 1-Click Quick Promo Chips */}
-                <div className="flex flex-wrap items-center gap-2 mt-3">
-                  <span className="text-[11px] font-mono text-[var(--muted)]">Available offers:</span>
-                  {[
-                    { code: 'NEXUS10', label: 'NEXUS10 · 10% off' },
-                    { code: 'WELCOME15', label: 'WELCOME15 · 15% first order' },
-                    { code: 'NRHOLDER20', label: 'NRHOLDER20 · 20% VIP ($NXL)' },
-                  ].map((offer) => (
-                    <button
-                      key={offer.code}
-                      type="button"
-                      disabled={applyingPromo}
-                      onClick={() => void applyPromoCode(offer.code)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-colors cursor-pointer ${
-                        appliedPromo === offer.code
-                          ? 'bg-[var(--gold)]/20 border-[var(--gold)] text-[var(--gold)] font-bold'
-                          : 'bg-[var(--card-subtle)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--gold)]/40'
-                      }`}
-                    >
-                      {offer.label}
-                    </button>
-                  ))}
-                </div>
 
                 {appliedPromo && (
                   <p className="text-[11px] font-mono text-[var(--gold)] mt-2.5 flex items-center gap-1.5">

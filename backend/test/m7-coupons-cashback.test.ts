@@ -1,10 +1,10 @@
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'crypto';
-import { CouponService } from '../src/services/couponService.js';
+import { CouponService } from '../src/services/coupon.service.js';
 import { MongoService, MongoOrderDoc } from '../src/services/mongo.js';
 import { walletService } from '../src/services/wallet.js';
-import { NR_MICRO_SCALE } from '../src/services/nrTokenService.js';
+import { NR_MICRO_SCALE } from '../src/services/nrToken.service.js';
 
 describe('Phase 2 (M7): Tamper-Proof Smart Coupons & Automatic 2% $NXL Cashback', () => {
   const runId = crypto.randomBytes(4).toString('hex');

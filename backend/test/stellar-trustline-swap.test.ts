@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DualRailTokenService, STELLAR_NR_ISSUER } from '../src/services/dualRailTokenService.js';
+import { DualRailTokenService, STELLAR_NR_ISSUER } from '../src/services/dualRailToken.service.js';
 import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
 
 test('Suite: Stellar Trustline Verification & Bridge Guards', async (t) => {

@@ -16,12 +16,12 @@ import {
   computeSpotPriceUsd,
   computeBuyQuoteFromPool,
   computeSellQuoteFromPool,
-} from '../src/services/nrTokenService.js';
+} from '../src/services/nrToken.service.js';
 import { walletService } from '../src/services/wallet.js';
 import { MongoService, MongoOrderDoc, MongoTokenPoolDoc } from '../src/services/mongo.js';
-import { swapRouter } from '../src/routes/swap.js';
-import { checkoutRouter } from '../src/routes/checkout.js';
-import { adminRouter } from '../src/routes/admin.js';
+import { swapRouter } from '../src/routes/swap.routes.js';
+import { checkoutRouter } from '../src/routes/checkout.routes.js';
+import { adminRouter } from '../src/routes/admin.routes.js';
 import { signToken } from '../src/services/jwt.js';
 
 describe('Suite: Module 1 — $NR Native Token & Constant-Product AMM', () => {

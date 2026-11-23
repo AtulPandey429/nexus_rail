@@ -4,8 +4,8 @@ import { MongoService, MongoOrderDoc, MongoCartItemDoc, OrderItem } from './mong
 import { ProductService } from './products.js';
 import { settlementEmitter } from './settlementEvents.js';
 import { OrderSequenceService } from './orderSequence.js';
-import { PortfolioService } from './portfolioService.js';
-import { CouponService } from './couponService.js';
+import { PortfolioService } from './portfolio.service.js';
+import { CouponService } from './coupon.service.js';
 import crypto from 'crypto';
 
 function stripe(): Stripe {

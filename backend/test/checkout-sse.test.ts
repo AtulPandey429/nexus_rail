@@ -10,7 +10,7 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 import { settlementEmitter } from '../src/services/settlementEvents.js';
 import { MongoService, MongoOrderDoc } from '../src/services/mongo.js';
-import { checkoutRouter } from '../src/routes/checkout.js';
+import { checkoutRouter } from '../src/routes/checkout.routes.js';
 import { signToken } from '../src/services/jwt.js';
 
 describe('Suite: Real-Time SSE Settlement Stream (FEAT-01)', () => {

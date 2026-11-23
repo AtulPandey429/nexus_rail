@@ -1,8 +1,8 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { PortfolioService, CASHOUT_SPREAD_BPS } from '../src/services/portfolioService.js';
+import { PortfolioService, CASHOUT_SPREAD_BPS } from '../src/services/portfolio.service.js';
 import { ProductService } from '../src/services/products.js';
-import { NrTokenService } from '../src/services/nrTokenService.js';
+import { NrTokenService } from '../src/services/nrToken.service.js';
 import { walletService } from '../src/services/wallet.js';
 import { MongoService, MongoOrderDoc } from '../src/services/mongo.js';
 import crypto from 'crypto';

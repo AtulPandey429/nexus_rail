@@ -9,14 +9,14 @@ dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 import { MongoService } from '../src/services/mongo.js';
-import { AdminAnalyticsService } from '../src/services/adminAnalyticsService.js';
+import { AdminAnalyticsService } from '../src/services/adminAnalytics.service.js';
 import { SorobanService } from '../src/services/soroban.js';
-import { TreasuryService } from '../src/services/treasuryService.js';
-import { PortfolioService } from '../src/services/portfolioService.js';
+import { TreasuryService } from '../src/services/treasury.service.js';
+import { PortfolioService } from '../src/services/portfolio.service.js';
 import { RedisCacheService } from '../src/services/redis.js';
 import { signToken } from '../src/services/jwt.js';
-import { adminRouter } from '../src/routes/admin.js';
-import { analyticsRouter } from '../src/routes/analytics.js';
+import { adminRouter } from '../src/routes/admin.routes.js';
+import { analyticsRouter } from '../src/routes/analytics.routes.js';
 import type { AdminAnalyticsGranularity, AdminAnalyticsRangeKey } from '../src/types/index.js';
 
 describe('Suite: Admin Analytics, Performance & Security', () => {
