@@ -35,7 +35,11 @@ import {
 import { readSession, clearSession, notifySession, onSessionChange, SessionUser } from '@/lib/shop';
 import { usePlatformConfig } from '@/lib/platformConfig';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
-import { SwapTransactionLeg, isRealOnChainTxHash } from '@/components/swap/SwapTransactionTimeline';
+import {
+  SwapTransactionLeg,
+  getSwapTypeLabel,
+  isRealOnChainTxHash,
+} from '@/components/swap/SwapTransactionTimeline';
 import type { UserPortfolioResponse, HydratedHolding } from '@/types';
 
 interface ProfileData {
@@ -1952,7 +1956,7 @@ export default function ProfilePage() {
                                 />
                                 <div>
                                   <span className="font-bold text-[var(--foreground)]">
-                                    {b.settlementType === 'INTERNAL_LEDGER' ? 'Internal Ledger Swap' : 'Cross-Chain Bridge'}
+                                    {getSwapTypeLabel(b)}
                                   </span>
                                   <span className="block text-[11px] text-[var(--muted)]">Rail: {b.chain || 'INTERNAL'}</span>
                                 </div>

@@ -14,6 +14,95 @@ import {
 
 export type SwapRail = 'XRPL' | 'STELLAR' | 'INTERNAL_LEDGER';
 
+export type SwapKind = 'SAME_CHAIN' | 'CROSS_CHAIN' | 'INTERNAL_LEDGER';
+
+export interface SwapHistoryClassificationInput {
+  swapKind?: SwapKind;
+  settlementType?: 'ON_CHAIN' | 'INTERNAL_LEDGER' | 'HYBRID' | 'FAILED';
+  chain?: string;
+  destinationAddress?: string;
+  amount?: string;
+  transactions?: SwapTransactionLeg[];
+  details?: {
+    fromAsset?: string;
+    toAsset?: string;
+    direction?: string;
+    mode?: string;
+  };
+}
+
+function inferFrontendRail(asset?: string, address?: string): SwapRail {
+  const upper = (asset || '').trim().toUpperCase();
+  if (upper === 'XRP') return 'XRPL';
+  if (upper === 'XLM') return 'STELLAR';
+  if (upper === 'NXL') {
+    const clean = (address || '').trim();
+    if (clean.startsWith('r')) return 'XRPL';
+    if (clean.startsWith('G')) return 'STELLAR';
+  }
+  return 'INTERNAL_LEDGER';
+}
+
+function parseAssetsFromAmount(amount?: string): { fromAsset?: string; toAsset?: string } {
+  if (typeof amount !== 'string') return {};
+  const match = amount.match(/^\s*[\d.,]+\s+([A-Za-z0-9]+)\s*(?:->|→)\s*[\d.,]+\s+([A-Za-z0-9]+)/);
+  if (!match) return {};
+  return { fromAsset: match[1], toAsset: match[2] };
+}
+
+/**
+ * Resolves whether a swap history entry is an internal ledger swap, a same-chain swap,
+ * or a cross-chain bridge across two distinct blockchains.
+ */
+export function resolveSwapKind(entry: SwapHistoryClassificationInput): SwapKind {
+  if (entry.settlementType === 'INTERNAL_LEDGER' || entry.swapKind === 'INTERNAL_LEDGER') {
+    return 'INTERNAL_LEDGER';
+  }
+  if (entry.swapKind === 'SAME_CHAIN' || entry.swapKind === 'CROSS_CHAIN') {
+    return entry.swapKind;
+  }
+
+  const direction = String(entry.details?.direction || '').toUpperCase();
+  if (direction === 'XRPL_TO_STELLAR' || direction === 'STELLAR_TO_XRPL') {
+    return 'CROSS_CHAIN';
+  }
+  const mode = String(entry.details?.mode || '').toUpperCase();
+  if (mode === 'SOROBAN_BRIDGE_BURN' || mode === 'SOROBAN_BRIDGE_ESCROW') {
+    return 'CROSS_CHAIN';
+  }
+
+  const legs = Array.isArray(entry.transactions) ? entry.transactions : [];
+  const parsed = parseAssetsFromAmount(entry.amount);
+  const fromAsset = entry.details?.fromAsset || parsed.fromAsset;
+  const toAsset = entry.details?.toAsset || parsed.toAsset;
+
+  const incomingLeg = legs.find((l) => l.direction === 'INCOMING');
+  const outgoingOnChainLeg = [...legs].reverse().find((l) => l.direction === 'OUTGOING' && l.rail !== 'INTERNAL_LEDGER');
+  const lastOutgoingLeg = [...legs].reverse().find((l) => l.direction === 'OUTGOING');
+
+  const fromRail: SwapRail = incomingLeg?.rail || inferFrontendRail(fromAsset);
+  const toRail: SwapRail =
+    outgoingOnChainLeg?.rail || lastOutgoingLeg?.rail || inferFrontendRail(toAsset, entry.destinationAddress);
+
+  if (fromRail === 'INTERNAL_LEDGER' && toRail === 'INTERNAL_LEDGER') {
+    return 'INTERNAL_LEDGER';
+  }
+  if (fromRail !== 'INTERNAL_LEDGER' && toRail !== 'INTERNAL_LEDGER' && fromRail !== toRail) {
+    return 'CROSS_CHAIN';
+  }
+  return 'SAME_CHAIN';
+}
+
+/**
+ * Returns the human-readable label for a swap history entry.
+ */
+export function getSwapTypeLabel(entry: SwapHistoryClassificationInput): string {
+  const kind = resolveSwapKind(entry);
+  if (kind === 'INTERNAL_LEDGER') return 'Internal Ledger Swap';
+  if (kind === 'CROSS_CHAIN') return 'Cross-Chain Bridge';
+  return 'Same-Chain Swap';
+}
+
 export type SwapLegStage =
   | 'DEPOSIT'
   | 'INTERNAL_DEBIT'

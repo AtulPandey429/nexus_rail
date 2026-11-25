@@ -18,6 +18,7 @@ import { STELLAR_TESTNET, XRPL_TESTNET } from '../utils/constants.js';
 import {
   SwapTransactionLeg,
   buildExplorerTxUrl,
+  classifySwapKind,
   deriveFallbackLegs,
   sanitizeOnChainTxHash,
 } from '../utils/swapTransactions.js';
@@ -711,11 +712,26 @@ export class SwapController {
             timestamp: l.created_at,
           });
         }
+        const classification = classifySwapKind({
+          fromAsset: l.details?.fromAsset,
+          toAsset: l.details?.toAsset || l.details?.currency || l.details?.assetCode,
+          userDestinationAddress: l.details?.destinationAddress,
+          transactions: legs,
+          direction: l.details?.direction,
+          mode: l.details?.mode,
+        });
         return {
           id: l.id,
           swapId: l.reference_id,
           chain: l.chain,
-          action: l.action,
+          action:
+            l.action === 'CROSS_CHAIN_BRIDGE' && !classification.isCrossChain
+              ? 'SAME_CHAIN_SWAP'
+              : l.action,
+          swapKind: classification.swapKind,
+          isCrossChain: classification.isCrossChain,
+          fromRail: classification.fromRail,
+          toRail: classification.toRail,
           amount: l.amount_primary || '',
           destinationAddress: l.details?.destinationAddress || l.operator_id,
           txHash: realTxHash || '',
@@ -740,6 +756,14 @@ export class SwapController {
         const legs = s.transactions && s.transactions.length > 0 ? s.transactions : deriveFallbackLegs(s);
         const cleanDeposit = sanitizeOnChainTxHash(s.depositTxHash) || undefined;
         const cleanPayout = sanitizeOnChainTxHash(s.payoutTxHash) || undefined;
+        const classification = classifySwapKind({
+          fromAsset: s.fromAsset,
+          toAsset: s.toAsset,
+          userSourceAddress: s.userSourceAddress,
+          userDestinationAddress: s.userDestinationAddress,
+          settlementType: s.settlementType,
+          transactions: legs,
+        });
         formatted.push({
           id: s.swapId,
           swapId: s.swapId,
@@ -755,7 +779,16 @@ export class SwapController {
               : s.userDestinationAddress?.startsWith('r')
               ? 'XRPL'
               : 'INTERNAL',
-          action: s.settlementType === 'INTERNAL_LEDGER' ? 'INTERNAL_LEDGER_SWAP' : 'CROSS_CHAIN_SWAP',
+          action:
+            classification.swapKind === 'INTERNAL_LEDGER'
+              ? 'INTERNAL_LEDGER_SWAP'
+              : classification.swapKind === 'CROSS_CHAIN'
+              ? 'CROSS_CHAIN_SWAP'
+              : 'SAME_CHAIN_SWAP',
+          swapKind: classification.swapKind,
+          isCrossChain: classification.isCrossChain,
+          fromRail: classification.fromRail,
+          toRail: classification.toRail,
           amount: `${s.payAmount} ${s.fromAsset} -> ${s.receiveAmount} ${s.toAsset}`,
           destinationAddress: s.userDestinationAddress,
           txHash: cleanPayout || cleanDeposit || '',

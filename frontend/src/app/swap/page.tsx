@@ -97,6 +97,7 @@ import {
 import {
   SwapTransactionTimeline,
   SwapTransactionLeg,
+  getSwapTypeLabel,
   isRealOnChainTxHash,
 } from '@/components/swap/SwapTransactionTimeline';
 
@@ -2267,7 +2268,7 @@ export default function SwapPage() {
                               />
                               <div>
                                 <span className="font-bold text-[var(--foreground)]">
-                                  {b.settlementType === 'INTERNAL_LEDGER' ? 'Internal Ledger Swap' : 'Cross-Chain Bridge'}
+                                  {getSwapTypeLabel(b)}
                                 </span>
                                 <span className="block text-[11px] text-[var(--muted)]">Rail: {b.chain || 'INTERNAL'}</span>
                               </div>

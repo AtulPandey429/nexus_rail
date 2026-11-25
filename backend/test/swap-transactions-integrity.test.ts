@@ -11,6 +11,7 @@ import {
   sanitizeOnChainTxHash,
   buildExplorerTxUrl,
   deriveFallbackLegs,
+  classifySwapKind,
 } from '../src/utils/swapTransactions.js';
 import { NrTokenService } from '../src/services/nrToken.service.js';
 import { CrossChainSwapService } from '../src/services/crossChainSwap.service.js';
@@ -80,6 +81,54 @@ describe('Suite: Swap Transaction Integrity & Zero Fake Hashes', () => {
     assert.equal(legs[1].txHash, null);
     assert.equal(legs[1].explorerUrl, null);
     assert.equal(legs[1].ledgerRef, 'JE-NR-1552');
+  });
+
+  it('classifySwapKind distinguishes same-chain swaps from cross-chain bridges even when FAILED', () => {
+    const sameChainXrplFailed = classifySwapKind({
+      fromAsset: 'XRP',
+      toAsset: 'NXL',
+      userDestinationAddress: 'r9ksrsLGVhbVeMB2fQHtBoDfDkcZ5m2Gdt',
+      settlementType: 'FAILED',
+    });
+    assert.equal(sameChainXrplFailed.swapKind, 'SAME_CHAIN');
+    assert.equal(sameChainXrplFailed.isCrossChain, false);
+    assert.equal(sameChainXrplFailed.fromRail, 'XRPL');
+    assert.equal(sameChainXrplFailed.toRail, 'XRPL');
+
+    const sameChainStellar = classifySwapKind({
+      fromAsset: 'XLM',
+      toAsset: 'NXL',
+      userDestinationAddress: 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
+      settlementType: 'ON_CHAIN',
+    });
+    assert.equal(sameChainStellar.swapKind, 'SAME_CHAIN');
+    assert.equal(sameChainStellar.isCrossChain, false);
+
+    const crossChainXrpToXlm = classifySwapKind({
+      fromAsset: 'XRP',
+      toAsset: 'XLM',
+      userDestinationAddress: 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
+      settlementType: 'ON_CHAIN',
+    });
+    assert.equal(crossChainXrpToXlm.swapKind, 'CROSS_CHAIN');
+    assert.equal(crossChainXrpToXlm.isCrossChain, true);
+
+    const crossChainXrpToStellarNxl = classifySwapKind({
+      fromAsset: 'XRP',
+      toAsset: 'NXL',
+      userDestinationAddress: 'GAIH3ULLFQ4DGSECF2AR555KZ4KNDGEKN4AFI4SU2M7B43MGK3QJZNSR',
+      settlementType: 'FAILED',
+    });
+    assert.equal(crossChainXrpToStellarNxl.swapKind, 'CROSS_CHAIN');
+    assert.equal(crossChainXrpToStellarNxl.isCrossChain, true);
+
+    const internalSwap = classifySwapKind({
+      fromAsset: 'XRP',
+      toAsset: 'USD',
+      settlementType: 'INTERNAL_LEDGER',
+    });
+    assert.equal(internalSwap.swapKind, 'INTERNAL_LEDGER');
+    assert.equal(internalSwap.isCrossChain, false);
   });
 
   it('XRP -> USD produces NO fake payoutTxHash, sets INTERNAL_LEDGER, records sequential legs, and persists in MongoDB', async () => {

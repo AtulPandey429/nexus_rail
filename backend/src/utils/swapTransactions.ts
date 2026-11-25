@@ -12,6 +12,8 @@ export type SwapLegStage =
 
 export type SwapSettlementType = 'ON_CHAIN' | 'INTERNAL_LEDGER' | 'HYBRID' | 'FAILED';
 
+export type SwapKind = 'SAME_CHAIN' | 'CROSS_CHAIN' | 'INTERNAL_LEDGER';
+
 export interface SwapTransactionLeg {
   sequence: number;
   direction: 'INCOMING' | 'OUTGOING';
@@ -71,6 +73,63 @@ export function inferAssetRail(asset: string, address?: string): SwapRail {
     if (clean.startsWith('G')) return 'STELLAR';
   }
   return 'INTERNAL_LEDGER';
+}
+
+/**
+ * Classifies a swap into INTERNAL_LEDGER, SAME_CHAIN, or CROSS_CHAIN based on
+ * the source and destination rails (ignoring FAILED settlement status so failed
+ * same-chain swaps still display as Same-Chain Swap rather than Cross-Chain Bridge).
+ */
+export function classifySwapKind(params: {
+  fromAsset?: string;
+  toAsset?: string;
+  userSourceAddress?: string;
+  userDestinationAddress?: string;
+  settlementType?: SwapSettlementType | string;
+  transactions?: SwapTransactionLeg[];
+  fromRail?: SwapRail;
+  toRail?: SwapRail;
+  direction?: string;
+  mode?: string;
+}): {
+  swapKind: SwapKind;
+  isCrossChain: boolean;
+  fromRail: SwapRail;
+  toRail: SwapRail;
+} {
+  const legs = Array.isArray(params.transactions) ? params.transactions : [];
+  const incomingLeg = legs.find((l) => l.direction === 'INCOMING');
+  const outgoingOnChainLeg = [...legs].reverse().find((l) => l.direction === 'OUTGOING' && l.rail !== 'INTERNAL_LEDGER');
+  const lastOutgoingLeg = [...legs].reverse().find((l) => l.direction === 'OUTGOING');
+
+  const fromRail: SwapRail =
+    params.fromRail || incomingLeg?.rail || inferAssetRail(params.fromAsset || '', params.userSourceAddress);
+  const toRail: SwapRail =
+    params.toRail ||
+    outgoingOnChainLeg?.rail ||
+    lastOutgoingLeg?.rail ||
+    inferAssetRail(params.toAsset || '', params.userDestinationAddress);
+
+  if (params.settlementType === 'INTERNAL_LEDGER' || (fromRail === 'INTERNAL_LEDGER' && toRail === 'INTERNAL_LEDGER')) {
+    return { swapKind: 'INTERNAL_LEDGER', isCrossChain: false, fromRail, toRail };
+  }
+
+  const upperDir = String(params.direction || '').toUpperCase();
+  const upperMode = String(params.mode || '').toUpperCase();
+  if (
+    upperDir === 'XRPL_TO_STELLAR' ||
+    upperDir === 'STELLAR_TO_XRPL' ||
+    upperMode === 'SOROBAN_BRIDGE_BURN' ||
+    upperMode === 'SOROBAN_BRIDGE_ESCROW'
+  ) {
+    return { swapKind: 'CROSS_CHAIN', isCrossChain: true, fromRail, toRail };
+  }
+
+  if (fromRail !== 'INTERNAL_LEDGER' && toRail !== 'INTERNAL_LEDGER' && fromRail !== toRail) {
+    return { swapKind: 'CROSS_CHAIN', isCrossChain: true, fromRail, toRail };
+  }
+
+  return { swapKind: 'SAME_CHAIN', isCrossChain: false, fromRail, toRail };
 }
 
 /**
