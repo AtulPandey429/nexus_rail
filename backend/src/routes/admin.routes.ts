@@ -50,6 +50,16 @@ adminRouter.get('/treasury/config', AdminController.getTreasuryConfig);
 adminRouter.patch('/treasury/config', AdminController.patchTreasuryConfig);
 adminRouter.post('/treasury/trigger-split', AdminController.triggerTreasurySplit);
 
+// Real On-Chain Buyback & Burn Engine (NexusSwap -> NexusVault burn_nxl)
+adminRouter.get('/buyback/status', AdminController.getBuybackStatus);
+adminRouter.post('/buyback/execute', AdminController.executeBuyback);
+adminRouter.get('/buyback/history', AdminController.getBuybackHistory);
+
+// Durable Cross-Chain Bridge Relayer & Recovery Queue
+adminRouter.get('/bridge/operations', AdminController.getBridgeOperations);
+adminRouter.post('/bridge/:swapId/retry', AdminController.retryBridgeOperation);
+adminRouter.post('/bridge/:swapId/refund', AdminController.refundBridgeOperation);
+
 // On-Chain Soroban Vault Contracts
 adminRouter.get('/contracts/nexus-vault', AdminController.getNexusVault);
 adminRouter.get('/contracts/live', AdminController.getLiveContracts);
@@ -59,6 +69,7 @@ adminRouter.post('/contracts/nexus-vault/upgrade', AdminController.upgradeVault)
 
 // Dual-Rail XRPL & Stellar Infrastructure
 adminRouter.get('/tokens/nr', AdminController.getNrToken);
+adminRouter.get('/tokenomics/reconciliation', AdminController.getTokenomicsReconciliation);
 adminRouter.get(['/dual-rail/status', '/dual-rail/summary'], AdminController.getDualRailStatus);
 adminRouter.post('/dual-rail/xrpl-amm/create', AdminController.createXrplAmm);
 adminRouter.post('/dual-rail/xrpl-amm/deposit', AdminController.depositXrplAmm);

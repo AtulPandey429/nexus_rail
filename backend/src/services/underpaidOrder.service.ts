@@ -159,8 +159,11 @@ export async function resolveUnderpaidOrder(params: {
         amount: Number(order.delivered_crypto_amount),
         referenceId: `REFUND-${order.order_number}`,
       });
+      if (!payout.ok || !payout.txHash) {
+        throw new Error(payout.errorMessage || 'On-chain refund broadcast failed');
+      }
       refundTxHash = payout.txHash;
-      refundExplorerUrl = payout.explorerUrl;
+      refundExplorerUrl = payout.explorerUrl || undefined;
     } else {
       finalMode = 'REFUND_WALLET';
       if (paidUsdCents > 0) {

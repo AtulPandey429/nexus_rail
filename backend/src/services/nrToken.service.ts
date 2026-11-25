@@ -7,6 +7,7 @@ import {
   MongoTokenPoolDoc,
   MongoTokenPriceTickDoc,
   MongoOrderDoc,
+  MongoSwapOrderDoc,
 } from './mongo.js';
 import { walletService } from './wallet.js';
 import { getFxQuote } from './market.js';
@@ -18,11 +19,20 @@ import { IpfsService } from './ipfs.js';
 import { RedisCacheService } from './redis.js';
 import { PortfolioService } from './portfolio.service.js';
 import { TreasuryService } from './treasury.service.js';
+import type { DbWalletTransaction } from '../types/index.js';
+import {
+  SwapSettlementType,
+  SwapTransactionLeg,
+  buildExplorerTxUrl,
+  deriveFallbackLegs,
+  isRealOnChainTxHash,
+  sanitizeOnChainTxHash,
+} from '../utils/swapTransactions.js';
 
 export const NR_MICRO_SCALE = 1_000_000;
 export const GENESIS_RESERVE_USD_CENTS = 10_000_000; // $100,000.00
 export const GENESIS_POOL_NR_MICRO = 100_000_000_000; // 100,000.000000 NR
-export const TOTAL_SUPPLY_NR_MICRO = 1_000_000_000_000; // 1,000,000.000000 NR cap
+export const TOTAL_SUPPLY_NR_MICRO = 2_000_000_000_000; // 2,000,000.000000 NXL canonical max supply cap
 export const DEFAULT_SWAP_FEE_BPS = 50; // 0.50%
 export const MIN_RESERVE_USD_CENTS = 100_000; // $1,000.00 safety floor
 
@@ -97,6 +107,11 @@ export interface NrSwapOrder {
   paymentIdentifierType: 'destination_tag' | 'memo_text' | 'internal_ledger';
   paymentIdentifier: string | number;
   status: 'PENDING_DEPOSIT' | 'DEPOSIT_CONFIRMED' | 'PAYOUT_PROCESSING' | 'COMPLETED' | 'AWAITING_TRUSTLINE' | 'FAILED';
+  settlementType?: SwapSettlementType;
+  transactions?: SwapTransactionLeg[];
+  errorMessage?: string;
+  updatedUsdBalanceCents?: number;
+  updatedNxlBalanceMicro?: number;
   depositTxHash?: string;
   payoutTxHash?: string;
   depositExplorerUrl?: string;
@@ -276,7 +291,16 @@ export class NrTokenService {
         existing = await poolCol.findOne({ symbol: 'NXL' });
       }
     }
-    if (existing) return existing;
+    if (existing) {
+      if (existing.total_supply_nr_micro !== TOTAL_SUPPLY_NR_MICRO) {
+        await poolCol.updateOne(
+          { _id: existing._id },
+          { $set: { total_supply_nr_micro: TOTAL_SUPPLY_NR_MICRO } }
+        );
+        existing.total_supply_nr_micro = TOTAL_SUPPLY_NR_MICRO;
+      }
+      return existing;
+    }
 
     const now = new Date().toISOString();
     const genesisSpotUsd = computeSpotPriceUsd(GENESIS_RESERVE_USD_CENTS, GENESIS_POOL_NR_MICRO);
@@ -539,11 +563,105 @@ export class NrTokenService {
     };
 
     NR_SWAP_ORDERS.set(swapId, order);
+    await this.saveNrSwapOrder(order);
     return order;
   }
 
-  static getNrSwapOrder(swapId: string): NrSwapOrder | undefined {
-    return NR_SWAP_ORDERS.get(swapId);
+  private static async saveNrSwapOrder(order: NrSwapOrder): Promise<void> {
+    const now = new Date().toISOString();
+    NR_SWAP_ORDERS.set(order.swapId, order);
+
+    try {
+      const col = await MongoService.getCollection<MongoSwapOrderDoc>('swaps');
+      const cleanDeposit = sanitizeOnChainTxHash(order.depositTxHash) || undefined;
+      const cleanPayout = sanitizeOnChainTxHash(order.payoutTxHash) || undefined;
+      const doc: MongoSwapOrderDoc = {
+        swapId: order.swapId,
+        user_id: order.userId,
+        fromAsset: order.fromAsset,
+        toAsset: order.toAsset,
+        payAmount: order.payAmount,
+        receiveAmount: order.receiveAmount,
+        exchangeRate: order.exchangeRate,
+        userDestinationAddress: order.userDestinationAddress,
+        platformDepositAddress: order.platformDepositAddress,
+        paymentIdentifierType: order.paymentIdentifierType,
+        paymentIdentifier: order.paymentIdentifier,
+        status: order.status,
+        settlementType: order.settlementType,
+        transactions: order.transactions,
+        errorMessage: order.errorMessage || order.trustlineMessage,
+        depositTxHash: cleanDeposit,
+        payoutTxHash: cleanPayout,
+        depositExplorerUrl: cleanDeposit ? order.depositExplorerUrl : undefined,
+        payoutExplorerUrl: cleanPayout ? order.payoutExplorerUrl : undefined,
+        journalEntry: order.journalEntry,
+        createdAt: order.createdAt,
+        expiresAt: order.expiresAt,
+        updatedAt: now,
+      };
+      await col.updateOne({ swapId: order.swapId }, { $set: doc }, { upsert: true });
+    } catch (err: any) {
+      console.warn('⚠️ [NrTokenService] MongoDB swap persistence warning:', err?.message);
+    }
+  }
+
+  static async getNrSwapOrder(swapId: string): Promise<NrSwapOrder | undefined> {
+    const cached = NR_SWAP_ORDERS.get(swapId);
+    if (cached) return cached;
+
+    try {
+      const col = await MongoService.getCollection<MongoSwapOrderDoc>('swaps');
+      const doc = await col.findOne({ swapId });
+      if (doc && (doc.fromAsset === 'NXL' || doc.toAsset === 'NXL' || doc.fromAsset === 'USD' || doc.toAsset === 'USD')) {
+        const cleanDeposit = sanitizeOnChainTxHash(doc.depositTxHash) || undefined;
+        const cleanPayout = sanitizeOnChainTxHash(doc.payoutTxHash) || undefined;
+        const fromRail = doc.fromAsset === 'XRP' ? 'XRPL' : doc.fromAsset === 'XLM' ? 'STELLAR' : 'INTERNAL_LEDGER';
+        const toRail =
+          doc.toAsset === 'XRP'
+            ? 'XRPL'
+            : doc.toAsset === 'XLM'
+            ? 'STELLAR'
+            : doc.toAsset === 'NXL' && doc.userDestinationAddress?.startsWith('r')
+            ? 'XRPL'
+            : doc.toAsset === 'NXL' && doc.userDestinationAddress?.startsWith('G')
+            ? 'STELLAR'
+            : 'INTERNAL_LEDGER';
+
+        const hydrated: NrSwapOrder = {
+          swapId: doc.swapId,
+          userId: doc.user_id,
+          fromAsset: doc.fromAsset,
+          toAsset: doc.toAsset,
+          payAmount: doc.payAmount,
+          receiveAmount: doc.receiveAmount,
+          exchangeRate: doc.exchangeRate,
+          spotPriceBeforeUsd: 0,
+          spotPriceAfterUsd: 0,
+          priceImpactPercent: 0,
+          feeUsd: 0,
+          userDestinationAddress: doc.userDestinationAddress,
+          platformDepositAddress: doc.platformDepositAddress,
+          paymentIdentifierType: doc.paymentIdentifierType,
+          paymentIdentifier: doc.paymentIdentifier,
+          status: doc.status,
+          settlementType: doc.settlementType,
+          transactions: deriveFallbackLegs(doc),
+          errorMessage: doc.errorMessage,
+          depositTxHash: cleanDeposit,
+          payoutTxHash: cleanPayout,
+          depositExplorerUrl: buildExplorerTxUrl(fromRail, cleanDeposit) || undefined,
+          payoutExplorerUrl: buildExplorerTxUrl(toRail, cleanPayout) || undefined,
+          journalEntry: doc.journalEntry,
+          createdAt: doc.createdAt,
+          expiresAt: doc.expiresAt,
+        };
+        NR_SWAP_ORDERS.set(swapId, hydrated);
+        return hydrated;
+      }
+    } catch {}
+
+    return undefined;
   }
 
   /**
@@ -558,8 +676,9 @@ export class NrTokenService {
     amount?: number;
     depositTxHash?: string;
     userDestinationAddress?: string;
+    skipDepositVerification?: boolean;
   }): Promise<{ order: NrSwapOrder; poolStats: NrPoolStats }> {
-    let order = params.swapId ? NR_SWAP_ORDERS.get(params.swapId) : undefined;
+    let order = params.swapId ? await this.getNrSwapOrder(params.swapId) : undefined;
     if (params.swapId && !order && (!params.fromAsset || !params.toAsset || !params.amount)) {
       throw new Error(`Swap order "${params.swapId}" not found or expired.`);
     }
@@ -586,18 +705,77 @@ export class NrTokenService {
       throw new Error('Authentication is required to credit or debit NexusRail wallet balances');
     }
 
-    // Validate on-chain ingress hash when deposit is external XLM/XRP
-    if ((order.fromAsset === 'XLM' || order.fromAsset === 'XRP') && !params.depositTxHash?.trim()) {
-      throw new Error(
-        `Deposit required! Please sign and broadcast ${order.payAmount} ${order.fromAsset} to ${order.platformDepositAddress} first.`
-      );
+    const isExternalFrom = order.fromAsset === 'XLM' || order.fromAsset === 'XRP';
+    const fromRail = order.fromAsset === 'XRP' ? 'XRPL' : order.fromAsset === 'XLM' ? 'STELLAR' : 'INTERNAL_LEDGER';
+    const legs: SwapTransactionLeg[] = [];
+    let cleanDepositHash: string | undefined;
+
+    // Validate & verify on-chain ingress hash BEFORE crediting any internal/AMM balance
+    if (isExternalFrom) {
+      const rawDeposit = params.depositTxHash?.trim();
+      if (!rawDeposit) {
+        throw new Error(
+          `Deposit required! Please sign and broadcast ${order.payAmount} ${order.fromAsset} to ${order.platformDepositAddress} first.`
+        );
+      }
+      if (!isRealOnChainTxHash(rawDeposit)) {
+        throw new Error(`Invalid ${order.fromAsset} deposit transaction hash "${rawDeposit}". Expected a 64-character hex hash.`);
+      }
+      cleanDepositHash = rawDeposit;
+
+      if (!params.skipDepositVerification) {
+        await CrossChainSwapService.assertDepositHashNotReplayed(cleanDepositHash, order.swapId);
+        const verification = await CrossChainSwapService.verifyOnChainDeposit(
+          order.fromAsset as 'XRP' | 'XLM',
+          cleanDepositHash,
+          {
+            expectedDestination: order.platformDepositAddress,
+            minAmount: order.payAmount,
+            ...(order.paymentIdentifierType === 'destination_tag'
+              ? { expectedDestinationTag: Number(order.paymentIdentifier) }
+              : { expectedMemo: String(order.paymentIdentifier) }),
+          }
+        );
+        if (verification.status === 'FAILED') {
+          const failedExplorer = verification.explorerUrl || buildExplorerTxUrl(fromRail, cleanDepositHash);
+          legs.push({
+            sequence: 1,
+            direction: 'INCOMING',
+            stage: 'DEPOSIT',
+            label: `User Deposit (${order.fromAsset} on ${fromRail})`,
+            asset: order.fromAsset,
+            amount: order.payAmount,
+            rail: fromRail,
+            status: 'FAILED',
+            txHash: cleanDepositHash,
+            explorerUrl: failedExplorer,
+            toAddress: order.platformDepositAddress,
+            errorMessage: verification.errorMessage,
+            timestamp: new Date().toISOString(),
+          });
+          order.depositTxHash = cleanDepositHash;
+          order.depositExplorerUrl = failedExplorer || undefined;
+          order.status = 'FAILED';
+          order.settlementType = 'FAILED';
+          order.errorMessage = verification.errorMessage;
+          order.transactions = legs;
+          await this.saveNrSwapOrder(order);
+          return { order, poolStats: await this.getPoolStats() };
+        }
+        if (verification.status === 'NOT_FOUND') {
+          throw new Error(verification.errorMessage || 'Deposit transaction not found on-chain yet.');
+        }
+      }
     }
 
     await this.ensureGenesisPool();
     const client = await MongoService.getClient();
     const session = client.startSession();
     let finalQuote: NrSwapQuote | null = null;
-    const txHashIngress = params.depositTxHash?.trim() || `nr_ledger_in_${crypto.randomBytes(12).toString('hex')}`;
+    const ledgerEntries: {
+      debitTx?: DbWalletTransaction;
+      creditTx?: DbWalletTransaction;
+    } = {};
 
     try {
       await session.withTransaction(async () => {
@@ -616,10 +794,10 @@ export class NrTokenService {
         // 1. Ingress Debit (if internal USD or NXL wallet balance)
         if (order!.fromAsset === 'USD') {
           const debitCents = Math.round(order!.payAmount * 100);
-          await walletService.debitBalance(userId, debitCents, 'USD', order!.swapId, session);
+          ledgerEntries.debitTx = await walletService.debitBalance(userId, debitCents, 'USD', order!.swapId, session);
         } else if (order!.fromAsset === 'NXL') {
           const debitNrMicro = Math.round(order!.payAmount * NR_MICRO_SCALE);
-          await walletService.debitBalance(userId, debitNrMicro, 'NXL', order!.swapId, session);
+          ledgerEntries.debitTx = await walletService.debitBalance(userId, debitNrMicro, 'NXL', order!.swapId, session);
         }
 
         // 2. Update AMM Pool with optimistic concurrency check
@@ -673,9 +851,9 @@ export class NrTokenService {
 
         // 3. Egress Internal Credit (when toAsset is NXL or USD)
         if (order!.toAsset === 'NXL') {
-          await walletService.creditBalance(userId, finalQuote.nrDeltaMicro, 'NXL', order!.swapId, session);
+          ledgerEntries.creditTx = await walletService.creditBalance(userId, finalQuote.nrDeltaMicro, 'NXL', order!.swapId, session);
         } else if (order!.toAsset === 'USD') {
-          await walletService.creditBalance(userId, finalQuote.outputUsdCents, 'USD', order!.swapId, session);
+          ledgerEntries.creditTx = await walletService.creditBalance(userId, finalQuote.outputUsdCents, 'USD', order!.swapId, session);
         }
 
         // Module 4: Record Swap Spread in Platform Treasury
@@ -705,6 +883,8 @@ export class NrTokenService {
     }
 
     const q = finalQuote!;
+    const debitTx = ledgerEntries.debitTx;
+    const creditTx = ledgerEntries.creditTx;
     order.payAmount = q.payAmount;
     order.receiveAmount = q.receiveAmount;
     order.exchangeRate = q.exchangeRate;
@@ -712,27 +892,101 @@ export class NrTokenService {
     order.spotPriceAfterUsd = q.spotPriceAfterUsd;
     order.priceImpactPercent = q.priceImpactPercent;
     order.feeUsd = q.feeUsd;
-    order.depositTxHash = txHashIngress;
-    order.depositExplorerUrl =
-      order.fromAsset === 'XRP'
-        ? `https://testnet.xrpl.org/transactions/${txHashIngress}`
-        : order.fromAsset === 'XLM'
-        ? `https://stellar.expert/explorer/testnet/tx/${txHashIngress}`
-        : undefined;
+    order.journalEntry = `JE-NR-${Date.now().toString().slice(-4)}`;
 
-    // 4. Egress On-Chain Payout if target is XLM, XRP, or NXL on XRPL
+    if (cleanDepositHash) {
+      const depositUrl = buildExplorerTxUrl(fromRail, cleanDepositHash);
+      order.depositTxHash = cleanDepositHash;
+      order.depositExplorerUrl = depositUrl || undefined;
+      legs.push({
+        sequence: 1,
+        direction: 'INCOMING',
+        stage: 'DEPOSIT',
+        label: `User Deposit (${order.fromAsset} on ${fromRail})`,
+        asset: order.fromAsset,
+        amount: order.payAmount,
+        rail: fromRail,
+        status: 'SUCCESS',
+        txHash: cleanDepositHash,
+        explorerUrl: depositUrl,
+        toAddress: order.platformDepositAddress,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      order.depositTxHash = undefined;
+      order.depositExplorerUrl = undefined;
+      legs.push({
+        sequence: 1,
+        direction: 'INCOMING',
+        stage: 'INTERNAL_DEBIT',
+        label: `NexusRail Wallet Debit (${order.fromAsset})`,
+        asset: order.fromAsset,
+        amount: order.payAmount,
+        rail: 'INTERNAL_LEDGER',
+        status: 'SUCCESS',
+        txHash: null,
+        explorerUrl: null,
+        ledgerRef: debitTx?.id || order.journalEntry,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // 4. Egress Settlement (Internal Wallet Credit vs On-Chain Payout)
     if (order.toAsset === 'XLM' || order.toAsset === 'XRP') {
+      const toRail = order.toAsset === 'XLM' ? 'STELLAR' : 'XRPL';
       const payout = await CrossChainSwapService.payoutAssetToUser({
         toAsset: order.toAsset,
         destinationAddress: order.userDestinationAddress,
         amount: order.receiveAmount,
         referenceId: order.swapId,
       });
-      order.payoutTxHash = payout.txHash;
-      order.payoutExplorerUrl = payout.explorerUrl;
-      order.status = 'COMPLETED';
+
+      legs.push({
+        sequence: legs.length + 1,
+        direction: 'OUTGOING',
+        stage: 'ONCHAIN_PAYOUT',
+        label: `Server Payout (${order.toAsset} on ${toRail})`,
+        asset: order.toAsset,
+        amount: order.receiveAmount,
+        rail: toRail,
+        status: payout.ok ? 'SUCCESS' : 'FAILED',
+        txHash: payout.txHash,
+        explorerUrl: payout.explorerUrl,
+        toAddress: order.userDestinationAddress,
+        errorMessage: payout.ok ? undefined : payout.errorMessage,
+        timestamp: new Date().toISOString(),
+      });
+
+      order.payoutTxHash = payout.txHash || undefined;
+      order.payoutExplorerUrl = payout.explorerUrl || undefined;
+      if (payout.ok) {
+        order.status = 'COMPLETED';
+        order.settlementType = isExternalFrom ? 'ON_CHAIN' : 'HYBRID';
+        order.errorMessage = undefined;
+      } else {
+        order.status = 'FAILED';
+        order.settlementType = 'FAILED';
+        order.errorMessage = payout.errorMessage || `On-chain ${order.toAsset} payout failed`;
+      }
     } else if (order.toAsset === 'NXL' && isValidClassicAddress(order.userDestinationAddress)) {
-      // User requested delivery to an external XRPL wallet address (Same-chain or Bridge)
+      order.updatedNxlBalanceMicro = creditTx?.balance_after;
+      legs.push({
+        sequence: legs.length + 1,
+        direction: 'OUTGOING',
+        stage: 'INTERNAL_CREDIT',
+        label: 'NexusRail Internal Wallet Credit ($NXL)',
+        asset: 'NXL',
+        amount: order.receiveAmount,
+        rail: 'INTERNAL_LEDGER',
+        status: 'SUCCESS',
+        txHash: null,
+        explorerUrl: null,
+        ledgerRef: creditTx?.id || order.journalEntry,
+        toAddress: `NexusRail Internal Wallet (${userId.slice(0, 8)})`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // User requested delivery to an external XRPL wallet address
       const tl = await DualRailTokenService.checkXrplTrustline(order.userDestinationAddress);
       if (tl.hasTrustline) {
         try {
@@ -742,20 +996,102 @@ export class NrTokenService {
             order.userDestinationAddress,
             { skipTrustlineCheck: true, verifiedIssuer: tl.issuer }
           );
-          order.payoutTxHash = payout.txHash;
-          order.payoutExplorerUrl = payout.explorerUrl;
+          // CRIT-03 Fix: Debit the temporary internal escrow credit once on-chain payout succeeds
+          // so the user does not receive 2x tokens (both internal balance AND on-chain XRPL tokens).
+          const settledDebit = await walletService.debitBalance(
+            userId,
+            q.nrDeltaMicro,
+            'NXL',
+            `${order.swapId}:ONCHAIN_DELIVERED`
+          );
+          order.updatedNxlBalanceMicro = settledDebit.balance_after;
+
+          const cleanPayoutHash = sanitizeOnChainTxHash(payout.txHash);
+          const payoutUrl = buildExplorerTxUrl('XRPL', cleanPayoutHash) || payout.explorerUrl;
+          order.payoutTxHash = cleanPayoutHash || undefined;
+          order.payoutExplorerUrl = cleanPayoutHash ? payoutUrl : undefined;
           order.status = 'COMPLETED';
+          order.settlementType = isExternalFrom ? 'ON_CHAIN' : 'HYBRID';
+          legs.push({
+            sequence: legs.length + 1,
+            direction: 'OUTGOING',
+            stage: 'ONCHAIN_PAYOUT',
+            label: 'On-Chain Payout ($NXL on XRPL)',
+            asset: 'NXL',
+            amount: order.receiveAmount,
+            rail: 'XRPL',
+            status: 'SUCCESS',
+            txHash: cleanPayoutHash,
+            explorerUrl: cleanPayoutHash ? payoutUrl : null,
+            toAddress: order.userDestinationAddress,
+            timestamp: new Date().toISOString(),
+          });
         } catch (payoutErr: any) {
-          order.status = 'AWAITING_TRUSTLINE';
-          order.trustlineRequired = true;
-          order.trustlineMessage = payoutErr.message;
+          const failedHash = sanitizeOnChainTxHash(payoutErr?.txHash || payoutErr?.hash);
+          const errMsg = payoutErr?.message || 'XRPL $NXL payout failed';
+          const isTrustlineErr = /trustline/i.test(errMsg);
+          order.payoutTxHash = failedHash || undefined;
+          order.payoutExplorerUrl = buildExplorerTxUrl('XRPL', failedHash) || undefined;
+          order.status = isTrustlineErr ? 'AWAITING_TRUSTLINE' : 'FAILED';
+          order.settlementType = isTrustlineErr ? 'HYBRID' : 'FAILED';
+          order.trustlineRequired = isTrustlineErr;
+          order.trustlineMessage = isTrustlineErr ? errMsg : undefined;
+          order.errorMessage = isTrustlineErr ? undefined : errMsg;
+          legs.push({
+            sequence: legs.length + 1,
+            direction: 'OUTGOING',
+            stage: 'ONCHAIN_PAYOUT',
+            label: 'On-Chain Payout ($NXL on XRPL)',
+            asset: 'NXL',
+            amount: order.receiveAmount,
+            rail: 'XRPL',
+            status: isTrustlineErr ? 'PENDING' : 'FAILED',
+            txHash: failedHash,
+            explorerUrl: buildExplorerTxUrl('XRPL', failedHash),
+            toAddress: order.userDestinationAddress,
+            errorMessage: errMsg,
+            timestamp: new Date().toISOString(),
+          });
         }
       } else {
         order.status = 'AWAITING_TRUSTLINE';
+        order.settlementType = 'HYBRID';
         order.trustlineRequired = true;
         order.trustlineMessage = `Recipient account "${order.userDestinationAddress}" has not established an active Trustline to Issuer "${tl.issuer}" for currency "NXL". Your internal balance is safely credited, and on-chain tokens can be claimed once the trustline is enabled.`;
+        legs.push({
+          sequence: legs.length + 1,
+          direction: 'OUTGOING',
+          stage: 'ONCHAIN_PAYOUT',
+          label: 'On-Chain Payout ($NXL on XRPL)',
+          asset: 'NXL',
+          amount: order.receiveAmount,
+          rail: 'XRPL',
+          status: 'PENDING',
+          txHash: null,
+          explorerUrl: null,
+          toAddress: order.userDestinationAddress,
+          errorMessage: order.trustlineMessage,
+          timestamp: new Date().toISOString(),
+        });
       }
     } else if (order.toAsset === 'NXL' && StrKey.isValidEd25519PublicKey(order.userDestinationAddress)) {
+      order.updatedNxlBalanceMicro = creditTx?.balance_after;
+      legs.push({
+        sequence: legs.length + 1,
+        direction: 'OUTGOING',
+        stage: 'INTERNAL_CREDIT',
+        label: 'NexusRail Internal Wallet Credit ($NXL)',
+        asset: 'NXL',
+        amount: order.receiveAmount,
+        rail: 'INTERNAL_LEDGER',
+        status: 'SUCCESS',
+        txHash: null,
+        explorerUrl: null,
+        ledgerRef: creditTx?.id || order.journalEntry,
+        toAddress: `NexusRail Internal Wallet (${userId.slice(0, 8)})`,
+        timestamp: new Date().toISOString(),
+      });
+
       // User requested cross-chain delivery to an external Stellar wallet address (G...)
       const tl = await DualRailTokenService.checkStellarTrustline(order.userDestinationAddress);
       if (tl.hasTrustline) {
@@ -766,26 +1102,114 @@ export class NrTokenService {
             order.userDestinationAddress,
             { skipTrustlineCheck: true, verifiedIssuer: tl.issuer }
           );
-          order.payoutTxHash = payout.txHash;
-          order.payoutExplorerUrl = payout.explorerUrl;
+          // CRIT-03 Fix: Debit the temporary internal escrow credit once on-chain payout succeeds
+          // so the user does not receive 2x tokens (both internal balance AND on-chain Stellar tokens).
+          const settledDebit = await walletService.debitBalance(
+            userId,
+            q.nrDeltaMicro,
+            'NXL',
+            `${order.swapId}:ONCHAIN_DELIVERED`
+          );
+          order.updatedNxlBalanceMicro = settledDebit.balance_after;
+
+          const cleanPayoutHash = sanitizeOnChainTxHash(payout.txHash);
+          const payoutUrl = buildExplorerTxUrl('STELLAR', cleanPayoutHash) || payout.explorerUrl;
+          order.payoutTxHash = cleanPayoutHash || undefined;
+          order.payoutExplorerUrl = cleanPayoutHash ? payoutUrl : undefined;
           order.status = 'COMPLETED';
+          order.settlementType = isExternalFrom ? 'ON_CHAIN' : 'HYBRID';
+          legs.push({
+            sequence: legs.length + 1,
+            direction: 'OUTGOING',
+            stage: 'ONCHAIN_PAYOUT',
+            label: 'On-Chain Payout ($NXL on Stellar)',
+            asset: 'NXL',
+            amount: order.receiveAmount,
+            rail: 'STELLAR',
+            status: 'SUCCESS',
+            txHash: cleanPayoutHash,
+            explorerUrl: cleanPayoutHash ? payoutUrl : null,
+            toAddress: order.userDestinationAddress,
+            timestamp: new Date().toISOString(),
+          });
         } catch (payoutErr: any) {
-          order.status = 'AWAITING_TRUSTLINE';
-          order.trustlineRequired = true;
-          order.trustlineMessage = payoutErr.message;
+          const failedHash = sanitizeOnChainTxHash(payoutErr?.txHash || payoutErr?.hash);
+          const errMsg = payoutErr?.message || 'Stellar $NXL payout failed';
+          const isTrustlineErr = /trustline/i.test(errMsg);
+          order.payoutTxHash = failedHash || undefined;
+          order.payoutExplorerUrl = buildExplorerTxUrl('STELLAR', failedHash) || undefined;
+          order.status = isTrustlineErr ? 'AWAITING_TRUSTLINE' : 'FAILED';
+          order.settlementType = isTrustlineErr ? 'HYBRID' : 'FAILED';
+          order.trustlineRequired = isTrustlineErr;
+          order.trustlineMessage = isTrustlineErr ? errMsg : undefined;
+          order.errorMessage = isTrustlineErr ? undefined : errMsg;
+          legs.push({
+            sequence: legs.length + 1,
+            direction: 'OUTGOING',
+            stage: 'ONCHAIN_PAYOUT',
+            label: 'On-Chain Payout ($NXL on Stellar)',
+            asset: 'NXL',
+            amount: order.receiveAmount,
+            rail: 'STELLAR',
+            status: isTrustlineErr ? 'PENDING' : 'FAILED',
+            txHash: failedHash,
+            explorerUrl: buildExplorerTxUrl('STELLAR', failedHash),
+            toAddress: order.userDestinationAddress,
+            errorMessage: errMsg,
+            timestamp: new Date().toISOString(),
+          });
         }
       } else {
         order.status = 'AWAITING_TRUSTLINE';
+        order.settlementType = 'HYBRID';
         order.trustlineRequired = true;
         order.trustlineMessage = `Recipient Stellar account "${order.userDestinationAddress}" has not established an active Trustline to Issuer "${tl.issuer}" for asset "NXL". Your internal balance is safely credited, and on-chain tokens can be claimed once the trustline is enabled.`;
+        legs.push({
+          sequence: legs.length + 1,
+          direction: 'OUTGOING',
+          stage: 'ONCHAIN_PAYOUT',
+          label: 'On-Chain Payout ($NXL on Stellar)',
+          asset: 'NXL',
+          amount: order.receiveAmount,
+          rail: 'STELLAR',
+          status: 'PENDING',
+          txHash: null,
+          explorerUrl: null,
+          toAddress: order.userDestinationAddress,
+          errorMessage: order.trustlineMessage,
+          timestamp: new Date().toISOString(),
+        });
       }
     } else {
-      order.payoutTxHash = `nr_ledger_out_${crypto.randomBytes(12).toString('hex')}`;
+      // Internal Ledger Credit (USD or internal NXL) — NO fake blockchain tx hash
+      order.payoutTxHash = undefined;
+      order.payoutExplorerUrl = undefined;
       order.status = 'COMPLETED';
+      order.settlementType = 'INTERNAL_LEDGER';
+      if (order.toAsset === 'USD') {
+        order.updatedUsdBalanceCents = creditTx?.balance_after;
+      } else if (order.toAsset === 'NXL') {
+        order.updatedNxlBalanceMicro = creditTx?.balance_after;
+      }
+      legs.push({
+        sequence: legs.length + 1,
+        direction: 'OUTGOING',
+        stage: 'INTERNAL_CREDIT',
+        label: `NexusRail Internal Wallet Credit (${order.toAsset})`,
+        asset: order.toAsset,
+        amount: order.receiveAmount,
+        rail: 'INTERNAL_LEDGER',
+        status: 'SUCCESS',
+        txHash: null,
+        explorerUrl: null,
+        ledgerRef: creditTx?.id || order.journalEntry,
+        toAddress: `NexusRail Internal Wallet (${userId.slice(0, 8)})`,
+        timestamp: new Date().toISOString(),
+      });
     }
 
-    order.journalEntry = `JE-NR-${Date.now().toString().slice(-4)}`;
-    NR_SWAP_ORDERS.set(order.swapId, order);
+    order.transactions = legs;
+    await this.saveNrSwapOrder(order);
     RedisCacheService.invalidateCache('products:active').catch(() => {});
 
     return { order, poolStats: await this.getPoolStats() };

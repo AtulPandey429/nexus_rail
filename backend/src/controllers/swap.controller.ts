@@ -11,7 +11,16 @@ import { verifyToken } from '../services/jwt.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { SorobanService, NEXUS_SWAP_CONTRACT_ID, NEXUS_VAULT_CONTRACT_ID } from '../services/soroban.js';
+import { SupplyReconciliationService } from '../services/supplyReconciliation.service.js';
+import { BridgeOperationService, type SorobanBridgeMode } from '../services/bridgeOperation.service.js';
+import { walletService } from '../services/wallet.js';
 import { STELLAR_TESTNET, XRPL_TESTNET } from '../utils/constants.js';
+import {
+  SwapTransactionLeg,
+  buildExplorerTxUrl,
+  deriveFallbackLegs,
+  sanitizeOnChainTxHash,
+} from '../utils/swapTransactions.js';
 
 const SWAP_ASSETS = ['XRP', 'XLM', 'NXL', 'USD'] as const;
 
@@ -166,7 +175,7 @@ export class SwapController {
       }
 
       const { swapId, fromAsset, toAsset, amount, userDestinationAddress, depositTxHash, userSourceSecret } = parsed.data;
-      const existingNrOrder = swapId ? NrTokenService.getNrSwapOrder(swapId) : undefined;
+      const existingNrOrder = swapId ? await NrTokenService.getNrSwapOrder(swapId) : undefined;
       const isNrOrUsd =
         Boolean(existingNrOrder) ||
         fromAsset === 'NXL' ||
@@ -207,8 +216,12 @@ export class SwapController {
           userDestinationAddress,
         });
 
+        const settled = order.status === 'COMPLETED';
         res.json({
-          success: true,
+          success: settled,
+          settled,
+          status: order.status,
+          error: order.errorMessage || order.trustlineMessage || undefined,
           data: order,
           poolStats,
         });
@@ -226,8 +239,12 @@ export class SwapController {
         userSourceSecret,
       });
 
+      const settled = result.status === 'COMPLETED';
       res.json({
-        success: true,
+        success: settled,
+        settled,
+        status: result.status,
+        error: result.errorMessage || undefined,
         data: result,
       });
     } catch (err: any) {
@@ -247,7 +264,7 @@ export class SwapController {
         return;
       }
 
-      const order = (await CrossChainSwapService.getSwapOrder(swapId)) || NrTokenService.getNrSwapOrder(swapId);
+      const order = (await CrossChainSwapService.getSwapOrder(swapId)) || (await NrTokenService.getNrSwapOrder(swapId));
       if (!order) {
         res.status(404).json({ success: false, error: 'Swap order not found or expired' });
         return;
@@ -377,21 +394,32 @@ export class SwapController {
    */
   static async getXrplPendingClaims(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const swapsCol = await MongoService.getCollection<any>('swap_orders');
-      const rows = await swapsCol
-        .find({
-          user_id: req.user!.id,
-          fromAsset: 'XRP',
-          toAsset: 'NXL',
-          status: { $in: ['PENDING_DEPOSIT', 'DEPOSIT_CONFIRMED'] },
-          depositTxHash: { $exists: true, $nin: ['', null] },
-          payoutTxHash: { $in: ['', null, undefined] },
-        })
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .toArray();
+      const filter = {
+        user_id: req.user!.id,
+        fromAsset: 'XRP',
+        toAsset: 'NXL',
+        status: { $in: ['PENDING_DEPOSIT', 'DEPOSIT_CONFIRMED', 'AWAITING_TRUSTLINE'] },
+        depositTxHash: { $exists: true, $nin: ['', null] },
+        payoutTxHash: { $in: ['', null, undefined] },
+      };
+      const [swapsCol, legacyCol] = await Promise.all([
+        MongoService.getCollection<any>('swaps'),
+        MongoService.getCollection<any>('swap_orders'),
+      ]);
+      const [primaryRows, legacyRows] = await Promise.all([
+        swapsCol.find(filter).sort({ createdAt: -1 }).limit(5).toArray(),
+        legacyCol.find(filter).sort({ createdAt: -1 }).limit(5).toArray(),
+      ]);
 
-      const claims = rows.map((row) => ({
+      const seen = new Set<string>();
+      const merged = [...primaryRows, ...legacyRows].filter((r) => {
+        const id = String(r.swapId || '');
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+      const claims = merged.slice(0, 5).map((row) => ({
         swapId: String(row.swapId),
         depositTxHash: String(row.depositTxHash),
         amountXrp: Number(row.payAmount || 0),
@@ -417,8 +445,16 @@ export class SwapController {
         return;
       }
 
-      const swapsCol = await MongoService.getCollection<any>('swap_orders');
-      const swap = await swapsCol.findOne({ swapId: String(swapId) });
+      const [primarySwapsCol, legacySwapsCol] = await Promise.all([
+        MongoService.getCollection<any>('swaps'),
+        MongoService.getCollection<any>('swap_orders'),
+      ]);
+      let swapsCol = primarySwapsCol;
+      let swap = await primarySwapsCol.findOne({ swapId: String(swapId) });
+      if (!swap) {
+        swap = await legacySwapsCol.findOne({ swapId: String(swapId) });
+        if (swap) swapsCol = legacySwapsCol;
+      }
       if (!swap) {
         res.status(404).json({ success: false, error: 'Swap order not found' });
         return;
@@ -523,13 +559,38 @@ export class SwapController {
         toAsset: 'NXL',
         amount: xrpAmount,
       });
-      const receiveNxl = quote.receiveAmount;
+      const receiveNxl = Number(swap.receiveAmount || quote.receiveAmount);
 
-      const payout = await DualRailTokenService.withdrawNrToXrplAddress(
-        req.user!.id,
-        receiveNxl,
-        cleanDest
-      );
+      await SupplyReconciliationService.verifyReserveForWithdrawal('XRPL', receiveNxl);
+
+      // If this swap previously escrowed internal NXL while AWAITING_TRUSTLINE, debit it before on-chain payout
+      let escrowedMicroDebited = 0;
+      if (swap.status === 'AWAITING_TRUSTLINE') {
+        const microToDebit = Math.round(receiveNxl * 1_000_000);
+        try {
+          await walletService.debitBalance(req.user!.id, microToDebit, 'NXL', `${swapId}:CLAIM_PENDING`);
+          escrowedMicroDebited = microToDebit;
+        } catch {
+          // User may have already spent or not received internal escrow on legacy swap_orders
+        }
+      }
+
+      let payout: { txHash: string; ledgerSeq: number; explorerUrl: string };
+      try {
+        payout = await DualRailTokenService.withdrawNrToXrplAddress(
+          req.user!.id,
+          receiveNxl,
+          cleanDest,
+          { skipTrustlineCheck: true, verifiedIssuer: trustline.issuer }
+        );
+      } catch (payoutErr: any) {
+        if (escrowedMicroDebited > 0) {
+          await walletService
+            .creditBalance(req.user!.id, escrowedMicroDebited, 'NXL', `refund:${swapId}:CLAIM_PENDING`)
+            .catch(() => {});
+        }
+        throw payoutErr;
+      }
 
       await swapsCol.updateOne(
         { swapId: String(swapId) },
@@ -610,8 +671,46 @@ export class SwapController {
       ]);
 
       const seenSwapIds = new Set<string>();
-      const formatted = logs.map((l: any) => {
+      const formatted: any[] = logs.map((l: any) => {
         if (l.reference_id) seenSwapIds.add(String(l.reference_id));
+        const chainRail = String(l.chain || '').toUpperCase() === 'XRPL' ? 'XRPL' : 'STELLAR';
+        const realTxHash = sanitizeOnChainTxHash(l.tx_hash);
+        const realDepositHash = sanitizeOnChainTxHash(l.details?.depositTxHash);
+        const realPayoutHash = sanitizeOnChainTxHash(l.details?.payoutTxHash);
+        const legs: SwapTransactionLeg[] = [];
+        if (realDepositHash) {
+          const depRail = l.details?.fromAsset === 'XRP' ? 'XRPL' : 'STELLAR';
+          legs.push({
+            sequence: 1,
+            direction: 'INCOMING',
+            stage: 'DEPOSIT',
+            label: `User Deposit (${l.details?.fromAsset || depRail})`,
+            asset: l.details?.fromAsset || depRail,
+            amount: Number(l.details?.payAmount || 0),
+            rail: depRail,
+            status: 'SUCCESS',
+            txHash: realDepositHash,
+            explorerUrl: buildExplorerTxUrl(depRail, realDepositHash),
+            timestamp: l.created_at,
+          });
+        }
+        if (realTxHash) {
+          legs.push({
+            sequence: legs.length + 1,
+            direction: 'OUTGOING',
+            stage: 'ONCHAIN_PAYOUT',
+            label: `${l.action || 'On-Chain Settlement'} (${chainRail})`,
+            asset: l.details?.toAsset || (chainRail === 'XRPL' ? 'XRP' : 'XLM'),
+            amount: Number(l.details?.receiveAmount || l.amount_primary || 0),
+            rail: chainRail,
+            status: l.status === 'FAILED' ? 'FAILED' : 'SUCCESS',
+            txHash: realTxHash,
+            explorerUrl: buildExplorerTxUrl(chainRail, realTxHash) || l.explorer_url || null,
+            toAddress: l.details?.destinationAddress || undefined,
+            errorMessage: l.error_message || undefined,
+            timestamp: l.created_at,
+          });
+        }
         return {
           id: l.id,
           swapId: l.reference_id,
@@ -619,10 +718,18 @@ export class SwapController {
           action: l.action,
           amount: l.amount_primary || '',
           destinationAddress: l.details?.destinationAddress || l.operator_id,
-          txHash: l.tx_hash,
+          txHash: realTxHash || '',
+          depositTxHash: realDepositHash || undefined,
+          payoutTxHash: realPayoutHash || realTxHash || undefined,
+          depositExplorerUrl: realDepositHash
+            ? buildExplorerTxUrl(l.details?.fromAsset === 'XRP' ? 'XRPL' : 'STELLAR', realDepositHash) || undefined
+            : undefined,
+          payoutExplorerUrl: realTxHash ? buildExplorerTxUrl(chainRail, realTxHash) || l.explorer_url : undefined,
           ledgerSeq: l.ledger_seq,
-          explorerUrl: l.explorer_url,
+          explorerUrl: realTxHash ? buildExplorerTxUrl(chainRail, realTxHash) || l.explorer_url : '',
           status: l.status || 'SUCCESS',
+          errorMessage: l.error_message,
+          transactions: legs,
           createdAt: l.created_at,
           details: l.details || {},
         };
@@ -630,25 +737,47 @@ export class SwapController {
 
       for (const s of savedSwaps) {
         if (seenSwapIds.has(s.swapId)) continue;
+        const legs = s.transactions && s.transactions.length > 0 ? s.transactions : deriveFallbackLegs(s);
+        const cleanDeposit = sanitizeOnChainTxHash(s.depositTxHash) || undefined;
+        const cleanPayout = sanitizeOnChainTxHash(s.payoutTxHash) || undefined;
         formatted.push({
           id: s.swapId,
           swapId: s.swapId,
-          chain: s.toAsset === 'XLM' ? 'STELLAR' : 'XRPL',
-          action: 'CROSS_CHAIN_SWAP',
+          chain:
+            s.settlementType === 'INTERNAL_LEDGER'
+              ? 'INTERNAL'
+              : s.toAsset === 'XLM'
+              ? 'STELLAR'
+              : s.toAsset === 'XRP'
+              ? 'XRPL'
+              : s.userDestinationAddress?.startsWith('G')
+              ? 'STELLAR'
+              : s.userDestinationAddress?.startsWith('r')
+              ? 'XRPL'
+              : 'INTERNAL',
+          action: s.settlementType === 'INTERNAL_LEDGER' ? 'INTERNAL_LEDGER_SWAP' : 'CROSS_CHAIN_SWAP',
           amount: `${s.payAmount} ${s.fromAsset} -> ${s.receiveAmount} ${s.toAsset}`,
           destinationAddress: s.userDestinationAddress,
-          txHash: s.payoutTxHash || s.depositTxHash || '',
+          txHash: cleanPayout || cleanDeposit || '',
+          depositTxHash: cleanDeposit,
+          payoutTxHash: cleanPayout,
+          depositExplorerUrl: s.depositExplorerUrl,
+          payoutExplorerUrl: s.payoutExplorerUrl,
           ledgerSeq: undefined,
           explorerUrl: s.payoutExplorerUrl || s.depositExplorerUrl || '',
           status: s.status,
+          settlementType: s.settlementType,
+          errorMessage: s.errorMessage,
+          transactions: legs,
           createdAt: s.createdAt,
           details: {
             fromAsset: s.fromAsset,
             toAsset: s.toAsset,
             payAmount: s.payAmount,
             receiveAmount: s.receiveAmount,
-            depositTxHash: s.depositTxHash,
-            payoutTxHash: s.payoutTxHash,
+            depositTxHash: cleanDeposit,
+            payoutTxHash: cleanPayout,
+            journalEntry: s.journalEntry,
           },
         });
       }
@@ -768,7 +897,7 @@ export class SwapController {
         return;
       }
 
-      if (fromAsset === 'NXL' && toAsset === 'XRP') {
+      if (fromAsset === 'NXL' && (toAsset === 'XRP' || toAsset === 'NXL')) {
         if (!xrplDestination.startsWith('r')) {
           res.status(400).json({ success: false, error: 'Valid XRPL destination address (r...) is required' });
           return;
@@ -780,9 +909,10 @@ export class SwapController {
           xrplDestination,
           swapId,
         });
+        const mode: SorobanBridgeMode = toAsset === 'NXL' ? 'SOROBAN_BRIDGE_NXL' : 'SOROBAN_BRIDGE_BURN';
         res.json({
           success: true,
-          mode: 'SOROBAN_BRIDGE_BURN',
+          mode,
           data: {
             ...prepared,
             swapId,
@@ -798,7 +928,7 @@ export class SwapController {
 
       res.status(400).json({
         success: false,
-        error: `Soroban on-chain route supports XLM<->NXL (AMM), XLM->XRP (Bridge Escrow), or NXL->XRP (Burn-for-Bridge). Got ${fromAsset}->${toAsset}.`,
+        error: `Soroban on-chain route supports XLM<->NXL (AMM), XLM->XRP (Bridge Escrow), NXL->XRP or NXL->NXL (Burn-for-Bridge). Got ${fromAsset}->${toAsset}.`,
       });
     } catch (err: any) {
       res.status(400).json({ success: false, error: err?.message || 'Failed to prepare Soroban swap XDR' });
@@ -824,30 +954,147 @@ export class SwapController {
         return;
       }
 
+      if (
+        (mode === 'SOROBAN_BRIDGE_ESCROW' ||
+          mode === 'SOROBAN_BRIDGE_BURN' ||
+          mode === 'SOROBAN_BRIDGE_NXL') &&
+        xrplDestination.startsWith('r')
+      ) {
+        const bridgeOp = await BridgeOperationService.submitSorobanBridge({
+          signedXdr,
+          mode: mode as SorobanBridgeMode,
+          swapId,
+          fromAsset: fromAsset === 'NXL' ? 'NXL' : 'XLM',
+          toAsset:
+            mode === 'SOROBAN_BRIDGE_NXL' || toAsset === 'NXL' ? 'NXL' : 'XRP',
+          amount,
+          xrplDestination,
+          userSourceAddress: String(req.body?.userSourceAddress || '').trim() || undefined,
+          userId,
+          escrowExpiryUnixSec: req.body?.escrowExpiryUnixSec
+            ? Number(req.body.escrowExpiryUnixSec)
+            : undefined,
+        });
+
+        const settled = bridgeOp.status === 'COMPLETED';
+        res.json({
+          success: settled || bridgeOp.status === 'RETRY_SCHEDULED' || bridgeOp.status === 'AWAITING_TRUSTLINE',
+          settled,
+          status: bridgeOp.status,
+          error: bridgeOp.last_error || undefined,
+          data: {
+            swapId: bridgeOp.swap_id,
+            mode,
+            status: bridgeOp.status,
+            txHash: bridgeOp.source_tx_hash,
+            explorerUrl: bridgeOp.source_explorer_url,
+            payoutTxHash: bridgeOp.dest_tx_hash,
+            payoutExplorerUrl: bridgeOp.dest_explorer_url,
+            escrowReleaseTxHash: bridgeOp.escrow_release_tx_hash,
+            transactions: bridgeOp.legs,
+            bridgeOperation: bridgeOp,
+          },
+        });
+        return;
+      }
+
       const txRes = await SorobanService.submitSignedSorobanXdr(signedXdr);
+      const nowIso = new Date().toISOString();
+      const ingressHash = sanitizeOnChainTxHash(txRes.txHash);
+      const ingressExplorerUrl = buildExplorerTxUrl('STELLAR', ingressHash) || txRes.explorerUrl;
+
+      const transactions: SwapTransactionLeg[] = [
+        {
+          sequence: 1,
+          direction: 'INCOMING',
+          stage: mode === 'SOROBAN_AMM_SWAP' ? 'AMM_SWAP' : 'DEPOSIT',
+          label:
+            mode === 'SOROBAN_AMM_SWAP'
+              ? `Soroban AMM Swap (${fromAsset} → ${toAsset})`
+              : mode === 'SOROBAN_BRIDGE_BURN'
+              ? `Burn ${fromAsset} on NexusVault (Stellar)`
+              : `Lock ${fromAsset} in Bridge Escrow (Stellar)`,
+          asset: fromAsset,
+          amount,
+          rail: 'STELLAR',
+          status: 'SUCCESS',
+          txHash: ingressHash,
+          explorerUrl: ingressExplorerUrl,
+          timestamp: nowIso,
+        },
+      ];
 
       let payoutTxHash: string | undefined;
       let payoutExplorerUrl: string | undefined;
       let escrowReleaseTxHash: string | undefined;
+      let receiveXrp = 0;
 
       if (mode === 'SOROBAN_BRIDGE_ESCROW' && xrplDestination.startsWith('r') && amount > 0) {
         const fx = await getFxQuote();
-        const receiveXrp = Number(((amount * fx.xlmUsd) / fx.xrpUsd).toFixed(4));
+        receiveXrp = Number(((amount * fx.xlmUsd) / fx.xrpUsd).toFixed(4));
         const payout = await CrossChainSwapService.payoutAssetToUser({
           toAsset: 'XRP',
           destinationAddress: xrplDestination,
           amount: receiveXrp,
           referenceId: swapId,
         });
-        payoutTxHash = payout.txHash;
-        payoutExplorerUrl = payout.explorerUrl;
+        payoutTxHash = payout.txHash || undefined;
+        payoutExplorerUrl = payout.explorerUrl || undefined;
 
-        if (payoutTxHash) {
-          const rel = await SorobanService.releaseBridgeEscrowOnChain({
-            swapId,
-            xrplTxHash: payoutTxHash,
-          }).catch(() => null);
-          escrowReleaseTxHash = rel?.txHash;
+        transactions.push({
+          sequence: transactions.length + 1,
+          direction: 'OUTGOING',
+          stage: 'ONCHAIN_PAYOUT',
+          label: 'Server Payout (XRP on XRPL)',
+          asset: 'XRP',
+          amount: receiveXrp,
+          rail: 'XRPL',
+          status: payout.ok ? 'SUCCESS' : 'FAILED',
+          txHash: payout.txHash,
+          explorerUrl: payout.explorerUrl,
+          toAddress: xrplDestination,
+          errorMessage: payout.ok ? undefined : payout.errorMessage,
+          timestamp: new Date().toISOString(),
+        });
+
+        if (payout.ok && payout.txHash) {
+          try {
+            const rel = await SorobanService.releaseBridgeEscrowOnChain({
+              swapId,
+              xrplTxHash: payout.txHash,
+            });
+            const relHash = sanitizeOnChainTxHash(rel?.txHash);
+            escrowReleaseTxHash = relHash || undefined;
+            transactions.push({
+              sequence: transactions.length + 1,
+              direction: 'OUTGOING',
+              stage: 'ESCROW_RELEASE',
+              label: 'Soroban Bridge Escrow Release (Stellar)',
+              asset: fromAsset,
+              amount,
+              rail: 'STELLAR',
+              status: relHash ? 'SUCCESS' : 'FAILED',
+              txHash: relHash,
+              explorerUrl: buildExplorerTxUrl('STELLAR', relHash),
+              errorMessage: relHash ? undefined : 'Escrow release transaction did not return a hash',
+              timestamp: new Date().toISOString(),
+            });
+          } catch (relErr: any) {
+            transactions.push({
+              sequence: transactions.length + 1,
+              direction: 'OUTGOING',
+              stage: 'ESCROW_RELEASE',
+              label: 'Soroban Bridge Escrow Release (Stellar)',
+              asset: fromAsset,
+              amount,
+              rail: 'STELLAR',
+              status: 'FAILED',
+              txHash: null,
+              explorerUrl: null,
+              errorMessage: relErr?.message || 'Escrow release failed',
+              timestamp: new Date().toISOString(),
+            });
+          }
         }
       }
 
@@ -855,16 +1102,35 @@ export class SwapController {
         const fx = await getFxQuote();
         const poolStats = await NrTokenService.getPoolStats().catch(() => ({ spotPriceUsd: 1 }));
         const usdVal = amount * (poolStats.spotPriceUsd || 1);
-        const receiveXrp = Number((usdVal / Math.max(0.01, fx.xrpUsd)).toFixed(4));
+        receiveXrp = Number((usdVal / Math.max(0.01, fx.xrpUsd)).toFixed(4));
         const payout = await CrossChainSwapService.payoutAssetToUser({
           toAsset: 'XRP',
           destinationAddress: xrplDestination,
           amount: receiveXrp,
           referenceId: swapId,
         });
-        payoutTxHash = payout.txHash;
-        payoutExplorerUrl = payout.explorerUrl;
+        payoutTxHash = payout.txHash || undefined;
+        payoutExplorerUrl = payout.explorerUrl || undefined;
+
+        transactions.push({
+          sequence: transactions.length + 1,
+          direction: 'OUTGOING',
+          stage: 'ONCHAIN_PAYOUT',
+          label: 'Server Payout (XRP on XRPL)',
+          asset: 'XRP',
+          amount: receiveXrp,
+          rail: 'XRPL',
+          status: payout.ok ? 'SUCCESS' : 'FAILED',
+          txHash: payout.txHash,
+          explorerUrl: payout.explorerUrl,
+          toAddress: xrplDestination,
+          errorMessage: payout.ok ? undefined : payout.errorMessage,
+          timestamp: new Date().toISOString(),
+        });
       }
+
+      const failedLeg = transactions.find((t) => t.status === 'FAILED');
+      const allOk = !failedLeg;
 
       await DualRailTokenService.logChainAction({
         chain: 'STELLAR',
@@ -874,10 +1140,15 @@ export class SwapController {
         txHash: txRes.txHash,
         ledgerSeq: txRes.ledger,
         amountPrimary: amount,
+        status: allOk ? 'SUCCESS' : 'FAILED',
+        errorMessage: failedLeg?.errorMessage,
         details: {
           mode,
           fromAsset,
           toAsset,
+          payAmount: amount,
+          receiveAmount: receiveXrp || undefined,
+          depositTxHash: ingressHash || undefined,
           contractId: mode === 'SOROBAN_BRIDGE_BURN' ? NEXUS_VAULT_CONTRACT_ID : NEXUS_SWAP_CONTRACT_ID,
           destinationAddress: xrplDestination || undefined,
           payoutTxHash,
@@ -887,17 +1158,21 @@ export class SwapController {
       }).catch(() => {});
 
       res.json({
-        success: true,
+        success: allOk,
+        settled: allOk,
+        error: failedLeg?.errorMessage,
         data: {
           swapId,
           mode,
+          status: allOk ? 'COMPLETED' : 'FAILED',
           txHash: txRes.txHash,
           ledger: txRes.ledger,
-          explorerUrl: txRes.explorerUrl,
+          explorerUrl: ingressExplorerUrl,
           returnValue: txRes.returnValue,
           payoutTxHash,
           payoutExplorerUrl,
           escrowReleaseTxHash,
+          transactions,
         },
       });
     } catch (err: any) {
@@ -906,11 +1181,115 @@ export class SwapController {
   }
 
   /**
+   * POST /api/v1/swap/bridge/xrpl-to-stellar
+   */
+  static async executeXrplToStellarBridge(req: Request, res: Response): Promise<void> {
+    try {
+      const fromAsset = String(req.body?.fromAsset || 'XRP').toUpperCase();
+      const toAsset = String(req.body?.toAsset || 'XLM').toUpperCase();
+      const amount = Number(req.body?.amount || 0);
+      const destinationAddress = String(req.body?.destinationAddress || req.body?.userDestinationAddress || '').trim();
+      const sourceTxHash = String(req.body?.sourceTxHash || req.body?.depositTxHash || '').trim();
+      const swapId = req.body?.swapId ? String(req.body.swapId).trim() : undefined;
+      const expectedDestinationTag =
+        req.body?.destinationTag !== undefined ? Number(req.body.destinationTag) : undefined;
+      const userId = extractOptionalUserId(req);
+
+      if ((fromAsset !== 'XRP' && fromAsset !== 'NXL') || (toAsset !== 'XLM' && toAsset !== 'NXL')) {
+        res.status(400).json({
+          success: false,
+          error: 'XRPL->Stellar bridge supports XRP or NXL input to XLM or NXL output',
+        });
+        return;
+      }
+
+      const op = await BridgeOperationService.executeXrplToStellarBridge({
+        swapId,
+        userId,
+        fromAsset: fromAsset as 'XRP' | 'NXL',
+        toAsset: toAsset as 'XLM' | 'NXL',
+        amount,
+        destinationAddress,
+        sourceTxHash,
+        expectedDestinationTag,
+      });
+
+      const settled = op.status === 'COMPLETED';
+      res.json({
+        success: settled || op.status === 'RETRY_SCHEDULED' || op.status === 'AWAITING_TRUSTLINE',
+        settled,
+        status: op.status,
+        error: op.last_error,
+        data: op,
+      });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err?.message || 'XRPL->Stellar bridge execution failed' });
+    }
+  }
+
+  /**
+   * GET /api/v1/swap/bridge/:swapId
+   */
+  static async getBridgeOperation(req: Request, res: Response): Promise<void> {
+    try {
+      const swapId = String(req.params.swapId || '').trim();
+      const info = await BridgeOperationService.getOperationStatus(swapId);
+      if (!info.operation && !info.onChainEscrow) {
+        res.status(404).json({ success: false, error: `Bridge operation ${swapId} not found` });
+        return;
+      }
+      res.json({ success: true, data: info });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to inspect bridge operation' });
+    }
+  }
+
+  /**
+   * POST /api/v1/swap/bridge/:swapId/refund
+   */
+  static async refundBridgeEscrow(req: Request, res: Response): Promise<void> {
+    try {
+      const swapId = String(req.params.swapId || '').trim();
+      const callerAddress = req.body?.callerAddress ? String(req.body.callerAddress).trim() : undefined;
+      const result = await BridgeOperationService.refundEscrow({
+        swapId,
+        callerAddress,
+        executeRelayerRefund: false,
+      });
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err?.message || 'Escrow refund failed' });
+    }
+  }
+
+  /**
+   * POST /api/v1/swap/bridge/:swapId/claim-trustline
+   */
+  static async claimBridgeTrustline(req: Request, res: Response): Promise<void> {
+    try {
+      const swapId = String(req.params.swapId || '').trim();
+      const op = await BridgeOperationService.processBridgeOperation(swapId);
+      const settled = op.status === 'COMPLETED';
+      res.json({
+        success: settled,
+        settled,
+        status: op.status,
+        error: op.last_error,
+        data: op,
+      });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err?.message || 'Failed to resume trustline claim' });
+    }
+  }
+
+  /**
    * GET /api/v1/swap/:swapId
    */
   static async getSwapById(req: Request, res: Response): Promise<void> {
     const swapId = String(req.params.swapId);
-    const order = await CrossChainSwapService.getSwapOrder(swapId);
+    const order =
+      (await CrossChainSwapService.getSwapOrder(swapId)) ||
+      (await NrTokenService.getNrSwapOrder(swapId));
 
     if (!order) {
       res.status(404).json({ success: false, error: 'Swap order not found' });

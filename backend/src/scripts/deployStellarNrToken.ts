@@ -3,7 +3,8 @@ import { MongoService, MongoPlatformTokenDoc, MongoTokenWithdrawalDoc } from '..
 import { env } from '../config/env.js';
 
 export const STELLAR_NR_ASSET_CODE = 'NXL';
-export const NR_TOTAL_ON_CHAIN_CAP = 1_000_000;
+export const NR_TOTAL_ON_CHAIN_CAP = 2_000_000;
+export const NR_INITIAL_GENESIS_MINT = 1_000_000;
 
 export class StellarTokenIssuerService {
   private static getHorizonServer(): Horizon.Server {
@@ -17,7 +18,16 @@ export class StellarTokenIssuerService {
   static async getOnChainTokenDetails(): Promise<MongoPlatformTokenDoc> {
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
     const existing = await tokensCol.findOne({ symbol: 'NXL', chain: 'STELLAR' });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.total_supply_cap !== NR_TOTAL_ON_CHAIN_CAP) {
+        await tokensCol.updateOne(
+          { _id: existing._id },
+          { $set: { total_supply_cap: NR_TOTAL_ON_CHAIN_CAP } }
+        );
+        existing.total_supply_cap = NR_TOTAL_ON_CHAIN_CAP;
+      }
+      return existing;
+    }
 
     const genesisDoc: MongoPlatformTokenDoc = {
       symbol: 'NXL',
@@ -26,9 +36,9 @@ export class StellarTokenIssuerService {
       asset_code: STELLAR_NR_ASSET_CODE,
       issuer_address: env.STELLAR_NR_ISSUER_PUBLIC || 'GB24JBHL5EIZPUJPGPT67W6BDSEWY2SJU4I2UOV3RAZ4DG4HLLBJRAOZ',
       issuer_secret: env.STELLAR_NR_ISSUER_SECRET || 'SAYWBF264FHGQT6HKV4ARD6VS5CYHI7B5LK4SPGPSZ7F2FML36EE2LFY',
-      contract_id: env.STELLAR_NR_CONTRACT_ID || 'CC4L5YQEBSAPJ4KOLM4FXYYV7CAULXI6WPG35INRYLRUTX5GGEO6GD5N',
+      contract_id: env.STELLAR_NR_CONTRACT_ID || 'CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC',
       distribution_address: env.STELLAR_NR_DISTRIBUTOR_VAULT || 'GDXPDDOVJRPP4UKRSYJUABBR4WKNBHS3STNK5TGXJ6RNXTGDDZ5ORXGC',
-      initial_mint_amount: NR_TOTAL_ON_CHAIN_CAP,
+      initial_mint_amount: NR_INITIAL_GENESIS_MINT,
       total_supply_cap: NR_TOTAL_ON_CHAIN_CAP,
       mint_tx_hash: '4945f74bef92a0ab1f3842a8b72f79c252f187b1d7ea0b47a8f14a38929c837b',
       created_at: new Date('2026-11-16T10:00:00.000Z').toISOString(),

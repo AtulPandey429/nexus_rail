@@ -15,6 +15,10 @@ import { TreasuryService } from '../services/treasury.service.js';
 import { SorobanService } from '../services/soroban.js';
 import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
 import { DualRailTokenService } from '../services/dualRailToken.service.js';
+import { SupplyReconciliationService } from '../services/supplyReconciliation.service.js';
+import { GlobalSupplyCoordinator } from '../services/globalSupplyCoordinator.service.js';
+import { BuybackService } from '../services/buyback.service.js';
+import { BridgeOperationService } from '../services/bridgeOperation.service.js';
 import { AdminAnalyticsService } from '../services/adminAnalytics.service.js';
 import { CrossChainSwapService } from '../services/crossChainSwap.service.js';
 import { resolveUnderpaidOrder, type UnderpaidResolutionMode } from '../services/underpaidOrder.service.js';
@@ -683,14 +687,27 @@ export class AdminController {
       return res.status(400).json({ success: false, error: 'amountNxl must be between 0 and 100,000' });
     }
     const refId = `ADMIN_MINT_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-    const result = await SorobanService.mintNxlOnChain({
-      recipientAddress,
+    await GlobalSupplyCoordinator.reserveMintCapacity({
+      operationId: refId,
+      chain: 'STELLAR',
       amountNxl,
       reason,
-      refId,
-      operatorId: req.user?.id || 'ADMIN',
+      recipientAddress,
     });
-    res.json({ success: true, data: { ...result, amountNxl, recipientAddress, reason, refId } });
+    try {
+      const result = await SorobanService.mintNxlOnChain({
+        recipientAddress,
+        amountNxl,
+        reason,
+        refId,
+        operatorId: req.user?.id || 'ADMIN',
+      });
+      await GlobalSupplyCoordinator.confirmMintCapacity(refId, result.txHash, result.ledger);
+      res.json({ success: true, data: { ...result, amountNxl, recipientAddress, reason, refId } });
+    } catch (mintErr: any) {
+      await GlobalSupplyCoordinator.releaseMintCapacity(refId, mintErr?.message || 'Admin mint failed');
+      throw mintErr;
+    }
   } catch (error: any) {
     res.status(400).json({ success: false, error: error?.message || 'On-chain $NXL mint failed' });
   }
@@ -816,7 +833,7 @@ export class AdminController {
           contractId: stellarDoc?.contract_id || env.STELLAR_NR_CONTRACT_ID,
           distributorVault: stellarDoc?.distribution_address || env.STELLAR_NR_DISTRIBUTOR_VAULT,
           distributorSecretKey: env.STELLAR_HOT_WALLET_SECRET,
-          totalSupplyCap: stellarDoc?.total_supply_cap || 1_000_000,
+          totalSupplyCap: stellarDoc?.total_supply_cap || 2_000_000,
           mintTxHash: stellarDoc?.mint_tx_hash,
           explorerUrl: stellarDoc?.explorer_url || `https://stellar.expert/explorer/testnet/asset/NXL-${stellarDoc?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC}`,
         },
@@ -828,7 +845,7 @@ export class AdminController {
           ammAccount: xrplDoc?.amm_account || env.XRPL_NR_AMM_ACCOUNT,
           distributorVault: xrplDoc?.distribution_address || env.PLATFORM_XRPL_VAULT,
           distributorSecretSeed: env.XRPL_HOT_WALLET_SEED,
-          totalSupplyCap: xrplDoc?.total_supply_cap || 1_000_000,
+          totalSupplyCap: xrplDoc?.total_supply_cap || 2_000_000,
           ammTxHash: xrplDoc?.amm_tx_hash,
           mintTxHash: xrplDoc?.mint_tx_hash,
           explorerUrl: xrplDoc?.explorer_url || `https://testnet.xrpl.org/accounts/${env.XRPL_NR_ISSUER_ADDRESS}`,
@@ -838,6 +855,23 @@ export class AdminController {
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Failed to fetch credentials' });
   }
+  }
+
+  /**
+   * GET /api/v1/admin/tokenomics/reconciliation
+   * Full 360-degree on-chain + internal ledger $NXL supply reconciliation report
+   */
+  static async getTokenomicsReconciliation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const forceRefresh = req.query.refresh === 'true';
+      const report = await SupplyReconciliationService.getReconciliationReport({ forceRefresh });
+      res.json({ success: true, data: report });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to compute supply reconciliation report',
+      });
+    }
   }
 
   /**
@@ -901,6 +935,109 @@ export class AdminController {
       });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * GET /api/v1/admin/buyback/status
+   * Returns on-chain Buyback Reserve status and confirmed SAC burn metrics
+   */
+  static async getBuybackStatus(_req: AuthenticatedRequest, res: Response) {
+    try {
+      const status = await BuybackService.getStatus();
+      res.json({ success: true, data: status });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || 'Failed to load buyback status' });
+    }
+  }
+
+  /**
+   * POST /api/v1/admin/buyback/execute
+   * Triggers (or resumes) an authorized real NexusSwap + NexusVault buyback-and-burn cycle
+   */
+  static async executeBuyback(req: AuthenticatedRequest, res: Response) {
+    try {
+      const {
+        idempotencyKey,
+        xlmAmount,
+        minThresholdXlm,
+        maxSingleSwapXlm,
+        maxSlippageBps,
+        maxPriceImpactPct,
+      } = req.body || {};
+
+      const execution = await BuybackService.executeBuybackAndBurn({
+        idempotencyKey: idempotencyKey ? String(idempotencyKey) : undefined,
+        triggerType: 'ADMIN_MANUAL',
+        triggeredBy: req.user?.id || 'ADMIN',
+        xlmAmount: xlmAmount !== undefined ? Number(xlmAmount) : undefined,
+        minThresholdXlm: minThresholdXlm !== undefined ? Number(minThresholdXlm) : undefined,
+        maxSingleSwapXlm: maxSingleSwapXlm !== undefined ? Number(maxSingleSwapXlm) : undefined,
+        maxSlippageBps: maxSlippageBps !== undefined ? Number(maxSlippageBps) : undefined,
+        maxPriceImpactPct: maxPriceImpactPct !== undefined ? Number(maxPriceImpactPct) : undefined,
+      });
+
+      res.json({ success: true, data: execution });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || 'Buyback-and-burn execution failed' });
+    }
+  }
+
+  /**
+   * GET /api/v1/admin/buyback/history
+   * Returns paginated history of durable buyback-and-burn executions
+   */
+  static async getBuybackHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const limit = Number(req.query.limit || 50);
+      const items = await BuybackService.getHistory(limit);
+      res.json({ success: true, count: items.length, data: { items } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || 'Failed to load buyback history' });
+    }
+  }
+
+  /**
+   * GET /api/v1/admin/bridge/operations
+   */
+  static async getBridgeOperations(req: AuthenticatedRequest, res: Response) {
+    try {
+      const status = req.query.status ? String(req.query.status) : undefined;
+      const direction = req.query.direction ? String(req.query.direction) : undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
+      const result = await BridgeOperationService.listOperations({ status, direction, limit });
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || 'Failed to load bridge operations' });
+    }
+  }
+
+  /**
+   * POST /api/v1/admin/bridge/:swapId/retry
+   */
+  static async retryBridgeOperation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const swapId = String(req.params.swapId || '').trim();
+      const op = await BridgeOperationService.processBridgeOperation(swapId);
+      res.json({ success: true, data: op });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || 'Failed to retry bridge operation' });
+    }
+  }
+
+  /**
+   * POST /api/v1/admin/bridge/:swapId/refund
+   */
+  static async refundBridgeOperation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const swapId = String(req.params.swapId || '').trim();
+      const result = await BridgeOperationService.refundEscrow({
+        swapId,
+        executeRelayerRefund: true,
+      });
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || 'Failed to refund bridge escrow' });
     }
   }
 

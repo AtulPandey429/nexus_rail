@@ -165,7 +165,7 @@ describe('Suite: Module 4 — Platform Owner Profit Engine & Stellar Protocol 22
     const token = await StellarTokenIssuerService.getOnChainTokenDetails();
     assert.equal(token.symbol, 'NXL');
     assert.equal(token.chain, 'STELLAR');
-    assert.equal(token.total_supply_cap, 1_000_000);
+    assert.equal(token.total_supply_cap, 2_000_000);
 
     const validDest = 'GBZ42O4WJ45353I4V32B4N5M6K7L8J9H0G1F2E3D4C5B6A7Z8Y9X0W1V';
     const withdrawal = await StellarTokenIssuerService.withdrawNrToExternalAddress(

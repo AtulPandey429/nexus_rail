@@ -101,6 +101,76 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
     explorerUrl?: string;
   } | null>(null);
 
+  // Real On-Chain Buyback & Burn Engine (NexusSwap -> NexusVault burn_nxl)
+  const [buybackStatus, setBuybackStatus] = useState<any | null>(null);
+  const [buybackHistory, setBuybackHistory] = useState<any[]>([]);
+  const [loadingBuyback, setLoadingBuyback] = useState(false);
+  const [executingBuyback, setExecutingBuyback] = useState(false);
+  const [buybackFeedback, setBuybackFeedback] = useState<{
+    tone: 'success' | 'error';
+    message: string;
+    swapUrl?: string;
+    burnUrl?: string;
+  } | null>(null);
+
+  const loadBuybackData = async () => {
+    setLoadingBuyback(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const [statusRes, histRes] = await Promise.all([
+        fetch('/api/v1/admin/buyback/status', { headers, cache: 'no-store' }),
+        fetch('/api/v1/admin/buyback/history?limit=15', { headers, cache: 'no-store' }),
+      ]);
+      const statusJson = await statusRes.json().catch(() => null);
+      const histJson = await histRes.json().catch(() => null);
+      if (statusRes.ok && statusJson?.success) setBuybackStatus(statusJson.data);
+      if (histRes.ok && histJson?.success) setBuybackHistory(histJson.data?.items || []);
+    } catch {
+      // silent fallback
+    } finally {
+      setLoadingBuyback(false);
+    }
+  };
+
+  const handleExecuteRealBuyback = async () => {
+    setExecutingBuyback(true);
+    setBuybackFeedback(null);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+      const res = await fetch('/api/v1/admin/buyback/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json?.error || 'Buyback-and-burn execution failed');
+      }
+      const d = json.data;
+      setBuybackFeedback({
+        tone: d.status === 'COMPLETED' ? 'success' : 'error',
+        message:
+          d.status === 'COMPLETED'
+            ? `Swapped ${d.xlm_to_spend} XLM → ${d.actual_nxl_purchased} NXL & permanently burned ${d.burned_nxl} NXL on-chain.`
+            : `Execution recorded (${d.status}): ${d.last_error || 'Scheduled for worker recovery'}`,
+        swapUrl: d.swap_explorer_url,
+        burnUrl: d.burn_explorer_url,
+      });
+      await Promise.all([loadBuybackData(), loadLiveContracts()]);
+    } catch (err: any) {
+      setBuybackFeedback({
+        tone: 'error',
+        message: err?.message || 'Buyback-and-burn execution failed',
+      });
+    } finally {
+      setExecutingBuyback(false);
+    }
+  };
+
   const loadLiveContracts = async () => {
     setLoadingLiveContracts(true);
     try {
@@ -121,6 +191,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
 
   useEffect(() => {
     loadLiveContracts();
+    loadBuybackData();
   }, []);
 
   const handleOnChainTokenAction = async (mode: 'mint' | 'burn') => {
@@ -176,7 +247,7 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
     <div className="space-y-4">
       {splitFeedback && <Feedback tone={splitFeedbackTone}>{splitFeedback}</Feedback>}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Accumulated owner profit"
           value={formatUsd(treasurySummary?.netOwnerProfitUsd ?? 0)}
@@ -186,12 +257,20 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
           aside={<Badge tone="gold">Owner</Badge>}
         />
         <StatCard
-          label="$NXL buyback injected"
+          label="Virtual DB AMM pool injected"
           value={formatUsd(treasurySummary?.nrPoolInjectedUsd ?? 0)}
           icon={Coins}
           tone="cyan"
-          hint="Strengthens liquidity pool backing"
-          aside={<Badge tone="info">Pool</Badge>}
+          hint="Off-chain AMM pool liquidity ledger"
+          aside={<Badge tone="info">Virtual Pool</Badge>}
+        />
+        <StatCard
+          label="Confirmed on-chain burns"
+          value={`${Number(buybackStatus?.confirmedMetrics?.totalNxlBurnedOnChain ?? liveVaultMetrics?.totalNxlBurned ?? 0).toLocaleString()} NXL`}
+          icon={Flame}
+          tone="emerald"
+          hint={`Unburned purchased: ${Number(buybackStatus?.confirmedMetrics?.unburnedPurchasedNxl ?? 0).toFixed(2)} NXL`}
+          aside={<Badge tone="success" dot>SAC Burn</Badge>}
         />
         <StatCard
           label="Total protocol revenue"
@@ -583,6 +662,148 @@ export function TreasuryTab({ model }: { model: AdminModel }) {
             </Feedback>
           )}
         </div>
+      </Card>
+
+      {/* Real On-Chain Buyback & Burn Engine */}
+      <Card className="p-5 sm:p-6">
+        <SectionHeader
+          eyebrow="Deflationary Engine"
+          title="On-Chain Buyback & SAC Burn (NexusSwap → NexusVault)"
+          description="Purchases $NXL on NexusSwap using the isolated Buyback Reserve XLM balance and permanently executes burn_nxl(reason='buyback'). Distinct from virtual DB pool injections."
+          action={
+            <div className="flex items-center gap-2">
+              <Badge tone={buybackStatus?.reserveCollisionDetected ? 'danger' : buybackStatus?.configured ? 'success' : 'warning'} dot>
+                {buybackStatus?.reserveCollisionDetected
+                  ? 'Issuer Collision'
+                  : buybackStatus?.configured
+                  ? 'Isolated Reserve Ready'
+                  : 'Checking…'}
+              </Badge>
+              <Button variant="secondary" size="sm" icon={RefreshCw} loading={loadingBuyback} onClick={loadBuybackData}>
+                Refresh
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Flame}
+                loading={executingBuyback}
+                disabled={!buybackStatus?.eligibleForBuyback || buybackStatus?.reserveCollisionDetected}
+                onClick={handleExecuteRealBuyback}
+              >
+                Execute Buyback &amp; Burn
+              </Button>
+            </div>
+          }
+        />
+
+        {buybackFeedback && (
+          <div className="mt-4">
+            <Feedback tone={buybackFeedback.tone}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>{buybackFeedback.message}</span>
+                <div className="flex items-center gap-3">
+                  {buybackFeedback.swapUrl && (
+                    <a href={buybackFeedback.swapUrl} target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-1">
+                      Swap Tx <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {buybackFeedback.burnUrl && (
+                    <a href={buybackFeedback.burnUrl} target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-1">
+                      Burn Tx <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </Feedback>
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-admin-border bg-[#0B0F16] px-3.5 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-admin-faint">Isolated Buyback Reserve</p>
+            <div className="mt-1.5">
+              <CopyValue
+                value={buybackStatus?.reserveAddress || ''}
+                display={truncateMiddle(buybackStatus?.reserveAddress || 'Unconfigured', 10, 6)}
+                label="Copy buyback reserve address"
+              />
+            </div>
+          </div>
+          <MiniStat
+            label="Spendable Reserve XLM"
+            value={`${Number(buybackStatus?.spendableXlmAfterGasBuffer ?? 0).toFixed(2)} XLM`}
+            hint={`Min threshold: ${buybackStatus?.minThresholdXlm ?? 50} XLM (5 XLM gas buffer)`}
+            tone="text-sky-300"
+          />
+          <MiniStat
+            label="Buyback Purchased → Burned"
+            value={`${Number(buybackStatus?.confirmedMetrics?.totalNxlPurchased ?? 0).toFixed(2)} → ${Number(buybackStatus?.confirmedMetrics?.totalNxlBurnedOnChain ?? 0).toFixed(2)} NXL`}
+            hint={`${buybackStatus?.confirmedMetrics?.completedExecutions ?? 0} completed · ${Number(buybackStatus?.confirmedMetrics?.totalXlmSpent ?? 0).toFixed(2)} XLM spent`}
+            tone="text-emerald-300"
+          />
+          <MiniStat
+            label="Virtual Pool Ledger"
+            value={formatUsd(buybackStatus?.virtualTreasuryPoolInjectedUsd ?? treasurySummary?.nrPoolInjectedUsd ?? 0)}
+            hint="Off-chain AMM accounting only (not on-chain burn)"
+            tone="text-admin-gold-soft"
+          />
+        </div>
+
+        <TableWrap className="mt-5">
+          <Table minWidth={820}>
+            <thead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Trigger</Th>
+                <Th>Status</Th>
+                <Th align="right">XLM Spent</Th>
+                <Th align="right">Purchased</Th>
+                <Th align="right">Burned On-Chain</Th>
+                <Th align="right">Proof</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {buybackHistory.length > 0 ? (
+                buybackHistory.map((item: any) => (
+                  <tr key={item.id} className="hover:bg-white/[0.022]">
+                    <Td><span className="text-[11px] text-admin-muted">{formatDateTime(item.created_at)}</span></Td>
+                    <Td><Badge tone="neutral">{item.trigger_type || 'MANUAL'}</Badge></Td>
+                    <Td>
+                      <Badge
+                        tone={item.status === 'COMPLETED' ? 'success' : item.status === 'FAILED' ? 'danger' : 'warning'}
+                        dot
+                      >
+                        {item.status}
+                      </Badge>
+                    </Td>
+                    <Td align="right"><span className="font-admin-mono text-xs">{Number(item.xlm_to_spend || 0).toFixed(2)} XLM</span></Td>
+                    <Td align="right"><span className="font-admin-mono text-xs">{Number(item.actual_nxl_purchased || 0).toFixed(4)} NXL</span></Td>
+                    <Td align="right"><span className="font-admin-mono text-xs font-semibold text-emerald-300">{Number(item.burned_nxl || 0).toFixed(4)} NXL</span></Td>
+                    <Td align="right">
+                      <div className="inline-flex items-center gap-2 text-[11px]">
+                        {item.swap_explorer_url && (
+                          <a href={item.swap_explorer_url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">Swap</a>
+                        )}
+                        {item.burn_explorer_url && (
+                          <a href={item.burn_explorer_url} target="_blank" rel="noopener noreferrer" className="text-emerald-300 hover:underline">Burn</a>
+                        )}
+                      </div>
+                    </Td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState
+                      title="No on-chain buyback executions yet"
+                      description="Use Execute Buyback & Burn above once spendable XLM exceeds 50 XLM, or enable ENABLE_AUTO_BUYBACK_WORKER."
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </Table>
+        </TableWrap>
       </Card>
 
       <Card className="p-5 sm:p-6">

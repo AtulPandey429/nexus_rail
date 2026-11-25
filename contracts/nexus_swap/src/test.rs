@@ -210,6 +210,44 @@ fn test_cross_chain_bridge_escrow_release_and_expired_refund() {
     let refunded = f.client.refund_expired_escrow(&f.trader, &swap_id_2);
     assert_eq!(refunded.status, EscrowStatus::Refunded);
     assert_eq!(xlm.balance(&f.trader), trader_bal_before);
+
+    // 3. Audit $NXL (token_b) bridge escrow separately (Decision D3 Option A)
+    let nxl = TokenClient::new(&f.env, &f.nxl_id);
+    let nxl_bal_before = nxl.balance(&f.trader);
+    let swap_id_nxl = BytesN::from_array(&f.env, &[9u8; 32]);
+    let expiry_nxl = expiry + 900;
+    let nxl_escrow = f.client.lock_bridge_escrow(
+        &f.trader,
+        &f.nxl_id,
+        &3_000_000_000,
+        &swap_id_nxl,
+        &xrpl_dest,
+        &expiry_nxl,
+    );
+    assert_eq!(nxl_escrow.status, EscrowStatus::Locked);
+    assert_eq!(nxl_escrow.token, f.nxl_id);
+    assert_eq!(f.client.get_pool_state().reserve_b, state_before.reserve_b);
+
+    // Advance past NXL escrow expiry and verify 100% NXL self-refund
+    f.env.ledger().with_mut(|li| {
+        li.timestamp = expiry_nxl + 1;
+    });
+    let refunded_nxl = f.client.refund_expired_escrow(&f.trader, &swap_id_nxl);
+    assert_eq!(refunded_nxl.status, EscrowStatus::Refunded);
+    assert_eq!(nxl.balance(&f.trader), nxl_bal_before);
+
+    // 4. Reject arbitrary unapproved token in lock_bridge_escrow
+    let rogue_token = Address::generate(&f.env);
+    let swap_id_bad = BytesN::from_array(&f.env, &[10u8; 32]);
+    let bad_tok_err = f.client.try_lock_bridge_escrow(
+        &f.trader,
+        &rogue_token,
+        &1_000_000,
+        &swap_id_bad,
+        &xrpl_dest,
+        &(expiry_nxl + 1800),
+    );
+    assert_eq!(bad_tok_err, Err(Ok(SwapError::InvalidToken)));
 }
 
 #[test]

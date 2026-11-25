@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import {
+  Account,
   Address,
   BASE_FEE,
   Contract,
@@ -238,9 +239,8 @@ export class SorobanService {
     method: string,
     args: xdr.ScVal[] = []
   ): Promise<any> {
-    const server = this.getRpcServer();
     const sourcePublic = env.PLATFORM_STELLAR_VAULT;
-    const account = await server.getAccount(sourcePublic);
+    const account = new Account(sourcePublic, '0');
     const contract = new Contract(contractId);
 
     const tx = new TransactionBuilder(account, {
@@ -251,16 +251,40 @@ export class SorobanService {
       .setTimeout(30)
       .build();
 
-    const sim = await server.simulateTransaction(tx);
-    if (!rpc.Api.isSimulationSuccess(sim)) {
-      const errMsg = (sim as any)?.error || `Simulation failed for ${method}`;
-      throw new Error(String(errMsg));
+    // Use direct JSON-RPC `simulateTransaction` so read-only views remain resilient across
+    // newer Stellar protocol versions (e.g. Protocol 25+ SorobanTransactionData ext v1)
+    // without hitting `@stellar/stellar-base` SorobanDataBuilder XDR union parser limits.
+    const rpcRes = await fetch(this.getRpcUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'simulateTransaction',
+        params: { transaction: tx.toXDR() },
+      }),
+    });
+    if (!rpcRes.ok) {
+      throw new Error(`Soroban RPC simulateTransaction HTTP ${rpcRes.status}`);
     }
 
-    if (!sim.result?.retval) {
+    const rpcJson = (await rpcRes.json()) as any;
+    if (rpcJson?.error) {
+      throw new Error(
+        `Soroban RPC error for ${method}: ${rpcJson.error.message || JSON.stringify(rpcJson.error)}`
+      );
+    }
+
+    const sim = rpcJson?.result;
+    if (!sim || sim.error) {
+      throw new Error(String(sim?.error || `Simulation failed for ${method}`));
+    }
+
+    const retvalXdr = sim.results?.[0]?.xdr;
+    if (!retvalXdr) {
       return null;
     }
-    return scValToNative(sim.result.retval);
+    return scValToNative(xdr.ScVal.fromXDR(retvalXdr, 'base64'));
   }
 
   private static async buildPreparedUnsignedXdr(
@@ -296,13 +320,13 @@ export class SorobanService {
     };
   }
 
-  private static async invokeWithServerKey(
+  private static async invokeWithKeypair(
+    signer: Keypair,
     contractId: string,
     method: string,
     args: xdr.ScVal[]
   ): Promise<SorobanTxSubmissionResult> {
     const server = this.getRpcServer();
-    const signer = this.getAdminKeypair();
     const account = await server.getAccount(signer.publicKey());
     const contract = new Contract(contractId);
 
@@ -324,6 +348,15 @@ export class SorobanService {
     prepared.sign(signer);
 
     return this.submitSignedSorobanXdr(prepared.toXDR());
+  }
+
+  private static async invokeWithServerKey(
+    contractId: string,
+    method: string,
+    args: xdr.ScVal[]
+  ): Promise<SorobanTxSubmissionResult> {
+    const signer = this.getAdminKeypair();
+    return this.invokeWithKeypair(signer, contractId, method, args);
   }
 
   /**
@@ -589,6 +622,21 @@ export class SorobanService {
     );
   }
 
+  static async buildRefundExpiredEscrowXdr(params: {
+    callerAddress: string;
+    swapId: string;
+  }) {
+    return this.buildPreparedUnsignedXdr(
+      params.callerAddress,
+      NEXUS_SWAP_CONTRACT_ID,
+      'refund_expired_escrow',
+      [
+        new Address(params.callerAddress).toScVal(),
+        nativeToScVal(hashRef32(params.swapId), { type: 'bytes' }),
+      ]
+    );
+  }
+
   // ===========================================================================
   // SERVER-SIGNED RELAYER / ADMIN ON-CHAIN EXECUTORS (MINT, BURN, REFUND, ESCROW, CONFIG)
   // ===========================================================================
@@ -634,9 +682,13 @@ export class SorobanService {
     reason: 'buyback' | 'admin' | 'bridge';
     refId: string;
     operatorId?: string;
+    holderSecret?: string;
   }): Promise<SorobanTxSubmissionResult> {
-    const holderPub = this.getAdminKeypair().publicKey();
-    const res = await this.invokeWithServerKey(NEXUS_VAULT_CONTRACT_ID, 'burn_nxl', [
+    const holderSigner = params.holderSecret
+      ? Keypair.fromSecret(params.holderSecret)
+      : this.getAdminKeypair();
+    const holderPub = holderSigner.publicKey();
+    const res = await this.invokeWithKeypair(holderSigner, NEXUS_VAULT_CONTRACT_ID, 'burn_nxl', [
       new Address(holderPub).toScVal(),
       nativeToScVal(toStroops(params.amountNxl), { type: 'i128' }),
       nativeToScVal(params.reason, { type: 'symbol' }),
@@ -659,8 +711,67 @@ export class SorobanService {
       },
     }).catch(() => {});
 
-    await RedisCacheService.invalidateCache('admin:contract:live').catch(() => {});
+    await Promise.all([
+      RedisCacheService.invalidateCache('admin:contract:live').catch(() => {}),
+      RedisCacheService.invalidateCache('admin:tokenomics:reconciliation').catch(() => {}),
+    ]);
     return res;
+  }
+
+  /**
+   * Executes a server-signed AMM swap (`swap_exact_in`) on NexusSwap v2.0 using
+   * the protocol-controlled Buyback Reserve keypair, returning verified on-chain output amount.
+   */
+  static async executeBuybackSwapOnNexusSwap(params: {
+    buyerSecret: string;
+    amountXlm: number;
+    minNxlOut: number;
+    deadlineUnixSec?: number;
+    refId: string;
+    operatorId?: string;
+  }): Promise<SorobanTxSubmissionResult & { amountNxlReceived: number; buyerPublicKey: string }> {
+    const buyerSigner = Keypair.fromSecret(params.buyerSecret);
+    const buyerPub = buyerSigner.publicKey();
+    const deadline = BigInt(params.deadlineUnixSec || Math.floor(Date.now() / 1000) + 300);
+
+    const res = await this.invokeWithKeypair(buyerSigner, NEXUS_SWAP_CONTRACT_ID, 'swap_exact_in', [
+      new Address(buyerPub).toScVal(),
+      new Address(XLM_SAC_CONTRACT_ID).toScVal(),
+      nativeToScVal(toStroops(params.amountXlm), { type: 'i128' }),
+      nativeToScVal(toStroops(Math.max(0.0000001, params.minNxlOut)), { type: 'i128' }),
+      nativeToScVal(deadline, { type: 'u64' }),
+    ]);
+
+    const rawOut = res.returnValue?.amount_out;
+    const verifiedOutNxl = rawOut !== undefined && rawOut !== null
+      ? fromStroops(rawOut)
+      : Number(params.minNxlOut);
+
+    await DualRailTokenService.logChainAction({
+      chain: 'STELLAR',
+      action: 'AMM_SWAP',
+      operatorId: params.operatorId || 'BUYBACK_ENGINE',
+      referenceId: params.refId,
+      txHash: res.txHash,
+      ledgerSeq: res.ledger,
+      amountPrimary: `${params.amountXlm} XLM`,
+      amountSecondary: `${verifiedOutNxl} NXL`,
+      details: {
+        contract: NEXUS_SWAP_CONTRACT_ID,
+        method: 'swap_exact_in',
+        purpose: 'buyback',
+        buyer: buyerPub,
+        minNxlOut: params.minNxlOut,
+        verifiedOutNxl,
+      },
+    }).catch(() => {});
+
+    await RedisCacheService.invalidateCache('admin:contract:live').catch(() => {});
+    return {
+      ...res,
+      amountNxlReceived: verifiedOutNxl,
+      buyerPublicKey: buyerPub,
+    };
   }
 
   static async refundOrderOnChain(params: {

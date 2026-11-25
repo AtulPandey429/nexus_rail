@@ -137,7 +137,17 @@ fn test_order_refund_and_double_refund_guard() {
     // Fund relayer so relayer can execute refund
     StellarAssetClient::new(&f.env, &f.xlm_id).mint(&f.relayer, &gross);
 
-    let refunded = f.client.refund_order(&f.relayer, &order_ref, &gross);
+    // Partial refund 1: 2,000_000_000 stroops
+    let part1 = f.client.refund_order(&f.relayer, &order_ref, &2_000_000_000);
+    assert!(!part1.refunded);
+    assert_eq!(part1.refund_amount, 2_000_000_000);
+
+    // Partial refund exceeding remaining balance must fail
+    let over_err = f.client.try_refund_order(&f.relayer, &order_ref, &4_000_000_000);
+    assert_eq!(over_err, Err(Ok(VaultError::RefundExceedsOrder)));
+
+    // Partial refund 2: remaining 3,000_000_000 stroops -> marks order fully refunded
+    let refunded = f.client.refund_order(&f.relayer, &order_ref, &3_000_000_000);
     assert!(refunded.refunded);
     assert_eq!(refunded.refund_amount, gross);
 
@@ -145,7 +155,7 @@ fn test_order_refund_and_double_refund_guard() {
     assert_eq!(xlm.balance(&f.payer), 100_000_000_000);
 
     // Double refund must be rejected
-    let second = f.client.try_refund_order(&f.relayer, &order_ref, &gross);
+    let second = f.client.try_refund_order(&f.relayer, &order_ref, &1);
     assert_eq!(second, Err(Ok(VaultError::OrderAlreadyRefunded)));
 }
 
@@ -203,6 +213,33 @@ fn test_nxl_mint_cap_burn_and_bridge_burn() {
     assert_eq!(metrics.total_nxl_burned, 2_000_000_000);
     assert_eq!(metrics.total_bridge_burns, 1);
     assert_eq!(metrics.circulating_nxl, 1_003_000_000_000);
+    // Bridge burn keeps effective cap at 10_000_000_000_000, so remaining = 8_997_000_000_000
+    assert_eq!(metrics.remaining_mintable_nxl, 8_997_000_000_000);
+
+    // 3. Deflationary buyback burn (100 NXL = 1_000_000_000 stroops) permanently reduces effective cap!
+    let buyback_ref = ref_bytes(&f.env, 13);
+    f.client.burn_nxl(
+        &f.payer,
+        &1_000_000_000,
+        &symbol_short!("buyback"),
+        &buyback_ref,
+    );
+    let metrics_after_bb = f.client.get_metrics();
+    assert_eq!(metrics_after_bb.total_nxl_burned, 3_000_000_000);
+    assert_eq!(metrics_after_bb.circulating_nxl, 1_002_000_000_000);
+    // Effective cap is now 9_999_000_000_000 -> remaining stays 8_997_000_000_000 (cannot re-mint buyback burn!)
+    assert_eq!(metrics_after_bb.remaining_mintable_nxl, 8_997_000_000_000);
+
+    // Attempting to mint 8_997_500_000_000 (which would fit under original 10T cap but exceeds effective 9.999T cap) must fail!
+    let cap_test_ref = ref_bytes(&f.env, 14);
+    let bb_cap_err = f.client.try_mint_nxl(
+        &f.admin,
+        &f.payer,
+        &8_997_500_000_000,
+        &symbol_short!("admin"),
+        &cap_test_ref,
+    );
+    assert_eq!(bb_cap_err, Err(Ok(VaultError::SupplyCapExceeded)));
 }
 
 #[test]

@@ -88,7 +88,17 @@ interface AmmQuoteOverlay {
 
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
 import { usePlatformConfig } from '@/lib/platformConfig';
-import { executeSorobanSwapOrBridge, fetchLiveSorobanSwapPool } from '@/lib/soroban';
+import {
+  claimBridgeTrustline,
+  executeSorobanSwapOrBridge,
+  fetchLiveSorobanSwapPool,
+  refundExpiredBridgeEscrowWithFreighter,
+} from '@/lib/soroban';
+import {
+  SwapTransactionTimeline,
+  SwapTransactionLeg,
+  isRealOnChainTxHash,
+} from '@/components/swap/SwapTransactionTimeline';
 
 export default function SwapPage() {
   const [fromToken, setFromToken] = useState<SwapToken>('XRP');
@@ -127,7 +137,7 @@ export default function SwapPage() {
   const [userTestnetSecret, setUserTestnetSecret] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const [swapState, setSwapState] = useState<'idle' | 'preparing' | 'signing_wallet' | 'executing_payout' | 'success' | 'error'>('idle');
+  const [swapState, setSwapState] = useState<'idle' | 'preparing' | 'signing_wallet' | 'executing_payout' | 'success' | 'partial_or_failed' | 'error'>('idle');
   const [swapError, setSwapError] = useState('');
   const [bridgeHistory, setBridgeHistory] = useState<any[]>([]);
   const [loadingBridgeHistory, setLoadingBridgeHistory] = useState(false);
@@ -146,8 +156,12 @@ export default function SwapPage() {
   const [sorobanSwapNotice, setSorobanSwapNotice] = useState<{
     tone: 'success' | 'error';
     text: string;
+    swapId?: string;
+    bridgeStatus?: string;
+    mechanism?: string;
     explorerUrl?: string;
     payoutExplorerUrl?: string;
+    transactions?: SwapTransactionLeg[];
   } | null>(null);
 
   useEffect(() => {
@@ -158,7 +172,10 @@ export default function SwapPage() {
 
   const canUseSorobanContract =
     (fromToken === 'XLM' && (toToken === 'NXL' || toToken === 'XRP')) ||
-    (fromToken === 'NXL' && (toToken === 'XLM' || toToken === 'XRP'));
+    (fromToken === 'NXL' &&
+      (toToken === 'XLM' ||
+        toToken === 'XRP' ||
+        (toToken === 'NXL' && destinationAddress.trim().startsWith('r'))));
 
   const handleSorobanDirectSwap = async () => {
     const amt = Number(payAmount);
@@ -167,7 +184,7 @@ export default function SwapPage() {
       return;
     }
     if (!canUseSorobanContract) return;
-    if (toToken === 'XRP' && !destinationAddress.trim().startsWith('r')) {
+    if ((toToken === 'XRP' || (fromToken === 'NXL' && toToken === 'NXL')) && !destinationAddress.trim().startsWith('r')) {
       setSorobanSwapNotice({ tone: 'error', text: 'Enter a valid XRPL destination address (r...) first.' });
       return;
     }
@@ -176,33 +193,92 @@ export default function SwapPage() {
     setSorobanSwapNotice(null);
     try {
       const slippageNum = parseFloat(slippage.replace('%', '')) || 0.5;
+      const needsXrplDest = toToken === 'XRP' || (fromToken === 'NXL' && toToken === 'NXL');
       const res = await executeSorobanSwapOrBridge({
         fromAsset: fromToken as 'XLM' | 'NXL',
         toAsset: toToken as 'XLM' | 'NXL' | 'XRP',
         amount: amt,
-        userDestinationAddress: toToken === 'XRP' ? destinationAddress.trim() : undefined,
+        userDestinationAddress: needsXrplDest ? destinationAddress.trim() : undefined,
         slippagePct: slippageNum,
       });
 
+      const opStatus = res.bridgeOperation?.status || res.status || 'COMPLETED';
+      const failedLeg = res.transactions?.find((t) => t.status === 'FAILED');
       const modeLabel =
-        res.mode === 'SOROBAN_AMM_SWAP'
+        opStatus === 'AWAITING_TRUSTLINE'
+          ? '$NXL burned on Stellar (1:1). Enable your XRPL NXL trustline and click Claim Trustline below to mint on XRPL.'
+          : opStatus === 'RETRY_SCHEDULED'
+          ? 'Stellar lock confirmed; XRPL relayer delivery is retrying automatically in the background.'
+          : opStatus === 'REFUNDABLE'
+          ? 'Escrow lock expired without XRPL delivery — click Self-Refund Escrow below to recover your XLM via Freighter.'
+          : failedLeg
+          ? failedLeg.errorMessage || 'On-chain payout leg failed after Stellar lock.'
+          : res.mode === 'SOROBAN_AMM_SWAP'
           ? 'NexusSwap AMM swap confirmed on Stellar Testnet!'
+          : res.mode === 'SOROBAN_BRIDGE_NXL'
+          ? 'Strict 1:1 bridge complete: $NXL burned on Stellar & minted on XRPL!'
           : res.mode === 'SOROBAN_BRIDGE_BURN'
           ? '$NXL burned on NexusVault & XRPL payout sent!'
           : 'Bridge escrow locked, XRPL payout sent & escrow released!';
 
       setSorobanSwapNotice({
-        tone: 'success',
+        tone: failedLeg || opStatus === 'REFUNDABLE' ? 'error' : 'success',
         text: modeLabel,
+        swapId: res.swapId,
+        bridgeStatus: opStatus,
+        mechanism: res.bridgeOperation?.mechanism,
         explorerUrl: res.explorerUrl,
         payoutExplorerUrl: res.payoutExplorerUrl,
+        transactions: res.transactions,
       });
       fetchLiveSorobanSwapPool().then((pool) => setSorobanPool(pool)).catch(() => {});
+      fetchSwapBridgeHistory();
     } catch (err: any) {
       setSorobanSwapNotice({
         tone: 'error',
         text: err?.message || 'Soroban smart contract execution failed',
       });
+    } finally {
+      setSorobanSwapBusy(false);
+    }
+  };
+
+  const handleSorobanRecoveryAction = async (action: 'refund' | 'claim') => {
+    if (!sorobanSwapNotice?.swapId) return;
+    setSorobanSwapBusy(true);
+    try {
+      if (action === 'refund') {
+        const res = await refundExpiredBridgeEscrowWithFreighter(sorobanSwapNotice.swapId);
+        setSorobanSwapNotice((prev) =>
+          prev
+            ? {
+                ...prev,
+                tone: 'success',
+                bridgeStatus: 'REFUNDED',
+                text: `Escrow self-refunded on-chain via Freighter! Tx: ${res.txHash.slice(0, 12)}…`,
+              }
+            : null
+        );
+      } else {
+        const res = await claimBridgeTrustline(sorobanSwapNotice.swapId);
+        setSorobanSwapNotice((prev) =>
+          prev
+            ? {
+                ...prev,
+                tone: res.settled ? 'success' : 'error',
+                bridgeStatus: res.status,
+                text: res.settled
+                  ? '1:1 XRPL $NXL bridge mint completed!'
+                  : res.error || 'XRPL trustline still not active yet.',
+              }
+            : null
+        );
+      }
+      fetchSwapBridgeHistory();
+    } catch (err: any) {
+      setSorobanSwapNotice((prev) =>
+        prev ? { ...prev, tone: 'error', text: err?.message || 'Bridge recovery failed' } : null
+      );
     } finally {
       setSorobanSwapBusy(false);
     }
@@ -245,8 +321,15 @@ export default function SwapPage() {
   const [activeSwapOrder, setActiveSwapOrder] = useState<{
     swapId: string;
     depositAddress: string;
-    identifierType: 'destination_tag' | 'memo_text';
+    identifierType: 'destination_tag' | 'memo_text' | 'internal_ledger';
     identifier: string | number;
+    status?: 'PENDING_DEPOSIT' | 'DEPOSIT_CONFIRMED' | 'PAYOUT_PROCESSING' | 'COMPLETED' | 'AWAITING_TRUSTLINE' | 'FAILED';
+    settlementType?: 'ON_CHAIN' | 'INTERNAL_LEDGER' | 'HYBRID' | 'FAILED';
+    transactions?: SwapTransactionLeg[];
+    errorMessage?: string;
+    trustlineMessage?: string;
+    updatedUsdBalanceCents?: number;
+    updatedNxlBalanceMicro?: number;
     depositTxHash?: string;
     payoutTxHash?: string;
     depositExplorerUrl?: string;
@@ -875,6 +958,10 @@ export default function SwapPage() {
       setSwapError('Enter a valid swap amount greater than 0.');
       return;
     }
+    if ((fromToken === 'USD' || toToken === 'USD') && !readSession().token) {
+      setSwapError('Please sign in first to swap with your NexusRail Internal USD Wallet.');
+      return;
+    }
     if (!effectiveDestination) {
       setSwapError('Enter the destination wallet address for this swap.');
       return;
@@ -1059,32 +1146,43 @@ export default function SwapPage() {
         }),
       });
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          const completed = json.data;
-          setActiveSwapOrder((prev) => ({
-            ...prev!,
-            depositTxHash: completed.depositTxHash,
-            payoutTxHash: completed.payoutTxHash,
-            depositExplorerUrl: completed.depositExplorerUrl,
-            payoutExplorerUrl: completed.payoutExplorerUrl,
-            journalEntry: completed.journalEntry,
-          }));
-          if (json.poolStats) {
-            setNrPool(json.poolStats);
-          }
-          updateBalancesAfterSwap();
-          loadNrPoolAndBalances();
-          setSwapState('success');
-          fetchSwapBridgeHistory();
-          return;
-        } else {
-          throw new Error(json.error || 'Execution failed');
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.data) {
+        const completed = json.data;
+        const resolvedStatus = completed.status || (json.success ? 'COMPLETED' : 'FAILED');
+        setActiveSwapOrder((prev) => ({
+          ...prev!,
+          status: resolvedStatus,
+          settlementType: completed.settlementType,
+          transactions: Array.isArray(completed.transactions) ? completed.transactions : undefined,
+          errorMessage: completed.errorMessage || json.error,
+          trustlineMessage: completed.trustlineMessage,
+          updatedUsdBalanceCents: completed.updatedUsdBalanceCents,
+          updatedNxlBalanceMicro: completed.updatedNxlBalanceMicro,
+          depositTxHash: completed.depositTxHash,
+          payoutTxHash: completed.payoutTxHash,
+          depositExplorerUrl: completed.depositExplorerUrl,
+          payoutExplorerUrl: completed.payoutExplorerUrl,
+          journalEntry: completed.journalEntry,
+        }));
+        if (json.poolStats) {
+          setNrPool(json.poolStats);
         }
+        if (typeof completed.updatedUsdBalanceCents === 'number') {
+          setUsdBalance(completed.updatedUsdBalanceCents / 100);
+        }
+        if (typeof completed.updatedNxlBalanceMicro === 'number') {
+          setNrBalance(completed.updatedNxlBalanceMicro / 1_000_000);
+        }
+        if (resolvedStatus === 'COMPLETED' && typeof completed.updatedUsdBalanceCents !== 'number') {
+          updateBalancesAfterSwap();
+        }
+        loadNrPoolAndBalances();
+        fetchSwapBridgeHistory();
+        setSwapState(resolvedStatus === 'COMPLETED' ? 'success' : 'partial_or_failed');
+        return;
       } else {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Server responded with ${res.status}`);
+        throw new Error(json?.error || `Server responded with ${res.status}`);
       }
     } catch (err: any) {
       setSwapError(`Execution failed: ${err.message}`);
@@ -1788,11 +1886,16 @@ export default function SwapPage() {
                   )}
                 </div>
               ) : (
-                <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--gold)]/20 flex items-center justify-between text-xs font-mono">
-                  <span className="text-[var(--muted)]">Settlement Destination</span>
-                  <span className="text-[var(--gold-bright)] font-semibold">
-                    {user?.email || (user?.id ? `Wallet ${user.id.slice(0, 8)}` : 'Sign in to credit NexusRail Wallet')}
-                  </span>
+                <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--gold)]/20 space-y-1.5 text-xs font-mono">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--muted)]">Settlement Destination</span>
+                    <span className="text-[var(--gold-bright)] font-semibold">
+                      {user?.email || (user?.id ? `NexusRail Wallet (${user.id.slice(0, 8)})` : 'Sign in to credit NexusRail Wallet')}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                    USD settles to your <strong className="text-emerald-300">NexusRail Internal Ledger Wallet</strong> (off-chain, not your external GemWallet/Freighter wallet). View your USD balance in Profile or use it at checkout.
+                  </p>
                 </div>
               )}
 
@@ -1880,46 +1983,53 @@ export default function SwapPage() {
                   >
                     <Zap className="w-3.5 h-3.5" />
                     <span>
-                      {sorobanSwapBusy
-                        ? 'Signing Soroban tx in Freighter…'
-                        : toToken === 'XRP'
-                        ? fromToken === 'NXL'
-                          ? `Burn ${fromToken} on Contract & Bridge to XRPL (Freighter)`
-                          : `Lock ${fromToken} in Bridge Escrow & Receive XRP (Freighter)`
-                        : `Swap ${fromToken} → ${toToken} Directly On-Chain (Freighter)`}
-                    </span>
-                  </button>
-                  {sorobanSwapNotice && (
-                    <div
-                      className={`rounded-lg px-3 py-2 text-[11px] flex flex-wrap items-center justify-between gap-2 ${
-                        sorobanSwapNotice.tone === 'success'
-                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                          : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
-                      }`}
-                    >
-                      <span>{sorobanSwapNotice.text}</span>
-                      <div className="flex items-center gap-2">
-                        {sorobanSwapNotice.explorerUrl && (
-                          <a
-                            href={sorobanSwapNotice.explorerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline font-semibold inline-flex items-center gap-1"
-                          >
-                            Stellar Tx <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                        {sorobanSwapNotice.payoutExplorerUrl && (
-                          <a
-                            href={sorobanSwapNotice.payoutExplorerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline font-semibold inline-flex items-center gap-1"
-                          >
-                            XRPL Tx <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
+                        {sorobanSwapBusy
+                          ? 'Signing Soroban tx in Freighter…'
+                          : fromToken === 'NXL' && toToken === 'NXL'
+                          ? 'Bridge $NXL 1:1 (Stellar Burn → XRPL Mint via Freighter)'
+                          : toToken === 'XRP'
+                          ? fromToken === 'NXL'
+                            ? `Burn ${fromToken} on Contract & Bridge to XRPL (Freighter)`
+                            : `Lock ${fromToken} in 15m Escrow & Receive XRP (Freighter)`
+                          : `Swap ${fromToken} → ${toToken} Directly On-Chain (Freighter)`}
+                      </span>
+                    </button>
+                    {sorobanSwapNotice && (
+                      <div className="space-y-2">
+                        <div
+                          className={`rounded-lg px-3 py-2 text-[11px] flex flex-wrap items-center justify-between gap-2 ${
+                            sorobanSwapNotice.tone === 'success'
+                              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                              : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
+                          }`}
+                        >
+                          <span>{sorobanSwapNotice.text}</span>
+                          {sorobanSwapNotice.swapId &&
+                            sorobanSwapNotice.mechanism === 'SOROBAN_ESCROW' &&
+                            sorobanSwapNotice.bridgeStatus !== 'COMPLETED' &&
+                            sorobanSwapNotice.bridgeStatus !== 'REFUNDED' && (
+                              <button
+                                type="button"
+                                onClick={() => handleSorobanRecoveryAction('refund')}
+                                className="px-2 py-1 rounded bg-amber-500/20 border border-amber-400/40 text-amber-200 font-semibold hover:bg-amber-500/30 cursor-pointer"
+                              >
+                                Self-Refund Escrow (Freighter)
+                              </button>
+                            )}
+                          {sorobanSwapNotice.swapId &&
+                            sorobanSwapNotice.bridgeStatus === 'AWAITING_TRUSTLINE' && (
+                              <button
+                                type="button"
+                                onClick={() => handleSorobanRecoveryAction('claim')}
+                                className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 font-semibold hover:bg-emerald-500/30 cursor-pointer"
+                              >
+                                Claim XRPL Trustline
+                              </button>
+                            )}
+                        </div>
+                      {sorobanSwapNotice.transactions && sorobanSwapNotice.transactions.length > 0 && (
+                        <SwapTransactionTimeline transactions={sorobanSwapNotice.transactions} compact />
+                      )}
                     </div>
                   )}
                 </div>
@@ -2129,65 +2239,135 @@ export default function SwapPage() {
                 <table className="w-full text-left font-mono text-xs">
                   <thead>
                     <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
-                      <th className="py-3 px-4">Action</th>
-                      <th className="py-3 px-4">Disbursed Amount</th>
-                      <th className="py-3 px-4">Destination Ledger &amp; Address</th>
+                      <th className="py-3 px-4">Swap / Rail</th>
+                      <th className="py-3 px-4">Amount</th>
+                      <th className="py-3 px-4">Destination</th>
                       <th className="py-3 px-4">Timestamp</th>
                       <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">On-Chain Explorer Proof</th>
+                      <th className="py-3 px-4 text-right">Sequential Tx Hashes (In → Out)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {bridgeHistory.map((b: any, idx: number) => (
-                      <tr key={b.id || idx} className="hover:bg-[var(--card-hover)] transition-colors">
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
-                            <div>
-                              <span className="font-bold text-[var(--foreground)]">Cross-Chain Bridge</span>
-                              <span className="block text-[11px] text-[var(--muted)]">Payout on {b.chain}</span>
+                    {bridgeHistory.map((b: any, idx: number) => {
+                      const legs: SwapTransactionLeg[] = Array.isArray(b.transactions) && b.transactions.length > 0
+                        ? b.transactions
+                        : [];
+                      const isSuccess = b.status === 'COMPLETED' || b.status === 'SUCCESS' || b.status === 'CONFIRMED';
+                      const isFailed = b.status === 'FAILED';
+                      return (
+                        <tr key={b.id || idx} className="hover:bg-[var(--card-hover)] transition-colors align-top">
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  isFailed ? 'bg-rose-400' : isSuccess ? 'bg-emerald-400' : 'bg-amber-400'
+                                }`}
+                              />
+                              <div>
+                                <span className="font-bold text-[var(--foreground)]">
+                                  {b.settlementType === 'INTERNAL_LEDGER' ? 'Internal Ledger Swap' : 'Cross-Chain Bridge'}
+                                </span>
+                                <span className="block text-[11px] text-[var(--muted)]">Rail: {b.chain || 'INTERNAL'}</span>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="py-3.5 px-4 whitespace-nowrap font-bold text-emerald-400">
-                          {b.amount || 'NXL'}
-                        </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap font-bold text-emerald-400">
+                            {b.amount || 'NXL'}
+                          </td>
 
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span className="text-[var(--muted)]">
-                            {b.destinationAddress ? `${b.destinationAddress.slice(0, 8)}...${b.destinationAddress.slice(-6)}` : '—'}
-                          </span>
-                        </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="text-[var(--muted)]">
+                              {b.destinationAddress
+                                ? b.destinationAddress.length > 20
+                                  ? `${b.destinationAddress.slice(0, 8)}...${b.destinationAddress.slice(-6)}`
+                                  : b.destinationAddress
+                                : '—'}
+                            </span>
+                          </td>
 
-                        <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
-                          {b.createdAt ? new Date(b.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                        </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
+                            {b.createdAt ? new Date(b.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
 
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>{b.status || 'CONFIRMED'}</span>
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                          {b.explorerUrl ? (
-                            <a
-                              href={b.explorerUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 w-fit border ${
+                                isFailed
+                                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                  : isSuccess
+                                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                  : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                              }`}
                             >
-                              <span>View Explorer Proof</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          ) : (
-                            <span className="text-[var(--muted)]">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                              {isFailed ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                              <span>{b.status || 'CONFIRMED'}</span>
+                            </span>
+                            {b.errorMessage && (
+                              <span className="block text-[10px] text-rose-400 mt-1 max-w-[200px] truncate" title={b.errorMessage}>
+                                {b.errorMessage}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            {legs.length > 0 ? (
+                              <div className="flex flex-col items-end gap-1">
+                                {legs.map((leg, lIdx) => {
+                                  const hasRealHash = isRealOnChainTxHash(leg.txHash);
+                                  return (
+                                    <div key={`${leg.sequence}-${lIdx}`} className="flex items-center gap-1.5 text-[11px]">
+                                      <span className="text-[var(--muted)]">
+                                        #{leg.sequence || lIdx + 1} {leg.direction === 'INCOMING' ? 'IN' : 'OUT'}:
+                                      </span>
+                                      <span
+                                        className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                          leg.status === 'FAILED'
+                                            ? 'bg-rose-500/15 text-rose-400'
+                                            : leg.status === 'SUCCESS'
+                                            ? 'bg-emerald-500/15 text-emerald-400'
+                                            : 'bg-amber-500/15 text-amber-300'
+                                        }`}
+                                      >
+                                        {leg.status}
+                                      </span>
+                                      {hasRealHash && leg.explorerUrl ? (
+                                        <a
+                                          href={leg.explorerUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline cursor-pointer"
+                                          title={leg.txHash!}
+                                        >
+                                          <span>{leg.txHash!.slice(0, 6)}...{leg.txHash!.slice(-6)}</span>
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                      ) : leg.rail === 'INTERNAL_LEDGER' ? (
+                                        <span className="text-[var(--muted)]">Internal Ledger</span>
+                                      ) : (
+                                        <span className="text-[var(--muted)]">No tx hash</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : isRealOnChainTxHash(b.txHash) && b.explorerUrl ? (
+                              <a
+                                href={b.explorerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                              >
+                                <span>{b.txHash.slice(0, 8)}...{b.txHash.slice(-6)}</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ) : (
+                              <span className="text-[var(--muted)]">Internal Ledger</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2287,7 +2467,7 @@ export default function SwapPage() {
                   <div className="flex items-center justify-between text-[var(--gold)] font-bold pb-1 border-b border-[var(--border)]">
                     <span className="flex items-center gap-1.5">
                       <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[11px]">2</span>
-                      <span>EGRESS: SERVER DISBURSES TO YOU</span>
+                      <span>{toToken === 'USD' ? 'EGRESS: CREDITED TO NEXUSRAIL WALLET' : 'EGRESS: SERVER DISBURSES TO YOU'}</span>
                     </span>
                     <span>{receiveAmount} {toToken}</span>
                   </div>
@@ -2295,6 +2475,11 @@ export default function SwapPage() {
                     <span className="text-[var(--muted)]">Recipient Address:</span>
                     <span className="text-[var(--foreground)] font-mono truncate max-w-[240px]">{effectiveDestination}</span>
                   </div>
+                  {toToken === 'USD' && (
+                    <p className="text-[11px] text-emerald-300/90 leading-relaxed">
+                      Off-chain internal ledger credit: USD will appear in your NexusRail Internal Wallet (not in GemWallet/Freighter).
+                    </p>
+                  )}
                 </div>
 
                 {/* Choose Deposit Payment Method (Internal Wallet vs On-Chain) */}
@@ -2558,77 +2743,169 @@ export default function SwapPage() {
               </div>
             )}
 
-            {swapState === 'success' && activeSwapOrder && (
-              <div className="py-4 space-y-5">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
-                  <CheckCircle2 className="w-7 h-7" />
-                </div>
-                
-                <div className="text-center">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono font-bold tracking-wider uppercase">
-                    SETTLED ON-CHAIN
-                  </span>
-                  <h4 className="text-xl font-bold text-[var(--foreground)] mt-1.5">Cross-Chain Swap Complete!</h4>
-                  <p className="text-xs font-mono text-[var(--gold)] mt-1">
-                    Swapped {payAmount} {fromToken} &rarr; {receiveAmount} {toToken}
-                  </p>
-                </div>
+            {(swapState === 'success' || swapState === 'partial_or_failed') && activeSwapOrder && (() => {
+              const status = activeSwapOrder.status || (swapState === 'success' ? 'COMPLETED' : 'FAILED');
+              const settlementType = activeSwapOrder.settlementType;
+              const isCompleted = status === 'COMPLETED';
+              const isAwaitingTrustline = status === 'AWAITING_TRUSTLINE';
+              const isFailed = !isCompleted && !isAwaitingTrustline;
+              const isInternalOnly = isCompleted && (settlementType === 'INTERNAL_LEDGER' || toToken === 'USD');
 
-                {/* Proof Details */}
-                <div className="space-y-3 font-mono text-xs">
-                  {/* Deposit Proof */}
-                  <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[var(--muted)] text-[11px] uppercase">User Deposit Tx ({fromToken})</span>
-                      <a
-                        href={activeSwapOrder.depositExplorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[var(--gold)] hover:underline flex items-center gap-1 text-[11px]"
-                      >
-                        <span>View on Explorer</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                    <p className="text-[var(--foreground)] text-[11px] truncate font-mono">{activeSwapOrder.depositTxHash}</p>
+              const fallbackLegs: SwapTransactionLeg[] = [];
+              if (isRealOnChainTxHash(activeSwapOrder.depositTxHash)) {
+                fallbackLegs.push({
+                  sequence: 1,
+                  direction: 'INCOMING',
+                  stage: 'DEPOSIT',
+                  label: `User Deposit (${fromToken})`,
+                  asset: fromToken,
+                  amount: Number(payAmount) || 0,
+                  rail: fromToken === 'XRP' ? 'XRPL' : 'STELLAR',
+                  status: 'SUCCESS',
+                  txHash: activeSwapOrder.depositTxHash!,
+                  explorerUrl: activeSwapOrder.depositExplorerUrl || null,
+                  timestamp: new Date().toISOString(),
+                });
+              }
+              if (isRealOnChainTxHash(activeSwapOrder.payoutTxHash)) {
+                fallbackLegs.push({
+                  sequence: fallbackLegs.length + 1,
+                  direction: 'OUTGOING',
+                  stage: 'ONCHAIN_PAYOUT',
+                  label: `Server Payout (${toToken})`,
+                  asset: toToken,
+                  amount: Number(receiveAmount) || 0,
+                  rail: toToken === 'XLM' ? 'STELLAR' : 'XRPL',
+                  status: isFailed ? 'FAILED' : 'SUCCESS',
+                  txHash: activeSwapOrder.payoutTxHash!,
+                  explorerUrl: activeSwapOrder.payoutExplorerUrl || null,
+                  errorMessage: isFailed ? activeSwapOrder.errorMessage : undefined,
+                  timestamp: new Date().toISOString(),
+                });
+              }
+              const timelineLegs =
+                activeSwapOrder.transactions && activeSwapOrder.transactions.length > 0
+                  ? activeSwapOrder.transactions
+                  : fallbackLegs;
+
+              return (
+                <div className="py-4 space-y-5 max-h-[80vh] overflow-y-auto pr-1">
+                  <div
+                    className={`w-12 h-12 rounded-full border flex items-center justify-center mx-auto ${
+                      isFailed
+                        ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                        : isAwaitingTrustline
+                        ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                        : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                    }`}
+                  >
+                    {isFailed ? (
+                      <AlertCircle className="w-7 h-7" />
+                    ) : isAwaitingTrustline ? (
+                      <AlertTriangle className="w-7 h-7" />
+                    ) : (
+                      <CheckCircle2 className="w-7 h-7" />
+                    )}
                   </div>
 
-                  {/* Payout Proof */}
-                  <div className="p-3.5 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[var(--muted)] text-[11px] uppercase">Server Payout Tx ({toToken})</span>
-                      <a
-                        href={activeSwapOrder.payoutExplorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[var(--gold)] hover:underline flex items-center gap-1 text-[11px]"
+                  <div className="text-center">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full border text-[11px] font-mono font-bold tracking-wider uppercase ${
+                        isFailed
+                          ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                          : isAwaitingTrustline
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      }`}
+                    >
+                      {isFailed
+                        ? 'SWAP FAILED'
+                        : isAwaitingTrustline
+                        ? 'ACTION REQUIRED · TRUSTLINE PENDING'
+                        : isInternalOnly
+                        ? 'CREDITED TO NEXUSRAIL WALLET (OFF-CHAIN)'
+                        : settlementType === 'HYBRID'
+                        ? 'SETTLED (ON-CHAIN + INTERNAL)'
+                        : 'SETTLED ON-CHAIN'}
+                    </span>
+
+                    <h4 className="text-xl font-bold text-[var(--foreground)] mt-1.5">
+                      {isFailed
+                        ? 'Swap Payout Failed'
+                        : isAwaitingTrustline
+                        ? 'Deposit Confirmed, On-Chain Payout Pending'
+                        : isInternalOnly
+                        ? 'Swap Credited to Internal Wallet!'
+                        : swapMode === 'same_chain'
+                        ? 'Same-Chain Swap Complete!'
+                        : 'Cross-Chain Swap Complete!'}
+                    </h4>
+                    <p className="text-xs font-mono text-[var(--gold)] mt-1">
+                      {payAmount} {fromToken} &rarr; {receiveAmount} {toToken}
+                    </p>
+                  </div>
+
+                  {isInternalOnly && (
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs font-mono space-y-1.5">
+                      <p className="text-emerald-300 font-bold">
+                        Where did your {receiveAmount} {toToken} go?
+                      </p>
+                      <p className="text-[11px] text-[var(--foreground)] leading-relaxed">
+                        {toToken === 'USD'
+                          ? `Your $${receiveAmount} USD was credited to your NexusRail Internal Ledger Wallet (not an external GemWallet/Freighter wallet). Current USD Balance: $${usdBalance.toFixed(2)} USD.`
+                          : `Your ${receiveAmount} ${toToken} was credited to your NexusRail Internal Ledger Wallet.`}
+                      </p>
+                      <Link
+                        href="/profile"
+                        className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] font-bold"
                       >
-                        <span>View on Explorer</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                        <span>View Internal Wallet in Profile</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </Link>
                     </div>
-                    <p className="text-[var(--foreground)] text-[11px] truncate font-mono">{activeSwapOrder.payoutTxHash}</p>
+                  )}
+
+                  {isFailed && (activeSwapOrder.errorMessage || swapError) && (
+                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
+                      {activeSwapOrder.errorMessage || swapError}
+                    </div>
+                  )}
+
+                  {isAwaitingTrustline && activeSwapOrder.trustlineMessage && (
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-mono">
+                      {activeSwapOrder.trustlineMessage}
+                    </div>
+                  )}
+
+                  {/* Sequential Incoming -> Outgoing Transaction Timeline */}
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-[var(--muted)] font-bold">
+                      Sequential Transaction Proof (Incoming &rarr; Outgoing)
+                    </p>
+                    <SwapTransactionTimeline transactions={timelineLegs} />
                   </div>
 
                   {/* Accounting Journal Entry */}
-                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex justify-between items-center text-xs">
-                    <span className="text-emerald-400 font-bold">Ledger Journal Ref:</span>
-                    <span className="text-[var(--foreground)] font-mono">{activeSwapOrder.journalEntry || 'JE-SWAP-2048'} (Balanced)</span>
-                  </div>
-                </div>
+                  {activeSwapOrder.journalEntry && (
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex justify-between items-center text-xs font-mono">
+                      <span className="text-emerald-400 font-bold">Ledger Journal Ref:</span>
+                      <span className="text-[var(--foreground)]">{activeSwapOrder.journalEntry} (Balanced)</span>
+                    </div>
+                  )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowReviewModal(false);
-                    setSwapState('idle');
-                  }}
-                  className="w-full py-3.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold font-mono text-xs transition-colors cursor-pointer"
-                >
-                  Done
-                </button>
-              </div>
-            )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowReviewModal(false);
+                      setSwapState('idle');
+                    }}
+                    className="w-full py-3.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-black font-bold font-mono text-xs transition-colors cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              );
+            })()}
 
           </div>
         </div>

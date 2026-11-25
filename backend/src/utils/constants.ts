@@ -83,8 +83,8 @@ export const STELLAR_TESTNET: StellarNetworkConfig = {
   nexusVaultContractId: 'CBTDO4EKCQNUZRYSNK6LXB7AOQUNCY7FOV6AYDICSAH7CY6N57CQRJVB',
   nexusSwapContractId: 'CCJBRAJ5JUQPMIMGHDZKGRNXRZVJU5KBU7PMNJK235ORSXUSSHCPQYAM',
   xlmSacContractId: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
-  nexusVaultWasmHash: 'e1d29ba2ba3e909891d702fc9ce3e01fd2adc27aac6dd97ac5335df47c817912',
-  nexusSwapWasmHash: '59fdf6924205cc3c923362d9f91d7384ff20bf5e1193d09423471c903e75c6f2',
+  nexusVaultWasmHash: '94fd195166ec771ffba4bc4092f9961977fca445d32a777372696c9f3ae104a1',
+  nexusSwapWasmHash: 'db3b5a90fdcb7b45c3e3864ed3693a58c5ab4314e621865fadcf8588e53a1ce3',
 
   explorerBase: 'https://stellar.expert/explorer/testnet',
   explorerTxBase: 'https://stellar.expert/explorer/testnet/tx/',

@@ -35,6 +35,7 @@ import {
 import { readSession, clearSession, notifySession, onSessionChange, SessionUser } from '@/lib/shop';
 import { usePlatformConfig } from '@/lib/platformConfig';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
+import { SwapTransactionLeg, isRealOnChainTxHash } from '@/components/swap/SwapTransactionTimeline';
 import type { UserPortfolioResponse, HydratedHolding } from '@/types';
 
 interface ProfileData {
@@ -118,7 +119,26 @@ export default function ProfilePage() {
   const [copiedTxHash, setCopiedTxHash] = useState<string | null>(null);
   const [bridgeHistory, setBridgeHistory] = useState<any[]>([]);
   const [loadingBridgeHistory, setLoadingBridgeHistory] = useState<boolean>(false);
+  const [internalBalance, setInternalBalance] = useState<{ usdCents: number; nxlMicro: number } | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+
+  const fetchInternalBalance = async () => {
+    const s = readSession();
+    if (!s.token) return;
+    try {
+      const res = await fetch('/api/v1/wallet/balance', {
+        headers: { Authorization: `Bearer ${s.token}` },
+        cache: 'no-store',
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success && json.balance) {
+        setInternalBalance({
+          usdCents: Number(json.balance.USD || 0),
+          nxlMicro: Number(json.balance.NXL ?? json.balance.NR ?? 0),
+        });
+      }
+    } catch {}
+  };
 
   // Synchronize sessionUser from auth session state and broadcast events
   useEffect(() => {
@@ -129,6 +149,7 @@ export default function ProfilePage() {
       setSessionUser(refreshed.user);
       fetchProfile();
       fetchPortfolio();
+      fetchInternalBalance();
     });
     return () => unsubscribe();
   }, []);
@@ -459,6 +480,7 @@ export default function ProfilePage() {
   useEffect(() => {
     fetchProfile();
     fetchPortfolio();
+    fetchInternalBalance();
   }, []);
 
   // Update Name
@@ -1124,6 +1146,26 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-mono text-emerald-300 font-bold">Internal NexusRail Custody</span>
+                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                    Off-Chain Claim · 1:1 Backed
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xl font-bold font-mono text-emerald-300">
+                    ${((internalBalance?.usdCents || 0) / 100).toFixed(2)} USD
+                  </span>
+                  <span className="text-xs font-mono text-[var(--gold)]">
+                    {((internalBalance?.nxlMicro || 0) / 1_000_000).toFixed(4)} NXL
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono text-[var(--muted)]">
+                  Distinct from your connected Freighter/GemWallet on-chain balance below. Withdraw $NXL to Stellar or XRPL 1:1 anytime.
+                </p>
+              </div>
+
               <div className="p-4 rounded-2xl bg-[var(--card-subtle)] border border-[var(--border)] flex items-center justify-between">
                 <span className="text-xs font-mono text-[var(--muted)]">Total Orders</span>
                 <span className="text-lg font-bold font-mono text-[var(--foreground)]">
@@ -1752,8 +1794,13 @@ export default function ProfilePage() {
                     </thead>
                     <tbody className="divide-y divide-[var(--border)]">
                       {ledgerTxs.map((tx: any, idx: number) => {
-                        const isIncoming = tx.direction === 'in';
-                        const isOutgoing = tx.direction === 'out';
+                        const isIncoming = tx.isIncoming === true || tx.direction === 'in';
+                        const isOutgoing = tx.isIncoming === false || tx.direction === 'out';
+                        const directionLabel = isIncoming ? 'in' : isOutgoing ? 'out' : tx.direction || 'transfer';
+                        const counterparty = tx.counterparty || (isIncoming ? tx.sender : tx.destination);
+                        const txDate = tx.timestamp || tx.date;
+                        const isFailed = tx.status === 'FAILED';
+                        const hasRealHash = isRealOnChainTxHash(tx.txHash);
                         return (
                           <tr key={tx.txHash || idx} className="hover:bg-[var(--card-hover)] transition-colors">
                             <td className="py-3.5 px-4 whitespace-nowrap">
@@ -1777,7 +1824,7 @@ export default function ProfilePage() {
                                 </span>
                                 <div>
                                   <span className="font-bold text-[var(--foreground)]">{tx.type || 'Transaction'}</span>
-                                  <span className="block text-[11px] text-[var(--muted)] uppercase">{tx.direction || 'transfer'}</span>
+                                  <span className="block text-[11px] text-[var(--muted)] uppercase">{directionLabel}</span>
                                 </div>
                               </div>
                             </td>
@@ -1789,18 +1836,18 @@ export default function ProfilePage() {
                             </td>
 
                             <td className="py-3.5 px-4 whitespace-nowrap">
-                              {tx.counterparty ? (
+                              {counterparty ? (
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-[var(--muted)]">
-                                    {tx.counterparty.slice(0, 6)}...{tx.counterparty.slice(-4)}
+                                    {counterparty.slice(0, 6)}...{counterparty.slice(-4)}
                                   </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleCopyHash(tx.counterparty)}
+                                    onClick={() => handleCopyHash(counterparty)}
                                     title="Copy counterparty address"
                                     className="text-[var(--muted)] hover:text-[var(--gold)] cursor-pointer"
                                   >
-                                    {copiedTxHash === tx.counterparty ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                    {copiedTxHash === counterparty ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                                   </button>
                                 </div>
                               ) : (
@@ -1809,25 +1856,32 @@ export default function ProfilePage() {
                             </td>
 
                             <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
-                              {tx.date ? new Date(tx.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                              {txDate ? new Date(txDate).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                             </td>
 
                             <td className="py-3.5 px-4 whitespace-nowrap">
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
-                                <CheckCircle2 className="w-3 h-3" />
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 w-fit border ${
+                                  isFailed
+                                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                }`}
+                              >
+                                {isFailed ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
                                 <span>{tx.status || 'SUCCESS'}</span>
                               </span>
                             </td>
 
                             <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                              {tx.explorerUrl ? (
+                              {tx.explorerUrl && hasRealHash ? (
                                 <a
                                   href={tx.explorerUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                                  title={tx.txHash}
                                 >
-                                  <span>View</span>
+                                  <span>{tx.txHash.slice(0, 6)}...{tx.txHash.slice(-4)}</span>
                                   <ExternalLink className="w-3 h-3" />
                                 </a>
                               ) : (
@@ -1875,64 +1929,127 @@ export default function ProfilePage() {
                     <thead>
                       <tr className="border-b border-[var(--border)] bg-[var(--card-subtle)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
                         <th className="py-3 px-4">Action / Chain</th>
-                        <th className="py-3 px-4">Amount Disbursed</th>
+                        <th className="py-3 px-4">Swap Amount</th>
                         <th className="py-3 px-4">Destination Address</th>
                         <th className="py-3 px-4">Timestamp</th>
                         <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4 text-right">Explorer Proof</th>
+                        <th className="py-3 px-4 text-right">Sequential Tx Hashes (In → Out)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border)]">
-                      {bridgeHistory.map((b: any, idx: number) => (
-                        <tr key={b.id || idx} className="hover:bg-[var(--card-hover)] transition-colors">
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-[var(--gold)]" />
-                              <div>
-                                <span className="font-bold text-[var(--foreground)]">Cross-Chain Bridge</span>
-                                <span className="block text-[11px] text-[var(--muted)]">Disbursed on {b.chain}</span>
+                      {bridgeHistory.map((b: any, idx: number) => {
+                        const legs: SwapTransactionLeg[] = Array.isArray(b.transactions) ? b.transactions : [];
+                        const isSuccess = b.status === 'COMPLETED' || b.status === 'SUCCESS' || b.status === 'CONFIRMED';
+                        const isFailed = b.status === 'FAILED';
+                        return (
+                          <tr key={b.id || idx} className="hover:bg-[var(--card-hover)] transition-colors align-top">
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    isFailed ? 'bg-rose-400' : isSuccess ? 'bg-emerald-400' : 'bg-amber-400'
+                                  }`}
+                                />
+                                <div>
+                                  <span className="font-bold text-[var(--foreground)]">
+                                    {b.settlementType === 'INTERNAL_LEDGER' ? 'Internal Ledger Swap' : 'Cross-Chain Bridge'}
+                                  </span>
+                                  <span className="block text-[11px] text-[var(--muted)]">Rail: {b.chain || 'INTERNAL'}</span>
+                                </div>
                               </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          <td className="py-3.5 px-4 whitespace-nowrap font-bold text-emerald-400">
-                            {b.amount || 'NXL'}
-                          </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap font-bold text-emerald-400">
+                              {b.amount || 'NXL'}
+                            </td>
 
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="text-[var(--muted)]">
-                              {b.destinationAddress ? `${b.destinationAddress.slice(0, 6)}...${b.destinationAddress.slice(-4)}` : '—'}
-                            </span>
-                          </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="text-[var(--muted)]">
+                                {b.destinationAddress
+                                  ? b.destinationAddress.length > 18
+                                    ? `${b.destinationAddress.slice(0, 6)}...${b.destinationAddress.slice(-4)}`
+                                    : b.destinationAddress
+                                  : '—'}
+                              </span>
+                            </td>
 
-                          <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
-                            {b.createdAt ? new Date(b.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                          </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap text-[var(--muted)] text-[11px]">
+                              {b.createdAt ? new Date(b.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </td>
 
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-bold flex items-center gap-1 w-fit">
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>{b.status || 'CONFIRMED'}</span>
-                            </span>
-                          </td>
-
-                          <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                            {b.explorerUrl ? (
-                              <a
-                                href={b.explorerUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 w-fit border ${
+                                  isFailed
+                                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                    : isSuccess
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                }`}
                               >
-                                <span>Verify Tx</span>
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            ) : (
-                              <span className="text-[var(--muted)]">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                                {isFailed ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                                <span>{b.status || 'CONFIRMED'}</span>
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right">
+                              {legs.length > 0 ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  {legs.map((leg, lIdx) => {
+                                    const hasRealHash = isRealOnChainTxHash(leg.txHash);
+                                    return (
+                                      <div key={`${leg.sequence}-${lIdx}`} className="flex items-center gap-1.5 text-[11px]">
+                                        <span className="text-[var(--muted)]">
+                                          #{leg.sequence || lIdx + 1} {leg.direction === 'INCOMING' ? 'IN' : 'OUT'}:
+                                        </span>
+                                        <span
+                                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                            leg.status === 'FAILED'
+                                              ? 'bg-rose-500/15 text-rose-400'
+                                              : leg.status === 'SUCCESS'
+                                              ? 'bg-emerald-500/15 text-emerald-400'
+                                              : 'bg-amber-500/15 text-amber-300'
+                                          }`}
+                                        >
+                                          {leg.status}
+                                        </span>
+                                        {hasRealHash && leg.explorerUrl ? (
+                                          <a
+                                            href={leg.explorerUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline cursor-pointer"
+                                            title={leg.txHash!}
+                                          >
+                                            <span>{leg.txHash!.slice(0, 6)}...{leg.txHash!.slice(-6)}</span>
+                                            <ExternalLink className="w-3 h-3" />
+                                          </a>
+                                        ) : leg.rail === 'INTERNAL_LEDGER' ? (
+                                          <span className="text-[var(--muted)]">Internal Ledger</span>
+                                        ) : (
+                                          <span className="text-[var(--muted)]">No tx hash</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : isRealOnChainTxHash(b.txHash) && b.explorerUrl ? (
+                                <a
+                                  href={b.explorerUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[var(--gold)] hover:underline text-[11px] cursor-pointer"
+                                >
+                                  <span>{b.txHash.slice(0, 8)}...{b.txHash.slice(-6)}</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                <span className="text-[var(--muted)]">Internal Ledger</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -7,6 +7,9 @@ import { LedgerWatcherWorker } from './workers/ledgerWatcher.js';
 import { SocketService } from './sockets/server.js';
 import { KeepAliveWorker } from './workers/keepAlive.js';
 import { WebhookDlqWorker } from './workers/webhookDlq.js';
+import { CashbackMintWorker } from './workers/cashbackMintWorker.js';
+import { BuybackWorker } from './workers/buybackWorker.js';
+import { BridgeRelayerWorker } from './workers/bridgeRelayerWorker.js';
 import type { HealthResponse } from './types/index.js';
 
 const app = express();
@@ -107,6 +110,24 @@ if (process.env.NODE_ENV !== 'test') {
       WebhookDlqWorker.startWorker();
     } catch (err: any) {
       console.warn('⚠️ [WebhookDlqWorker] Worker start warning:', err?.message || err);
+    }
+
+    try {
+      CashbackMintWorker.startWorker();
+    } catch (err: any) {
+      console.warn('⚠️ [CashbackMintWorker] Worker start warning:', err?.message || err);
+    }
+
+    try {
+      BuybackWorker.startWorker();
+    } catch (err: any) {
+      console.warn('⚠️ [BuybackWorker] Worker start warning:', err?.message || err);
+    }
+
+    try {
+      BridgeRelayerWorker.startWorker();
+    } catch (err: any) {
+      console.warn('⚠️ [BridgeRelayerWorker] Worker start warning:', err?.message || err);
     }
   });
 

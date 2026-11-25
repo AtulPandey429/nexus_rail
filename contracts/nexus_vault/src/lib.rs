@@ -64,7 +64,10 @@ pub enum DataKey {
     TotalNxlMinted,
     TotalNxlBurned,
     TotalBridgeBurns,
-    // Persistent replay-protected records
+    // Additive v2.1 storage keys (backward-compatible via .unwrap_or(0))
+    TotalBuybackBurned,
+    TotalRefunded,
+    // Persistent replay-protected records — extended to ~60 days TTL per bump
     SettledOrder(BytesN<32>),
     ProcessedAction(BytesN<32>),
 }
@@ -360,20 +363,33 @@ impl NexusVaultContract {
             .get(&order_key)
             .ok_or(VaultError::OrderNotFound)?;
 
-        if record.refunded {
+        if record.refunded || record.refund_amount >= record.gross_amount {
             return Err(VaultError::OrderAlreadyRefunded);
         }
-        if refund_amount > record.gross_amount {
+        let cumulative_refund = record
+            .refund_amount
+            .checked_add(refund_amount)
+            .ok_or(VaultError::MathOverflow)?;
+        if cumulative_refund > record.gross_amount {
             return Err(VaultError::RefundExceedsOrder);
         }
 
         let client = token::Client::new(&env, &record.token);
         client.transfer(&operator, &record.payer, &refund_amount);
 
-        record.refunded = true;
-        record.refund_amount = refund_amount;
+        record.refund_amount = cumulative_refund;
+        record.refunded = cumulative_refund == record.gross_amount;
         env.storage().persistent().set(&order_key, &record);
         bump_persistent(&env, &order_key);
+
+        let store = env.storage().instance();
+        let total_refunded: i128 = store.get(&DataKey::TotalRefunded).unwrap_or(0);
+        store.set(
+            &DataKey::TotalRefunded,
+            &total_refunded
+                .checked_add(refund_amount)
+                .ok_or(VaultError::MathOverflow)?,
+        );
 
         env.events().publish(
             (symbol_short!("refunded"), order_ref),
@@ -415,6 +431,13 @@ impl NexusVaultContract {
         let supply_cap: i128 = store.get(&DataKey::NxlSupplyCap).ok_or(VaultError::NotInitialized)?;
         let total_minted: i128 = store.get(&DataKey::TotalNxlMinted).unwrap_or(0);
         let total_burned: i128 = store.get(&DataKey::TotalNxlBurned).unwrap_or(0);
+        let total_buyback_burned: i128 = store.get(&DataKey::TotalBuybackBurned).unwrap_or(0);
+
+        // Deflationary buyback burns permanently reduce the effective supply cap,
+        // whereas cross-chain bridge burns restore bridge-in minting headroom.
+        let effective_supply_cap = supply_cap
+            .checked_sub(total_buyback_burned)
+            .ok_or(VaultError::MathOverflow)?;
 
         let new_total_minted = total_minted
             .checked_add(amount)
@@ -423,7 +446,7 @@ impl NexusVaultContract {
             .checked_sub(total_burned)
             .ok_or(VaultError::MathOverflow)?;
 
-        if new_circulating > supply_cap {
+        if new_circulating > effective_supply_cap {
             return Err(VaultError::SupplyCapExceeded);
         }
 
@@ -480,6 +503,16 @@ impl NexusVaultContract {
         env.storage().persistent().set(&action_key, &true);
         bump_persistent(&env, &action_key);
         store.set(&DataKey::TotalNxlBurned, &new_total_burned);
+
+        if reason == symbol_short!("buyback") {
+            let prev_buyback: i128 = store.get(&DataKey::TotalBuybackBurned).unwrap_or(0);
+            store.set(
+                &DataKey::TotalBuybackBurned,
+                &prev_buyback
+                    .checked_add(amount)
+                    .ok_or(VaultError::MathOverflow)?,
+            );
+        }
 
         env.events().publish(
             (symbol_short!("nxl_burn"), reason, ref_id),
@@ -693,8 +726,10 @@ impl NexusVaultContract {
         let supply_cap: i128 = store.get(&DataKey::NxlSupplyCap).ok_or(VaultError::NotInitialized)?;
         let total_minted: i128 = store.get(&DataKey::TotalNxlMinted).unwrap_or(0);
         let total_burned: i128 = store.get(&DataKey::TotalNxlBurned).unwrap_or(0);
+        let total_buyback_burned: i128 = store.get(&DataKey::TotalBuybackBurned).unwrap_or(0);
+        let effective_cap = supply_cap.saturating_sub(total_buyback_burned);
         let circulating = total_minted.saturating_sub(total_burned);
-        let remaining = supply_cap.saturating_sub(circulating);
+        let remaining = effective_cap.saturating_sub(circulating);
 
         Ok(VaultMetrics {
             total_orders_settled: store.get(&DataKey::TotalOrdersSettled).unwrap_or(0),

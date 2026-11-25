@@ -20,7 +20,7 @@ export const STELLAR_DISTRIBUTOR_VAULT = env.STELLAR_NR_DISTRIBUTOR_VAULT || 'GD
 // XRPL standard 3-character currency 'NXL' (ASCII native)
 export const XRPL_NR_CURRENCY_CODE = env.XRPL_NR_CURRENCY_CODE || 'NXL';
 export const XRPL_NR_CURRENCY_HEX = convertStringToHex('NXL').padEnd(40, '0');
-export const TOTAL_SUPPLY_CAP = 1_000_000;
+export const TOTAL_SUPPLY_CAP = 2_000_000;
 
 export class DualRailTokenService {
   private static getXrplClient(): Client {
@@ -532,6 +532,108 @@ export class DualRailTokenService {
   }
 
   /**
+   * Direct XRPL $NXL Minting via the Authorized XRPL Issuer (Decision D2 Option B).
+   *
+   * Preserves the existing authorized XRPL issuer (`rfogmLyR5R2VcYsENSjqSW7iTpg9v8AbGU`).
+   * IMPORTANT: Callers MUST reserve unified global supply cap via `GlobalSupplyCoordinator`
+   * before invoking this method because XRPL has no native on-chain supply cap.
+   */
+  static async mintNxlOnXrpl(params: {
+    recipientAddress: string;
+    amountNxl: number;
+    orderId: string;
+    operatorId?: string;
+    skipTrustlineCheck?: boolean;
+    memoTag?: string;
+    referencePrefix?: string;
+  }): Promise<{ txHash: string; ledgerSeq: number; explorerUrl: string; issuerAddress: string }> {
+    const { recipientAddress, amountNxl, orderId } = params;
+    if (!Number.isFinite(amountNxl) || amountNxl <= 0) {
+      throw new Error('amountNxl must be a positive number');
+    }
+
+    if (!params.skipTrustlineCheck) {
+      const trustline = await this.checkXrplTrustline(recipientAddress, XRPL_NR_CURRENCY_CODE);
+      if (!trustline.hasTrustline) {
+        throw new Error(
+          `XRPL Trustline Missing: Account "${recipientAddress}" has no active trustline to issuer "${trustline.issuer}" for currency "${XRPL_NR_CURRENCY_CODE}".`
+        );
+      }
+    }
+
+    const client = this.getXrplClient();
+    await client.connect();
+    try {
+      const { issuerWallet } = await this.getOrCreateXrplIssuer(client);
+      if (issuerWallet.address === recipientAddress) {
+        throw new Error('Cannot mint XRPL NXL directly to the issuer account itself');
+      }
+
+      const memoTypeHex = Buffer.from(params.memoTag || 'CASHBACK', 'utf8').toString('hex').toUpperCase();
+      const memoDataHex = Buffer.from(orderId, 'utf8').toString('hex').toUpperCase();
+
+      const mintTx = await client.submitAndWait(
+        {
+          TransactionType: 'Payment',
+          Account: issuerWallet.address,
+          Destination: recipientAddress,
+          Amount: {
+            currency: XRPL_NR_CURRENCY_CODE,
+            issuer: issuerWallet.address,
+            value: Number(amountNxl).toFixed(6),
+          },
+          Memos: [
+            {
+              Memo: {
+                MemoType: memoTypeHex,
+                MemoData: memoDataHex,
+              },
+            },
+          ],
+        },
+        { wallet: issuerWallet }
+      );
+
+      const meta: any = mintTx.result.meta;
+      const txResult = typeof meta === 'object' && meta ? meta.TransactionResult : undefined;
+      if (txResult !== 'tesSUCCESS') {
+        throw new Error(`XRPL direct issuer mint failed with result: ${txResult || 'UNCONFIRMED'}`);
+      }
+      if (mintTx.result.validated === false) {
+        throw new Error('XRPL direct issuer mint transaction is not yet validated on ledger');
+      }
+
+      const txHash = mintTx.result.hash;
+      const ledgerSeq = mintTx.result.ledger_index || 0;
+      const explorerUrl = `https://testnet.xrpl.org/transactions/${txHash}`;
+
+      const refPrefix = params.referencePrefix || 'cashback';
+      await this.logChainAction({
+        chain: 'XRPL',
+        action: 'MINT',
+        operatorId: params.operatorId || 'CASHBACK_MINTER',
+        referenceId: `${refPrefix}:${orderId}`,
+        txHash,
+        ledgerSeq,
+        amountPrimary: amountNxl,
+        details: {
+          reason: refPrefix,
+          orderId,
+          recipient: recipientAddress,
+          issuer: issuerWallet.address,
+          currency: XRPL_NR_CURRENCY_CODE,
+        },
+      }).catch(() => {});
+
+      return { txHash, ledgerSeq, explorerUrl, issuerAddress: issuerWallet.address };
+    } finally {
+      if (client.isConnected()) {
+        await client.disconnect().catch(() => {});
+      }
+    }
+  }
+
+  /**
    * Checks whether a Stellar account has established a Trustline (change_trust)
    * for the official $NXL asset issued by the platform Stellar issuer.
    */
@@ -885,23 +987,35 @@ export class DualRailTokenService {
       (await tokensCol.findOne({ chain: 'XRPL', symbol: 'NXL' })) ||
       (await tokensCol.findOne({ chain: 'XRPL' }));
 
-    // 2. XRPL Live AMM Status
+    // 2. XRPL Live AMM & Gateway Supply Status
     let xrplAmmAccount = xrplToken?.amm_account || env.XRPL_NR_AMM_ACCOUNT || 'rDPpHaLKbyDwcuR5HupxE2KyEj3G6i9RaE';
     let reserveXrp = 0;
     let reserveNr = 0;
     let tradingFeeBps = 50;
+    let liveXrplTotalSupply: number | null = null;
 
     const client = this.getXrplClient();
     try {
       await client.connect();
-      if (xrplToken?.issuer_address) {
-        const ammInfo = await client
-          .request({
-            command: 'amm_info',
-            asset: { currency: 'XRP' },
-            asset2: { currency: 'NXL', issuer: xrplToken.issuer_address },
-          })
-          .catch(() => null);
+      const xrplIssuerAddr = xrplToken?.issuer_address || env.XRPL_NR_ISSUER_ADDRESS;
+      const xrplDistAddr = xrplToken?.distribution_address || env.PLATFORM_XRPL_VAULT || 'rHPcjCjp2dymiMtdHdQSZae1kR3gMYDgAp';
+      if (xrplIssuerAddr) {
+        const [ammInfo, gwInfo] = await Promise.all([
+          client
+            .request({
+              command: 'amm_info',
+              asset: { currency: 'XRP' },
+              asset2: { currency: 'NXL', issuer: xrplIssuerAddr },
+            })
+            .catch(() => null),
+          client
+            .request({
+              command: 'gateway_balances',
+              account: xrplIssuerAddr,
+              hotwallet: [xrplDistAddr],
+            })
+            .catch(() => null),
+        ]);
 
         if (ammInfo?.result?.amm) {
           xrplAmmAccount = ammInfo.result.amm.account;
@@ -913,6 +1027,16 @@ export class DualRailTokenService {
           }
           tradingFeeBps = (ammInfo.result.amm.trading_fee || 500) / 10;
         }
+
+        if (gwInfo?.result) {
+          const hotBalances = (gwInfo.result as any).balances?.[xrplDistAddr] || [];
+          const hotNxl = hotBalances.find((b: any) => b.currency === 'NXL');
+          const hotAmount = hotNxl ? parseFloat(hotNxl.value || '0') : 0;
+          const obAmount = parseFloat((gwInfo.result as any).obligations?.NXL || '0');
+          if (hotAmount > 0 || obAmount > 0) {
+            liveXrplTotalSupply = Number((hotAmount + obAmount).toFixed(6));
+          }
+        }
       }
     } catch {
       // Graceful fallback if offline
@@ -922,21 +1046,51 @@ export class DualRailTokenService {
       } catch {}
     }
 
+    // 2b. Live Stellar Horizon Supply Status
+    let liveStellarTotalSupply: number | null = null;
+    try {
+      const horizonUrl = env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org';
+      const stellarIssuerAddr = stellarToken?.issuer_address || STELLAR_NR_ISSUER;
+      const assetRes = await fetch(
+        `${horizonUrl.replace(/\/$/, '')}/assets?asset_code=${encodeURIComponent(STELLAR_NR_ASSET_CODE)}&asset_issuer=${encodeURIComponent(stellarIssuerAddr)}`
+      ).then((r) => (r.ok ? r.json() : null));
+      const rec = assetRes?._embedded?.records?.[0];
+      if (rec) {
+        liveStellarTotalSupply = Number(
+          (
+            parseFloat(rec.balances?.authorized || '0') +
+            parseFloat(rec.balances?.authorized_to_maintain_liabilities || '0') +
+            parseFloat(rec.contracts_amount || '0') +
+            parseFloat(rec.claimable_balances_amount || '0') +
+            parseFloat(rec.liquidity_pools_amount || '0')
+          ).toFixed(7)
+        );
+      }
+    } catch {
+      // Graceful fallback if offline
+    }
+
     // 3. Logs
     const logsCol = await MongoService.getCollection<MongoChainActionLogDoc>('platform_chain_logs');
     const recentLogs = await logsCol.find({}).sort({ created_at: -1 }).limit(20).toArray();
 
-    // Parity is derived from the recorded mint amount on each chain. When a
-    // chain has no recorded mint, the balance cannot be asserted and the UI is
-    // told the rails are not reconciled instead of showing a fabricated figure.
-    const stellarCirculating = Number(stellarToken?.initial_mint_amount ?? 0);
-    const xrplCirculating = Number(xrplToken?.initial_mint_amount ?? 0);
+    // Parity uses live on-chain Horizon & XRPL gateway supply when reachable,
+    // falling back to recorded token docs only in offline environments.
+    const stellarCirculating =
+      liveStellarTotalSupply !== null
+        ? liveStellarTotalSupply
+        : Number(stellarToken?.initial_mint_amount ?? 0);
+    const xrplCirculating =
+      liveXrplTotalSupply !== null
+        ? liveXrplTotalSupply
+        : Number(xrplToken?.initial_mint_amount ?? 0);
     const isBalanced =
       stellarCirculating > 0 &&
       xrplCirculating > 0 &&
-      Math.abs(stellarCirculating - xrplCirculating) < 0.01;
+      stellarCirculating + xrplCirculating <= TOTAL_SUPPLY_CAP;
 
-    const summary: DualRailTokenSummaryDTO = {      stellar: {
+    const summary: DualRailTokenSummaryDTO = {
+      stellar: {
         assetCode: STELLAR_NR_ASSET_CODE,
         issuerAddress: stellarToken?.issuer_address || STELLAR_NR_ISSUER,
         contractId: stellarToken?.contract_id || STELLAR_NR_CONTRACT_ID,
@@ -963,7 +1117,7 @@ export class DualRailTokenService {
         xrplCirculating: xrplCirculating,
         totalSupplyCap: TOTAL_SUPPLY_CAP,
         isBalanced: isBalanced,
-        invariantString: '1 $NXL (Stellar) ≡ 1 $NXL (XRPL) · Fixed 1,000,000 Cap',
+        invariantString: '1 $NXL (Stellar) ≡ 1 $NXL (XRPL) · Fixed 2,000,000 Cap',
       },
       recentLogs: recentLogs.map((l) => ({
         id: l.id,

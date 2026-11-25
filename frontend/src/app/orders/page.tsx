@@ -14,8 +14,9 @@ import {
   ShieldCheck,
   ShoppingBag,
   Search,
+  Coins,
 } from 'lucide-react';
-import { fetchOrders } from '@/lib/shop';
+import { fetchOrders, readSession } from '@/lib/shop';
 import { explorerTxUrl, usePlatformConfig } from '@/lib/platformConfig';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
@@ -50,6 +51,48 @@ function OrdersListContent() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterRail, setFilterRail] = useState<RailFilter>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [cashbackStatusMap, setCashbackStatusMap] = useState<Record<string, any>>({});
+  const [claimingOrderId, setClaimingOrderId] = useState<string | null>(null);
+  const [claimMsgMap, setClaimMsgMap] = useState<Record<string, string>>({});
+
+  const refreshOrderCashback = async (orderId: string) => {
+    const { token } = readSession();
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/v1/orders/${encodeURIComponent(orderId)}/cashback-status`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setCashbackStatusMap((prev) => ({ ...prev, [orderId]: json.data }));
+      }
+    } catch {}
+  };
+
+  const handleClaimCashback = async (orderId: string) => {
+    const { token } = readSession();
+    if (!token) return;
+    setClaimingOrderId(orderId);
+    try {
+      const res = await fetch(`/api/v1/orders/${encodeURIComponent(orderId)}/claim-cashback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      setClaimMsgMap((prev) => ({
+        ...prev,
+        [orderId]: res.ok && json.success
+          ? `Minted ${json.data?.amount_nxl ?? ''} NXL 1:1 on ${json.data?.chain || 'chain'}!`
+          : json?.error || json?.data?.last_error || 'Cashback claim pending wallet/trustline.',
+      }));
+      await refreshOrderCashback(orderId);
+    } catch (err: any) {
+      setClaimMsgMap((prev) => ({ ...prev, [orderId]: err?.message || 'Cashback claim failed' }));
+    } finally {
+      setClaimingOrderId(null);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -61,7 +104,12 @@ function OrdersListContent() {
   useEffect(() => {
     fetchOrders()
       .then((apiRows) => {
-        setOrders(Array.isArray(apiRows) ? apiRows : []);
+        const list = Array.isArray(apiRows) ? apiRows : [];
+        setOrders(list);
+        list
+          .filter((o: any) => SETTLED_STATUSES.includes(String(o.status || '').toUpperCase()) && (o.id || o.orderNumber))
+          .slice(0, 10)
+          .forEach((o: any) => void refreshOrderCashback(String(o.id || o.orderNumber)));
       })
       .catch(() => setOrders([]))
       .finally(() => setLoading(false));
@@ -349,11 +397,44 @@ function OrdersListContent() {
 
                 {/* Card Action Footer */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-[var(--border)] text-xs font-mono">
-                  <div className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
-                    <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
-                    <span>
-                      {isSettled ? `Settled on ${rail}` : `Awaiting payment on ${rail}`}
-                    </span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
+                      <ShieldCheck className="w-4 h-4 text-[var(--gold)] shrink-0" />
+                      <span>
+                        {isSettled ? `Settled on ${rail}` : `Awaiting payment on ${rail}`}
+                      </span>
+                    </div>
+                    {isSettled && (() => {
+                      const cb = cashbackStatusMap[order.id || orderNum];
+                      const cbStatus = cb?.status;
+                      if (!cbStatus) return null;
+                      return (
+                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                          <Coins className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="text-emerald-300">
+                            2% Cashback ({cb.amount_nxl} NXL · {cb.chain}): {cbStatus}
+                          </span>
+                          {cb.explorer_url && (
+                            <a href={cb.explorer_url} target="_blank" rel="noopener noreferrer" className="text-sky-300 underline">
+                              Mint Tx
+                            </a>
+                          )}
+                          {(cbStatus === 'AWAITING_WALLET' || cbStatus === 'AWAITING_TRUSTLINE' || cbStatus === 'RETRY_SCHEDULED') && (
+                            <button
+                              type="button"
+                              onClick={() => handleClaimCashback(String(order.id || orderNum))}
+                              disabled={claimingOrderId === String(order.id || orderNum)}
+                              className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30 cursor-pointer"
+                            >
+                              {claimingOrderId === String(order.id || orderNum) ? 'Claiming…' : 'Claim 1:1 $NXL'}
+                            </button>
+                          )}
+                          {claimMsgMap[String(order.id || orderNum)] && (
+                            <span className="text-[var(--gold)]">{claimMsgMap[String(order.id || orderNum)]}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex items-center gap-3">

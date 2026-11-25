@@ -678,6 +678,13 @@ impl NexusSwapContract {
             return Err(SwapError::EscrowAlreadyExists);
         }
 
+        let store = env.storage().instance();
+        let token_a: Address = store.get(&DataKey::TokenA).ok_or(SwapError::NotInitialized)?;
+        let token_b: Address = store.get(&DataKey::TokenB).ok_or(SwapError::NotInitialized)?;
+        if token != token_a && token != token_b {
+            return Err(SwapError::InvalidToken);
+        }
+
         let contract_addr = env.current_contract_address();
         token::Client::new(&env, &token).transfer(&sender, &contract_addr, &amount);
 
@@ -696,7 +703,6 @@ impl NexusSwapContract {
         env.storage().persistent().set(&key, &escrow);
         bump_persistent(&env, &key);
 
-        let store = env.storage().instance();
         let locked: u64 = store.get(&DataKey::TotalEscrowsLocked).unwrap_or(0);
         store.set(
             &DataKey::TotalEscrowsLocked,

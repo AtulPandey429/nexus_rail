@@ -18,6 +18,7 @@ export interface MongoEncryptedSecretsDoc {
 
 export type PlatformSecretKeys =
   | 'stellarHotWalletSecret'
+  | 'stellarBuybackReserveSecret'
   | 'stellarNxlIssuerSecret'
   | 'xrplHotWalletSeed'
   | 'xrplNxlIssuerSeed'
@@ -92,6 +93,7 @@ export class VaultEncryptionService {
   private static getInitialEnvSecrets(): Record<string, string> {
     return {
       stellarHotWalletSecret: env.STELLAR_HOT_WALLET_SECRET || '',
+      stellarBuybackReserveSecret: env.STELLAR_BUYBACK_RESERVE_SECRET || '',
       stellarNxlIssuerSecret: env.STELLAR_NXL_ISSUER_SECRET || '',
       xrplHotWalletSeed: env.XRPL_HOT_WALLET_SEED || '',
       xrplNxlIssuerSeed: env.XRPL_NXL_ISSUER_SEED || '',

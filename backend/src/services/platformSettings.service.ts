@@ -14,7 +14,7 @@ export const DEFAULT_PLATFORM_SETTINGS: Omit<MongoPlatformSettingsDoc, '_id'> = 
   fees: {
     swap_fee_bps: 30, // 0.30%
     platform_order_fee_bps: 100, // 1.00%
-    cashback_rate_bps: 150, // 1.50%
+    cashback_rate_bps: 200, // 2.00% (Unified with TreasuryService & CouponService)
     slippage_tolerance_bps: 150, // 1.50%
     cashout_spread_bps: 50, // 0.50%
     nxl_discount_bps: 1000, // 10.00%

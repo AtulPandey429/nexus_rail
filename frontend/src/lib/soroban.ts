@@ -162,11 +162,85 @@ export async function executeSorobanSwapOrBridge(params: {
   return subJson.data as {
     swapId: string;
     mode: string;
+    status?: string;
     txHash: string;
     ledger?: number;
     explorerUrl: string;
     payoutTxHash?: string;
     payoutExplorerUrl?: string;
     escrowReleaseTxHash?: string;
+    bridgeOperation?: {
+      id: string;
+      swap_id: string;
+      status: string;
+      mechanism: string;
+      escrow_expiry_unix_sec?: number;
+      retry_count?: number;
+      last_error?: string;
+    };
+    transactions?: Array<{
+      sequence: number;
+      direction: 'INCOMING' | 'OUTGOING';
+      stage: 'DEPOSIT' | 'INTERNAL_DEBIT' | 'AMM_SWAP' | 'INTERNAL_CREDIT' | 'ONCHAIN_PAYOUT' | 'ESCROW_RELEASE';
+      label: string;
+      asset: string;
+      amount: number;
+      rail: 'XRPL' | 'STELLAR' | 'INTERNAL_LEDGER';
+      status: 'SUCCESS' | 'FAILED' | 'PENDING';
+      txHash: string | null;
+      explorerUrl: string | null;
+      ledgerRef?: string | null;
+      toAddress?: string;
+      errorMessage?: string;
+      timestamp: string;
+    }>;
   };
+}
+
+export async function refundExpiredBridgeEscrowWithFreighter(swapId: string) {
+  const { address } = await connectFreighter();
+  const res = await fetch(`/api/v1/swap/bridge/${encodeURIComponent(swapId)}/refund`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ callerAddress: address }),
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json?.error || 'Could not build bridge escrow refund transaction');
+  }
+  if (json.data?.mode === 'REFUNDED_ONCHAIN') {
+    return {
+      txHash: json.data.txHash as string,
+      explorerUrl: json.data.explorerUrl as string,
+      operation: json.data.operation,
+    };
+  }
+
+  const signedXdr = await signXdrWithFreighter(json.data.unsignedXdr, address);
+  const subRes = await fetch('/api/v1/swap/stellar/submit-xdr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signedXdr }),
+  });
+  const subJson = await subRes.json();
+  if (!subRes.ok || !subJson.success) {
+    throw new Error(subJson?.error || 'Horizon submission rejected refund XDR');
+  }
+  return {
+    txHash: subJson.txHash as string,
+    explorerUrl: subJson.explorerUrl as string,
+    operation: json.data?.operation,
+  };
+}
+
+export async function claimBridgeTrustline(swapId: string) {
+  const res = await fetch(`/api/v1/swap/bridge/${encodeURIComponent(swapId)}/claim-trustline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json?.error || 'Failed to claim pending bridge trustline');
+  }
+  return json;
 }

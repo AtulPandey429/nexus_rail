@@ -38,6 +38,8 @@ const envSchema = z.object({
 
   // Hot wallet & issuer secrets (Sensitive, optional / fallback for testnet dev)
   STELLAR_HOT_WALLET_SECRET: z.string().optional(),
+  STELLAR_BUYBACK_RESERVE_SECRET: z.string().optional(),
+  STELLAR_BUYBACK_RESERVE_PUBLIC: z.string().optional(),
   XRPL_HOT_WALLET_SEED: z.string().optional(),
   STELLAR_NXL_ISSUER_SECRET: z.string().optional().default(process.env.STELLAR_NXL_ISSUER_SECRET || process.env.STELLAR_NR_ISSUER_SECRET || 'SAYWBF264FHGQT6HKV4ARD6VS5CYHI7B5LK4SPGPSZ7F2FML36EE2LFY'),
   STELLAR_NR_ISSUER_SECRET: z.string().optional().default(process.env.STELLAR_NXL_ISSUER_SECRET || process.env.STELLAR_NR_ISSUER_SECRET || 'SAYWBF264FHGQT6HKV4ARD6VS5CYHI7B5LK4SPGPSZ7F2FML36EE2LFY'),

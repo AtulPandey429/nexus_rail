@@ -1,6 +1,7 @@
 import { MongoClient, Db, Collection } from 'mongodb';
 import { env } from '../config/env.js';
 import type { AssetSymbol } from '../types/index.js';
+import type { SwapSettlementType, SwapTransactionLeg } from '../utils/swapTransactions.js';
 
 export interface MongoUserDoc {
   _id?: any;
@@ -94,6 +95,9 @@ export interface MongoOrderDoc {
   cashback_credited?: boolean;
   cashback_usd_cents?: number;
   cashback_nxl_amount?: number;
+  cashback_chain?: 'STELLAR' | 'XRPL';
+  cashback_tx_hash?: string;
+  cashback_status?: CashbackIssuanceStatus;
   items: OrderItem[];
   payment_rail: string;
   payment_address?: string;
@@ -133,7 +137,10 @@ export interface MongoSwapOrderDoc {
   platformDepositAddress: string;
   paymentIdentifierType: 'destination_tag' | 'memo_text' | 'internal_ledger';
   paymentIdentifier: string | number;
-  status: 'PENDING_DEPOSIT' | 'DEPOSIT_CONFIRMED' | 'PAYOUT_PROCESSING' | 'COMPLETED' | 'FAILED';
+  status: 'PENDING_DEPOSIT' | 'DEPOSIT_CONFIRMED' | 'PAYOUT_PROCESSING' | 'COMPLETED' | 'AWAITING_TRUSTLINE' | 'FAILED';
+  settlementType?: SwapSettlementType;
+  transactions?: SwapTransactionLeg[];
+  errorMessage?: string;
   depositTxHash?: string;
   payoutTxHash?: string;
   depositExplorerUrl?: string;
@@ -493,6 +500,167 @@ export interface MongoTokenWithdrawalDoc {
   created_at: string;
 }
 
+export type GlobalSupplyReservationStatus = 'RESERVED' | 'CONFIRMED' | 'RELEASED';
+
+export interface MongoGlobalSupplyReservationDoc {
+  _id?: any;
+  operation_id: string;
+  chain: 'STELLAR' | 'XRPL';
+  reason: 'cashback' | 'bridge' | 'liquidity' | 'admin';
+  amount_nxl: number;
+  recipient_address: string;
+  status: GlobalSupplyReservationStatus;
+  tx_hash?: string;
+  ledger_seq?: number;
+  release_reason?: string;
+  created_at: string;
+  updated_at: string;
+  expires_at: Date;
+}
+
+export type CashbackIssuanceStatus =
+  | 'PENDING'
+  | 'AWAITING_WALLET'
+  | 'AWAITING_TRUSTLINE'
+  | 'CAP_RESERVED'
+  | 'MINTING'
+  | 'VERIFYING'
+  | 'COMPLETED'
+  | 'RETRY_SCHEDULED'
+  | 'FAILED';
+
+export interface MongoCashbackIssuanceDoc {
+  _id?: any;
+  id: string;
+  order_id: string;
+  order_number: string;
+  user_id: string;
+  target_chain: 'STELLAR' | 'XRPL' | 'UNSELECTED';
+  recipient_address: string;
+  cashback_usd_cents: number;
+  cashback_nxl: number;
+  spot_price_cents: number;
+  status: CashbackIssuanceStatus;
+  reservation_id?: string;
+  tx_hash?: string;
+  ledger_seq?: number;
+  explorer_url?: string;
+  issuer_address?: string;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export interface MongoWorkerLockDoc {
+  _id?: any;
+  lock_key: string;
+  owner_id: string;
+  acquired_at: string;
+  expires_at: Date;
+}
+
+export type BuybackExecutionStatus =
+  | 'COLLECTING'
+  | 'QUOTED'
+  | 'SWAPPING'
+  | 'SWAPPED'
+  | 'BURNING'
+  | 'COMPLETED'
+  | 'RETRY_SCHEDULED'
+  | 'FAILED';
+
+export interface MongoBuybackExecutionDoc {
+  _id?: any;
+  id: string;
+  idempotency_key: string;
+  trigger_type: 'ADMIN_MANUAL' | 'SCHEDULED_WORKER';
+  triggered_by: string;
+  reserve_address: string;
+  status: BuybackExecutionStatus;
+  reserve_xlm_before: number;
+  xlm_to_spend: number;
+  quoted_nxl_out: number;
+  min_nxl_out: number;
+  max_slippage_bps: number;
+  max_price_impact_pct: number;
+  estimated_price_impact_pct: number;
+  actual_nxl_purchased: number;
+  burned_nxl: number;
+  swap_tx_hash?: string;
+  swap_ledger_seq?: number;
+  swap_explorer_url?: string;
+  burn_tx_hash?: string;
+  burn_ledger_seq?: number;
+  burn_explorer_url?: string;
+  burn_ref_id?: string;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export type BridgeOperationStatus =
+  | 'PENDING'
+  | 'SOURCE_VERIFIED'
+  | 'EXECUTING'
+  | 'DEST_VERIFIED'
+  | 'COMPLETED'
+  | 'RETRY_SCHEDULED'
+  | 'AWAITING_TRUSTLINE'
+  | 'REFUNDABLE'
+  | 'REFUNDED'
+  | 'FAILED';
+
+export type BridgeDirection = 'STELLAR_TO_XRPL' | 'XRPL_TO_STELLAR';
+export type BridgeMechanism = 'SOROBAN_ESCROW' | 'BURN_AND_MINT' | 'LOCK_AND_RELEASE';
+
+export interface MongoBridgeOperationDoc {
+  _id?: any;
+  id: string;
+  swap_id: string;
+  user_id?: string;
+  direction: BridgeDirection;
+  mechanism: BridgeMechanism;
+  from_asset: 'XLM' | 'XRP' | 'NXL';
+  to_asset: 'XLM' | 'XRP' | 'NXL';
+  from_amount: number;
+  to_amount: number;
+  exchange_rate: number;
+  source_chain: 'STELLAR' | 'XRPL';
+  dest_chain: 'STELLAR' | 'XRPL';
+  source_address: string;
+  destination_address: string;
+  source_tx_hash: string;
+  source_explorer_url?: string;
+  source_verified_at?: string;
+  dest_tx_hash?: string;
+  dest_explorer_url?: string;
+  dest_verified_at?: string;
+  escrow_contract_id?: string;
+  escrow_expiry_unix_sec?: number;
+  escrow_release_tx_hash?: string;
+  escrow_release_explorer_url?: string;
+  escrow_refund_tx_hash?: string;
+  escrow_refund_explorer_url?: string;
+  supply_reservation_id?: string;
+  status: BridgeOperationStatus;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at?: string;
+  last_error?: string;
+  legs: any[];
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
 export class MongoService {
   private static client: MongoClient | null = null;
   private static dbInstance: Db | null = null;
@@ -642,6 +810,31 @@ export class MongoService {
 
       // 18. Module 7: Smart Coupons
       await db.collection('coupons').createIndex({ code: 1 }, { unique: true });
+
+      // 19. Phase 2B: Unified Global Supply Reservations, Direct Cashback Issuances & Worker Locks
+      await db.collection('global_supply_reservations').createIndex({ operation_id: 1 }, { unique: true });
+      await db.collection('global_supply_reservations').createIndex({ status: 1, expires_at: 1 });
+      await db.collection('cashback_issuances').createIndex({ order_id: 1 }, { unique: true });
+      await db.collection('cashback_issuances').createIndex({ user_id: 1, created_at: -1 });
+      await db.collection('cashback_issuances').createIndex({ status: 1, next_retry_at: 1 });
+      await db.collection('worker_locks').createIndex({ lock_key: 1 }, { unique: true });
+      await db.collection('worker_locks').createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 });
+
+      // 20. Phase 3: Durable Buyback & Burn Execution Engine
+      await db.collection('buyback_executions').createIndex({ id: 1 }, { unique: true });
+      await db.collection('buyback_executions').createIndex({ idempotency_key: 1 }, { unique: true });
+      await db.collection('buyback_executions').createIndex({ status: 1, next_retry_at: 1 });
+      await db.collection('buyback_executions').createIndex({ created_at: -1 });
+
+      // 21. Phase 4: Durable Cross-Chain Bridge Operations & Strict Replay Protection
+      await db.collection('bridge_operations').createIndex({ id: 1 }, { unique: true });
+      await db.collection('bridge_operations').createIndex({ swap_id: 1 }, { unique: true });
+      await db.collection('bridge_operations').createIndex(
+        { source_tx_hash: 1 },
+        { unique: true, partialFilterExpression: { source_tx_hash: { $type: 'string', $gt: '' } } }
+      );
+      await db.collection('bridge_operations').createIndex({ status: 1, next_retry_at: 1 });
+      await db.collection('bridge_operations').createIndex({ user_id: 1, created_at: -1 });
 
       console.log('✅ [MongoDB Atlas] Primary Collections & TTL Indexes Initialized');
     } catch (err: any) {

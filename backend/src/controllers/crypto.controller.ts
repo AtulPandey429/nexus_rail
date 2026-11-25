@@ -1,13 +1,15 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import { StrKey } from '@stellar/stellar-sdk';
+import { isValidClassicAddress } from 'xrpl';
 import { RatesService } from '../services/rates.js';
 import { chainRegistry } from '../services/crypto/index.js';
 import { verifyToken } from '../services/jwt.js';
 import { walletService } from '../services/wallet.js';
-import { StellarTokenIssuerService } from '../scripts/deployStellarNrToken.js';
 import { DualRailTokenService } from '../services/dualRailToken.service.js';
+import { SupplyReconciliationService } from '../services/supplyReconciliation.service.js';
+import { MongoService, MongoTokenWithdrawalDoc } from '../services/mongo.js';
 import { RedisCacheService } from '../services/redis.js';
-import { STELLAR_TESTNET } from '../utils/constants.js';
 
 export class CryptoController {
   /**
@@ -122,43 +124,133 @@ export class CryptoController {
     }
 
     const isXrpl = chain === 'XRPL' || targetAddress.startsWith('r');
+    const targetChain: 'XRPL' | 'STELLAR' = isXrpl ? 'XRPL' : 'STELLAR';
+
+    if (isXrpl && !isValidClassicAddress(targetAddress)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid XRPL destination address "${targetAddress}". Expected a valid classic address starting with "r".`,
+      });
+    }
+    if (!isXrpl && !StrKey.isValidEd25519PublicKey(targetAddress)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid Stellar destination address "${targetAddress}". Expected a valid 56-character Ed25519 public key starting with "G".`,
+      });
+    }
+
+    const requestedMicro = Math.round(numAmount * 1_000_000);
+    const withdrawalId = `wd_${crypto.randomUUID().slice(0, 16)}`;
 
     try {
-      const balances = await walletService.getBalance(userId);
-      const availableNxlMicro = balances.NXL || 0;
-      const requestedMicro = Math.round(numAmount * 1_000_000);
-
-      if (availableNxlMicro < requestedMicro) {
-        return res.status(400).json({
-          success: false,
-          error: `Insufficient $NXL balance. You have ${(availableNxlMicro / 1_000_000).toFixed(6)} $NXL available.`,
-        });
+      // 1. Pre-flight verification: Destination Trustline + On-Chain Protocol Reserve Availability (D2 Option A)
+      let verifiedIssuer: string | undefined;
+      if (isXrpl) {
+        const tl = await DualRailTokenService.checkXrplTrustline(targetAddress, 'NXL');
+        if (!tl.hasTrustline) {
+          return res.status(400).json({
+            success: false,
+            trustlineRequired: true,
+            issuer: tl.issuer,
+            currency: 'NXL',
+            error: `XRPL Trustline Missing: Account "${targetAddress}" has not established an active Trustline to Issuer "${tl.issuer}" for currency "NXL".`,
+          });
+        }
+        verifiedIssuer = tl.issuer;
+      } else {
+        const tl = await DualRailTokenService.checkStellarTrustline(targetAddress, 'NXL');
+        if (!tl.hasTrustline) {
+          return res.status(400).json({
+            success: false,
+            trustlineRequired: true,
+            issuer: tl.issuer,
+            assetCode: 'NXL',
+            error: `Stellar Trustline Missing: Account "${targetAddress}" has not established an active Trustline to Issuer "${tl.issuer}" for asset "NXL".`,
+          });
+        }
+        verifiedIssuer = tl.issuer;
       }
 
+      await SupplyReconciliationService.verifyReserveForWithdrawal(targetChain, numAmount);
+
+      // 2. Atomic Debit FIRST (CRIT-02 TOCTOU Overdraft & Double-Spend Defense)
+      await walletService.applyEntry(userId, requestedMicro, 'DEBIT', 'NXL', withdrawalId);
+
+      // 3. Broadcast REAL On-Chain Token Transfer (CRIT-01 Fix: No fake stub hashes)
       let txHash: string;
       let ledgerSeq: number | undefined;
       let explorerUrl: string;
-      let withdrawalId = `wd_${crypto.randomUUID().slice(0, 16)}`;
 
-      if (isXrpl) {
-        const xrplRes = await DualRailTokenService.withdrawNrToXrplAddress(userId, numAmount, targetAddress);
-        txHash = xrplRes.txHash;
-        ledgerSeq = xrplRes.ledgerSeq;
-        explorerUrl = xrplRes.explorerUrl;
-      } else {
-        const withdrawal = await StellarTokenIssuerService.withdrawNrToExternalAddress(
-          userId,
-          numAmount,
-          targetAddress
-        );
-        txHash = withdrawal.tx_hash;
-        ledgerSeq = withdrawal.ledger_seq;
-        explorerUrl = `${STELLAR_TESTNET.explorerTxBase}${withdrawal.tx_hash}`;
-        withdrawalId = withdrawal.id;
+      try {
+        if (isXrpl) {
+          const xrplRes = await DualRailTokenService.withdrawNrToXrplAddress(
+            userId,
+            numAmount,
+            targetAddress,
+            { skipTrustlineCheck: true, verifiedIssuer }
+          );
+          txHash = xrplRes.txHash;
+          ledgerSeq = xrplRes.ledgerSeq;
+          explorerUrl = xrplRes.explorerUrl;
+        } else {
+          const stellarRes = await DualRailTokenService.withdrawNrToStellarAddress(
+            userId,
+            numAmount,
+            targetAddress,
+            { skipTrustlineCheck: true, verifiedIssuer }
+          );
+          txHash = stellarRes.txHash;
+          ledgerSeq = stellarRes.ledgerSeq;
+          explorerUrl = stellarRes.explorerUrl;
+        }
+      } catch (broadcastErr: any) {
+        // Atomic Rollback: Refund user's internal $NXL balance if on-chain broadcast failed
+        await walletService
+          .applyEntry(userId, requestedMicro, 'CREDIT', 'NXL', `refund:${withdrawalId}`)
+          .catch((refundErr) => {
+            console.error(`🚨 [CryptoController] Critical withdrawal refund failure for ${withdrawalId}:`, refundErr);
+          });
+
+        try {
+          const withdrawalsCol = await MongoService.getCollection<MongoTokenWithdrawalDoc>('token_withdrawals');
+          await withdrawalsCol.insertOne({
+            id: withdrawalId,
+            user_id: userId,
+            amount_nr: numAmount,
+            destination_address: targetAddress,
+            chain: targetChain,
+            destination_stellar_address: isXrpl ? undefined : targetAddress,
+            tx_hash: '',
+            status: 'FAILED',
+            error_message: broadcastErr?.message || 'On-chain broadcast failed',
+            created_at: new Date().toISOString(),
+          });
+        } catch {}
+
+        throw broadcastErr;
       }
 
-      await walletService.applyEntry(userId, requestedMicro, 'DEBIT', 'NXL', withdrawalId);
-      await RedisCacheService.invalidateCache('admin:dual-rail:summary');
+      // 4. Persist confirmed on-chain withdrawal record
+      try {
+        const withdrawalsCol = await MongoService.getCollection<MongoTokenWithdrawalDoc>('token_withdrawals');
+        await withdrawalsCol.insertOne({
+          id: withdrawalId,
+          user_id: userId,
+          amount_nr: numAmount,
+          destination_address: targetAddress,
+          chain: targetChain,
+          destination_stellar_address: isXrpl ? undefined : targetAddress,
+          tx_hash: txHash,
+          ledger_seq: ledgerSeq,
+          status: 'CONFIRMED',
+          created_at: new Date().toISOString(),
+        });
+      } catch {}
+
+      await Promise.all([
+        RedisCacheService.invalidateCache('admin:dual-rail:summary').catch(() => {}),
+        RedisCacheService.invalidateCache('admin:tokenomics:reconciliation').catch(() => {}),
+      ]);
       const updatedBalances = await walletService.getBalance(userId);
 
       res.json({
@@ -167,7 +259,7 @@ export class CryptoController {
           withdrawalId,
           amountNxl: numAmount,
           amountNr: numAmount,
-          chain: isXrpl ? 'XRPL' : 'STELLAR',
+          chain: targetChain,
           destinationAddress: targetAddress,
           destinationStellarAddress: targetAddress,
           txHash,

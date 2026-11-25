@@ -40,5 +40,11 @@ swapRouter.post('/soroban/quote', SwapController.getSorobanQuote);
 swapRouter.post('/soroban/prepare', SwapController.prepareSorobanSwap);
 swapRouter.post('/soroban/submit', SwapController.submitSorobanSwap);
 
+// Phase 4: Durable Cross-Chain Bridge Operations & Self-Refund Recovery
+swapRouter.post('/bridge/xrpl-to-stellar', SwapController.executeXrplToStellarBridge);
+swapRouter.get('/bridge/:swapId', SwapController.getBridgeOperation);
+swapRouter.post('/bridge/:swapId/refund', SwapController.refundBridgeEscrow);
+swapRouter.post('/bridge/:swapId/claim-trustline', SwapController.claimBridgeTrustline);
+
 // Single Swap status
 swapRouter.get('/:swapId', SwapController.getSwapById);

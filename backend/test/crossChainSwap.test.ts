@@ -1,8 +1,12 @@
-import { describe, it } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert';
 import { CrossChainSwapService } from '../src/services/crossChainSwap.service.js';
+import { MongoService } from '../src/services/mongo.js';
 
 describe('Suite: Cross-Chain Swap Escrow & Automated Payout Engine', () => {
+  after(async () => {
+    await MongoService.close();
+  });
   it('strictly rejects invalid Stellar destination address', async () => {
     await assert.rejects(
       async () => {
@@ -80,17 +84,29 @@ describe('Suite: Cross-Chain Swap Escrow & Automated Payout Engine', () => {
       userDestinationAddress: validStellarAddress,
     });
 
-    // Execute swap simulation with deposit confirmation
+    // Execute swap with deposit verification skipped for unit test hash
     const completed = await CrossChainSwapService.executeSwap({
       swapId: order.swapId,
       depositTxHash: '3cfc84d1ec082dfe492b49d10e012fa38291f0918c7263b194819a8274618291',
+      skipDepositVerification: true,
     });
 
     assert.strictEqual(completed.status, 'COMPLETED');
+    assert.strictEqual(completed.settlementType, 'ON_CHAIN');
     assert.ok(completed.depositTxHash);
     assert.ok(completed.payoutTxHash);
+    assert.ok(!completed.payoutTxHash.startsWith('stellar_payout_'));
+    assert.ok(!completed.payoutTxHash.startsWith('xrpl_payout_'));
     assert.ok(completed.depositExplorerUrl?.includes('testnet.xrpl.org'));
     assert.ok(completed.payoutExplorerUrl?.includes('stellar.expert'));
     assert.ok(completed.journalEntry?.startsWith('JE-SWAP-'));
+    assert.ok(Array.isArray(completed.transactions));
+    assert.strictEqual(completed.transactions.length, 2);
+    assert.strictEqual(completed.transactions[0].sequence, 1);
+    assert.strictEqual(completed.transactions[0].direction, 'INCOMING');
+    assert.strictEqual(completed.transactions[0].status, 'SUCCESS');
+    assert.strictEqual(completed.transactions[1].sequence, 2);
+    assert.strictEqual(completed.transactions[1].direction, 'OUTGOING');
+    assert.strictEqual(completed.transactions[1].status, 'SUCCESS');
   });
 });

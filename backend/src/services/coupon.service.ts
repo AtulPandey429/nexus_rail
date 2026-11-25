@@ -116,14 +116,29 @@ export class CouponService {
   }
 
   /**
-   * Computes estimated 2% $NXL cashback for a given order total in USD cents
+   * Resolves the active $NXL cashback percentage from TreasuryService config (fallback to 2%).
+   */
+  private static async resolveCashbackPercent(): Promise<number> {
+    try {
+      const { TreasuryService } = await import('./treasury.service.js');
+      const cfg = await TreasuryService.getConfig();
+      if (typeof cfg?.cashback_pct === 'number' && cfg.cashback_pct >= 0 && cfg.cashback_pct <= 10) {
+        return cfg.cashback_pct;
+      }
+    } catch {}
+    return DEFAULT_CASHBACK_PERCENT;
+  }
+
+  /**
+   * Computes estimated $NXL cashback for a given order total in USD cents
    */
   static async estimateCashback(finalTotalCents: number): Promise<{
     cashbackUsdCents: number;
     cashbackNxl: number;
     spotPriceCents: number;
   }> {
-    const cashbackUsdCents = Math.max(0, Math.round((finalTotalCents * DEFAULT_CASHBACK_PERCENT) / 100));
+    const cashbackPct = await this.resolveCashbackPercent();
+    const cashbackUsdCents = Math.max(0, Math.round((finalTotalCents * cashbackPct) / 100));
     let spotPriceCents = 100;
     try {
       const pool = await NrTokenService.getPoolStats();

@@ -1,11 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeftRight,
   ExternalLink,
   KeyRound,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
 } from 'lucide-react';
 import {
@@ -13,14 +15,21 @@ import {
   Button,
   Card,
   CopyValue,
+  EmptyState,
+  Feedback,
   MetricRow,
   ProgressBar,
   SectionHeader,
   Skeleton,
+  Table,
+  TableWrap,
+  Td,
+  Th,
   cn,
 } from '@/components/admin/AdminUI';
 import { AssetAvatar, MiniStat } from '@/components/admin/AdminBits';
 import {
+  formatDateTime,
   formatNumber,
   truncateMiddle,
   type AdminModel,
@@ -67,6 +76,79 @@ export function VaultsTab({ model }: { model: AdminModel }) {
   const handleSync = () => {
     void loadDualRailStatus();
     void loadVaultBalances();
+    void loadReconciliation(true);
+    void loadBridgeOperations();
+  };
+
+  const [reconciliation, setReconciliation] = useState<any | null>(null);
+  const [loadingRecon, setLoadingRecon] = useState(false);
+  const [bridgeData, setBridgeData] = useState<{ operations: any[]; summary: any } | null>(null);
+  const [loadingBridgeOps, setLoadingBridgeOps] = useState(false);
+  const [bridgeActionBusyId, setBridgeActionBusyId] = useState<string | null>(null);
+  const [bridgeActionFeedback, setBridgeActionFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+
+  const loadReconciliation = async (refresh = false) => {
+    setLoadingRecon(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+      const res = await fetch(`/api/v1/admin/tokenomics/reconciliation${refresh ? '?refresh=true' : ''}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: 'no-store',
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) setReconciliation(json.data);
+    } catch {
+      // keep silent
+    } finally {
+      setLoadingRecon(false);
+    }
+  };
+
+  const loadBridgeOperations = async () => {
+    setLoadingBridgeOps(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+      const res = await fetch('/api/v1/admin/bridge/operations?limit=25', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: 'no-store',
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) setBridgeData(json.data);
+    } catch {
+      // keep silent
+    } finally {
+      setLoadingBridgeOps(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadReconciliation(false);
+    void loadBridgeOperations();
+  }, []);
+
+  const handleAdminBridgeAction = async (swapId: string, action: 'retry' | 'refund') => {
+    setBridgeActionBusyId(`${swapId}:${action}`);
+    setBridgeActionFeedback(null);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+      const res = await fetch(`/api/v1/admin/bridge/${encodeURIComponent(swapId)}/${action}`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json?.error || `Bridge ${action} failed`);
+      }
+      setBridgeActionFeedback({
+        tone: 'success',
+        message: `Bridge ${swapId} ${action === 'retry' ? 'retried' : 'refunded'} (${json.data?.status || json.data?.mode || 'OK'}).`,
+      });
+      await Promise.all([loadBridgeOperations(), loadReconciliation(true)]);
+    } catch (err: any) {
+      setBridgeActionFeedback({ tone: 'error', message: err?.message || `Bridge ${action} failed` });
+    } finally {
+      setBridgeActionBusyId(null);
+    }
   };
 
   return (
@@ -250,7 +332,7 @@ export function VaultsTab({ model }: { model: AdminModel }) {
         <div className="mt-4 flex flex-col gap-3 rounded-xl border border-admin-border bg-[#0A0E15] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[11px] leading-relaxed text-admin-muted">
             <ArrowLeftRight className="mr-1.5 inline h-3.5 w-3.5 text-admin-gold" aria-hidden="true" />
-            Both rails share a single NXL supply cap. Transfers between ledgers are reconciled after each settlement.
+            Both rails share a unified 2,000,000 NXL global cap. Transfers between ledgers are reconciled continuously.
           </p>
           {dualRailSummary?.stellar?.explorerUrl && (
             <a
@@ -264,6 +346,224 @@ export function VaultsTab({ model }: { model: AdminModel }) {
             </a>
           )}
         </div>
+      </Card>
+
+      {/* 360-Degree Live Tokenomics Supply Reconciliation Panel */}
+      <Card className="p-5 sm:p-6">
+        <SectionHeader
+          eyebrow="Phase 2–3 Audit"
+          title="360° $NXL Supply Reconciliation & Reserve Backing"
+          description="Live cross-chain verification comparing Stellar SAC total, NexusVault metrics, XRPL gateway balances, and internal custody liability."
+          action={
+            <div className="flex items-center gap-2">
+              <Badge
+                tone={
+                  reconciliation?.status === 'RECONCILED'
+                    ? 'success'
+                    : reconciliation?.status === 'DRIFT_DETECTED'
+                    ? 'danger'
+                    : 'warning'
+                }
+                dot
+              >
+                {reconciliation?.status || 'Loading…'}
+              </Badge>
+              <Button variant="secondary" size="sm" icon={RefreshCw} loading={loadingRecon} onClick={() => loadReconciliation(true)}>
+                Reconcile Live
+              </Button>
+            </div>
+          }
+        />
+
+        {reconciliation && (
+          <>
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              <MiniStat
+                label="Canonical / Effective Cap"
+                value={`${formatNumber(reconciliation.supplyModel?.canonicalMaxSupplyNxl ?? 2_000_000)} / ${formatNumber(reconciliation.supplyModel?.effectiveSupplyCapNxl ?? 2_000_000)} NXL`}
+                hint={`Remaining mintable: ${formatNumber(reconciliation.supplyModel?.remainingMintableNxl ?? 0)} NXL`}
+                tone="text-admin-gold-soft"
+              />
+              <MiniStat
+                label="Stellar SAC vs Vault Delta"
+                value={`${formatNumber(reconciliation.stellar?.onChainTotalSupplyNxl ?? 0)} NXL`}
+                hint={
+                  reconciliation.stellar?.isExactStroopMatch
+                    ? 'Exact stroop match (0 delta)'
+                    : `Drift: ${reconciliation.stellar?.vaultHorizonDeltaNxl} NXL`
+                }
+                tone={reconciliation.stellar?.isExactStroopMatch ? 'text-emerald-300' : 'text-rose-300'}
+              />
+              <MiniStat
+                label="External User Circulating"
+                value={`${formatNumber(reconciliation.crossChainTotals?.combinedExternalUserCirculatingNxl ?? 0, 4)} NXL`}
+                hint={`Stellar: ${formatNumber(reconciliation.stellar?.userExternalCirculatingNxl ?? 0, 4)} · XRPL: ${formatNumber(reconciliation.xrpl?.userExternalCirculatingNxl ?? 0, 4)}`}
+                tone="text-sky-300"
+              />
+              <MiniStat
+                label="Internal Custody Backing"
+                value={reconciliation.internalLedger?.isFullyBacked ? '100% Backed' : 'Underbacked'}
+                hint={`Liability: ${formatNumber(reconciliation.internalLedger?.totalInternalLiabilityNxl ?? 0, 2)} NXL vs Reserve ${formatNumber(reconciliation.internalLedger?.protocolOnChainReserveNxl ?? 0, 0)} NXL`}
+                tone={reconciliation.internalLedger?.isFullyBacked ? 'text-emerald-300' : 'text-rose-300'}
+              />
+            </div>
+
+            {Array.isArray(reconciliation.anomalies) && reconciliation.anomalies.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {reconciliation.anomalies.map((a: any, idx: number) => (
+                  <div
+                    key={`${a.code}-${idx}`}
+                    className="rounded-xl border border-amber-400/20 bg-amber-500/[0.05] px-3.5 py-2.5 flex items-start justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="h-4 w-4 text-amber-300 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-amber-200">{a.code} · {a.message}</p>
+                        <p className="text-[11px] text-admin-muted mt-0.5">{a.recommendation}</p>
+                      </div>
+                    </div>
+                    <Badge tone={a.severity === 'CRITICAL' || a.severity === 'HIGH' ? 'danger' : 'warning'}>
+                      {a.severity}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+
+      {/* Durable Cross-Chain Bridge Relayer Queue Panel */}
+      <Card className="p-5 sm:p-6">
+        <SectionHeader
+          eyebrow="Phase 4 Relayer"
+          title="Durable Cross-Chain Bridge Queue (Stellar ↔ XRPL)"
+          description="Monitor Escrow-First locks, 1:1 $NXL burn-and-mint bridges, AWAITING_TRUSTLINE claims, and relayer retry/refund controls."
+          action={
+            <div className="flex items-center gap-2">
+              {bridgeData?.summary && (
+                <Badge tone={bridgeData.summary.retrying > 0 || bridgeData.summary.failed > 0 ? 'warning' : 'success'}>
+                  {bridgeData.summary.completed}/{bridgeData.summary.total} settled · {bridgeData.summary.retrying} retrying · {bridgeData.summary.refundable} refundable
+                </Badge>
+              )}
+              <Button variant="secondary" size="sm" icon={RefreshCw} loading={loadingBridgeOps} onClick={loadBridgeOperations}>
+                Refresh Queue
+              </Button>
+            </div>
+          }
+        />
+
+        {bridgeActionFeedback && (
+          <div className="mt-4">
+            <Feedback tone={bridgeActionFeedback.tone}>{bridgeActionFeedback.message}</Feedback>
+          </div>
+        )}
+
+        <TableWrap className="mt-5">
+          <Table minWidth={920}>
+            <thead>
+              <tr>
+                <Th>Updated</Th>
+                <Th>Swap ID</Th>
+                <Th>Route / Mechanism</Th>
+                <Th align="right">Amount (In → Out)</Th>
+                <Th>Status</Th>
+                <Th>Proofs</Th>
+                <Th align="right">Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {bridgeData?.operations && bridgeData.operations.length > 0 ? (
+                bridgeData.operations.map((op: any) => {
+                  const canRetry = ['SOURCE_VERIFIED', 'DEST_VERIFIED', 'RETRY_SCHEDULED', 'AWAITING_TRUSTLINE', 'FAILED'].includes(op.status);
+                  const canRefund = op.mechanism === 'SOROBAN_ESCROW' && !op.dest_tx_hash && op.status !== 'COMPLETED' && op.status !== 'REFUNDED';
+                  return (
+                    <tr key={op.id || op.swap_id} className="hover:bg-white/[0.022]">
+                      <Td><span className="text-[11px] text-admin-muted">{formatDateTime(op.updated_at || op.created_at)}</span></Td>
+                      <Td>
+                        <CopyValue value={op.swap_id} display={truncateMiddle(op.swap_id, 10, 6)} label="Copy bridge swap ID" />
+                      </Td>
+                      <Td>
+                        <span className="text-xs font-medium text-white">{op.direction}</span>
+                        <span className="block text-[11px] text-admin-faint">{op.mechanism}</span>
+                      </Td>
+                      <Td align="right">
+                        <span className="font-admin-mono text-xs text-slate-200">
+                          {op.from_amount} {op.from_asset} → {op.to_amount} {op.to_asset}
+                        </span>
+                      </Td>
+                      <Td>
+                        <Badge
+                          tone={
+                            op.status === 'COMPLETED' || op.status === 'REFUNDED'
+                              ? 'success'
+                              : op.status === 'FAILED'
+                              ? 'danger'
+                              : 'warning'
+                          }
+                          dot
+                        >
+                          {op.status} {op.retry_count > 0 ? `(r${op.retry_count})` : ''}
+                        </Badge>
+                      </Td>
+                      <Td>
+                        <div className="flex flex-wrap gap-2 text-[11px]">
+                          {op.source_explorer_url && (
+                            <a href={op.source_explorer_url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">In</a>
+                          )}
+                          {op.dest_explorer_url && (
+                            <a href={op.dest_explorer_url} target="_blank" rel="noopener noreferrer" className="text-emerald-300 hover:underline">Out</a>
+                          )}
+                          {op.escrow_release_explorer_url && (
+                            <a href={op.escrow_release_explorer_url} target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">Release</a>
+                          )}
+                          {op.escrow_refund_explorer_url && (
+                            <a href={op.escrow_refund_explorer_url} target="_blank" rel="noopener noreferrer" className="text-rose-300 hover:underline">Refund</a>
+                          )}
+                        </div>
+                      </Td>
+                      <Td align="right">
+                        <div className="inline-flex items-center gap-1.5">
+                          {canRetry && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={RefreshCw}
+                              loading={bridgeActionBusyId === `${op.swap_id}:retry`}
+                              onClick={() => handleAdminBridgeAction(op.swap_id, 'retry')}
+                            >
+                              Retry
+                            </Button>
+                          )}
+                          {canRefund && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={RotateCcw}
+                              loading={bridgeActionBusyId === `${op.swap_id}:refund`}
+                              onClick={() => handleAdminBridgeAction(op.swap_id, 'refund')}
+                            >
+                              Refund
+                            </Button>
+                          )}
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState
+                      title="No bridge operations recorded yet"
+                      description="Soroban Escrow locks, burn-for-bridge $NXL transfers, and XRPL->Stellar bridges will appear here automatically."
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </Table>
+        </TableWrap>
       </Card>
     </div>
   );

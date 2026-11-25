@@ -290,11 +290,11 @@ const FLOW_FILTERS: Array<{ id: FlowMode; label: string }> = [
 ];
 
 const FLOW_CAPTIONS: Record<FlowMode, string> = {
-  all: 'Every transaction moves through audited Stellar Soroban contracts: NexusVault (fee split + mint/burn), $NXL SAC (capped supply ledger), and NexusSwap (AMM + timed bridge escrow).',
-  checkout: 'User signs 1 Freighter XDR → NexusVault::settle_order splits the order fee between Treasury and the Buyback Pool, then mints $NXL cashback.',
-  swap: 'User swaps XLM ↔ $NXL directly on NexusSwap (x·y=k) with a slippage guard. The AMM fee is split between Treasury and the pool, and output returns directly to User.',
-  bridge: 'XLM locks in NexusSwap Escrow (self-refund if it expires) or $NXL burns permanently via NexusVault::burn_for_bridge before XRPL settles XRP.',
-  supply: 'NexusVault is the on-chain Admin of $NXL SAC, enforcing the hard supply cap on mints and permanently burning supply on buyback-and-burn.',
+  all: 'Verified cross-chain tokenomics: NexusVault v2.0 (2M global 1:1 cap + buyback burn), $NXL SAC + XRPL Issuer (1:1 cashback & bridge), and NexusSwap v2.0 (AMM + 15m Escrow-First bridge).',
+  checkout: 'User signs 1 XDR → NexusVault::settle_order splits protocol fees to Treasury & Isolated Buyback Reserve, then mints 2% $NXL 1:1 on user wallet (Stellar SAC or XRPL Issuer).',
+  swap: 'User swaps XLM ↔ $NXL directly on NexusSwap (x·y=k) with slippage guard. Buyback Reserve converts accumulated XLM into $NXL here and executes permanent SAC burn_nxl.',
+  bridge: 'Escrow-First (XLM locks 15m on NexusSwap with self-refund) or 1:1 Burn-and-Mint ($NXL burns on NexusVault → mints on XRPL under unified 2M global cap).',
+  supply: 'GlobalSupplyCoordinator enforces the unified 2,000,000 NXL cap across Stellar SAC + XRPL Issuer; Buyback burns permanently reduce mintable cap headroom.',
 };
 
 const MOBILE_STEPS: Record<FlowMode, Array<{ from: string; badge: string; badgeColor: string; to: string; note: string }>> = {
@@ -929,7 +929,7 @@ export function ProtocolAssetFlowDiagram() {
                     </div>
                     <div className="mt-1">
                       <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                        SAC · CAPPED SUPPLY
+                        SAC · 2M GLOBAL CAP (1:1)
                       </span>
                     </div>
                   </div>
@@ -1070,7 +1070,7 @@ export function ProtocolAssetFlowDiagram() {
                 <span className="text-xs font-bold text-white">XRPL Wallet</span>
               </div>
               <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/25">
-                XRP · TIMED LOCK
+                XRP / $NXL · 15M ESCROW
               </span>
             </div>
           </div>

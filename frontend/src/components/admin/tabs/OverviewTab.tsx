@@ -432,6 +432,28 @@ export function OverviewTab({ model }: { model: AdminModel }) {
           {lastSyncedAt ? `Telemetry synced at ${lastSyncedAt.toLocaleTimeString()}.` : 'Telemetry awaiting first sync.'}
         </p>
       </Card>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-admin-border bg-[#0A0E15] px-5 py-4">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="text-xs font-semibold text-white">
+              $NXL Canonical Tokenomics Cap: 2,000,000 NXL (1:1 Stellar + XRPL)
+            </p>
+            <p className="text-[11px] text-admin-muted mt-0.5">
+              Inspect 360° supply reconciliation &amp; bridge relayer queue in Vaults, or execute real SAC buyback-and-burn in Treasury.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setActiveTab('treasury')}>
+            Buyback &amp; Treasury <ArrowRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setActiveTab('vaults')}>
+            Reconciliation &amp; Bridge <ArrowRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
