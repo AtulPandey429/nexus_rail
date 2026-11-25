@@ -358,6 +358,8 @@ export interface MongoPlatformSettingsDoc {
     xlmSacContractId: string;
     explorerBase: string;
     explorerTxBase: string;
+    explorerAccountBase: string;
+    explorerContractBase: string;
   };
   xrpl: {
     wss: string;
@@ -369,6 +371,7 @@ export interface MongoPlatformSettingsDoc {
     nxlAmmAccount: string;
     explorerBase: string;
     explorerTxBase: string;
+    explorerAccountBase: string;
   };
   updated_at: string;
   updated_by?: string;

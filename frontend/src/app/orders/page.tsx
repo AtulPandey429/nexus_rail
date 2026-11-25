@@ -16,7 +16,7 @@ import {
   Search,
 } from 'lucide-react';
 import { fetchOrders } from '@/lib/shop';
-import { TESTNET_CONFIG } from '@/utils/constants';
+import { explorerTxUrl, usePlatformConfig } from '@/lib/platformConfig';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -39,19 +39,10 @@ function matchesRailFilter(rail: string, filter: RailFilter) {
   return !/STELLAR|XLM|USDC|XRPL|XRP|RLUSD/.test(value);
 }
 
-function explorerUrlForRail(rail: string, txHash?: string) {
-  if (!txHash) return '';
-  const value = rail.toUpperCase();
-  const xrplBase = process.env.NEXT_PUBLIC_XRPL_EXPLORER_URL || TESTNET_CONFIG.xrpl.explorerTxBase;
-  const stellarBase = process.env.NEXT_PUBLIC_STELLAR_EXPLORER_URL || TESTNET_CONFIG.stellar.explorerTxBase;
-  if (/XRPL|XRP|RLUSD/.test(value)) return `${xrplBase.replace(/\/$/, '')}/${txHash}`;
-  if (/STELLAR|XLM|USDC/.test(value)) return `${stellarBase.replace(/\/$/, '')}/${txHash}`;
-  return '';
-}
-
 function OrdersListContent() {
   const searchParams = useSearchParams();
   const highlightOrderId = searchParams.get('orderId');
+  const { config: platformConfig } = usePlatformConfig();
 
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -263,7 +254,7 @@ function OrdersListContent() {
             const items = Array.isArray(order.items) ? order.items : [];
 
             const txHash = order.txHash || order.tx_hash || '';
-            const explorerUrl = explorerUrlForRail(rail, txHash);
+            const explorerUrl = explorerTxUrl(platformConfig, rail, txHash);
             const statusTone = isSettled
               ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
               : status === 'PENDING' || status === 'UNDERPAID'

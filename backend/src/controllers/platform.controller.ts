@@ -68,8 +68,11 @@ export class PlatformController {
           explorers: {
             stellarTx: pubConfig.stellar.explorerTxBase,
             stellarBase: pubConfig.stellar.explorerBase,
+            stellarAccount: pubConfig.stellar.explorerAccountBase,
+            stellarContract: pubConfig.stellar.explorerContractBase,
             xrplTx: pubConfig.xrpl.explorerTxBase,
             xrplBase: pubConfig.xrpl.explorerBase,
+            xrplAccount: pubConfig.xrpl.explorerAccountBase,
           },
           updatedAt: pubConfig.updatedAt,
         },

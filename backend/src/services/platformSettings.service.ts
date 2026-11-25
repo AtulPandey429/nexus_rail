@@ -33,6 +33,8 @@ export const DEFAULT_PLATFORM_SETTINGS: Omit<MongoPlatformSettingsDoc, '_id'> = 
     xlmSacContractId: STELLAR_TESTNET.xlmSacContractId,
     explorerBase: STELLAR_TESTNET.explorerBase,
     explorerTxBase: STELLAR_TESTNET.explorerTxBase,
+    explorerAccountBase: STELLAR_TESTNET.explorerAccountBase,
+    explorerContractBase: STELLAR_TESTNET.explorerContractBase,
   },
   xrpl: {
     wss: XRPL_TESTNET.wss,
@@ -44,6 +46,7 @@ export const DEFAULT_PLATFORM_SETTINGS: Omit<MongoPlatformSettingsDoc, '_id'> = 
     nxlAmmAccount: XRPL_TESTNET.nxlAmmAccount,
     explorerBase: XRPL_TESTNET.explorerBase,
     explorerTxBase: XRPL_TESTNET.explorerTxBase,
+    explorerAccountBase: XRPL_TESTNET.explorerAccountBase,
   },
   updated_at: new Date().toISOString(),
 };
@@ -220,6 +223,8 @@ export class PlatformSettingsService {
         xlmSacContractId: settings.stellar.xlmSacContractId,
         explorerBase: settings.stellar.explorerBase,
         explorerTxBase: settings.stellar.explorerTxBase,
+        explorerAccountBase: settings.stellar.explorerAccountBase,
+        explorerContractBase: settings.stellar.explorerContractBase,
       },
       xrpl: {
         network: settings.network_mode,
@@ -232,6 +237,7 @@ export class PlatformSettingsService {
         nxlAmmAccount: settings.xrpl.nxlAmmAccount,
         explorerBase: settings.xrpl.explorerBase,
         explorerTxBase: settings.xrpl.explorerTxBase,
+        explorerAccountBase: settings.xrpl.explorerAccountBase,
       },
       updatedAt: settings.updated_at,
     };

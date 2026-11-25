@@ -26,8 +26,14 @@ import {
   type AdminModel,
 } from '@/components/admin/adminModel';
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
+import { usePlatformConfig } from '@/lib/platformConfig';
 
 export function VaultsTab({ model }: { model: AdminModel }) {
+  const { config: platformConfig } = usePlatformConfig();
+  const stellarVaultAddress = platformConfig?.vaults?.stellar || PLATFORM_STELLAR_VAULT;
+  const xrplVaultAddress = platformConfig?.vaults?.xrpl || PLATFORM_XRPL_VAULT;
+  const stellarAccountBase = platformConfig?.explorers?.stellarAccount || '';
+  const xrplAccountBase = platformConfig?.explorers?.xrplAccount || '';
   const {
     dualRailSummary,
     dualRailLoading,
@@ -74,8 +80,8 @@ export function VaultsTab({ model }: { model: AdminModel }) {
           balance={stellarBalanceText}
           reachable={Boolean(stellarVault)}
           loading={vaultBalancesLoading}
-          address={PLATFORM_STELLAR_VAULT || 'Not configured'}
-          explorerUrl={PLATFORM_STELLAR_VAULT ? `https://stellar.expert/explorer/testnet/account/${PLATFORM_STELLAR_VAULT}` : ''}
+          address={stellarVaultAddress || 'Not configured'}
+          explorerUrl={stellarVaultAddress && stellarAccountBase ? `${stellarAccountBase}${stellarVaultAddress}` : ''}
           explorerLabel="Stellar Expert"
           tone="sky"
         />
@@ -87,8 +93,8 @@ export function VaultsTab({ model }: { model: AdminModel }) {
           balance={xrplBalanceText}
           reachable={Boolean(xrplVault)}
           loading={vaultBalancesLoading}
-          address={PLATFORM_XRPL_VAULT || 'Not configured'}
-          explorerUrl={PLATFORM_XRPL_VAULT ? `https://testnet.xrpl.org/accounts/${PLATFORM_XRPL_VAULT}` : ''}
+          address={xrplVaultAddress || 'Not configured'}
+          explorerUrl={xrplVaultAddress && xrplAccountBase ? `${xrplAccountBase}${xrplVaultAddress}` : ''}
           explorerLabel="XRPL explorer"
           tone="violet"
         />

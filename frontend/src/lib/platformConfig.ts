@@ -54,9 +54,11 @@ export interface PlatformConfig {
   };
   explorers: {
     stellarTx: string;
+    stellarBase: string;
     stellarAccount: string;
     stellarContract: string;
     xrplTx: string;
+    xrplBase: string;
     xrplAccount: string;
   };
 }
@@ -128,11 +130,12 @@ export function explorerTxUrl(
 ): string {
   if (!config || !txHash) return '';
   const value = (rail || '').toUpperCase();
+  const join = (base: string | undefined) => (base ? `${base.replace(/\/$/, '')}/${txHash}` : '');
   if (value.includes('XRPL') || value.includes('XRP') || value.includes('RLUSD')) {
-    return `${config.explorers.xrplTx}${txHash}`;
+    return join(config.explorers.xrplTx);
   }
   if (value.includes('STELLAR') || value.includes('XLM') || value.includes('USDC')) {
-    return `${config.explorers.stellarTx}${txHash}`;
+    return join(config.explorers.stellarTx);
   }
   return '';
 }

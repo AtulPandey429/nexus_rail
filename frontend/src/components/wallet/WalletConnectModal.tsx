@@ -36,6 +36,7 @@ import {
   buildSep0007Uri,
 } from '@/lib/wallets';
 import { PLATFORM_STELLAR_VAULT } from '@/lib/vault';
+import { usePlatformConfig } from '@/lib/platformConfig';
 import { notifySession, readSession } from '@/lib/shop';
 
 export interface WalletConnectedAccount {
@@ -69,6 +70,7 @@ export function WalletConnectModal({
   onConnected,
   initialNetwork,
 }: WalletConnectModalProps) {
+  const { config: platformConfig } = usePlatformConfig();
   // Network selection tabs: 'stellar' or 'xrpl'
   const [activeTab, setActiveTab] = useState<'stellar' | 'xrpl'>('stellar');
   const [searchQuery, setSearchQuery] = useState('');
@@ -340,7 +342,7 @@ export function WalletConnectModal({
         setConnectingWallet(null);
       } else if (wallet.id === 'lobstr') {
         // Stellar Mobile App: Generate SEP-0007 QR code & deep link
-        const destination = PLATFORM_STELLAR_VAULT;
+        const destination = platformConfig?.vaults?.stellar || PLATFORM_STELLAR_VAULT;
         if (!destination) {
           throw new Error('Stellar platform vault address is not configured.');
         }

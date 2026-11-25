@@ -38,8 +38,12 @@ import {
   type AdminModel,
 } from '@/components/admin/adminModel';
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
+import { usePlatformConfig } from '@/lib/platformConfig';
 
 export function OverviewTab({ model }: { model: AdminModel }) {
+  const { config: platformConfig } = usePlatformConfig();
+  const stellarVaultAddress = platformConfig?.vaults?.stellar || PLATFORM_STELLAR_VAULT;
+  const xrplVaultAddress = platformConfig?.vaults?.xrpl || PLATFORM_XRPL_VAULT;
   const {
     treasurySummary,
     analytics,
@@ -241,14 +245,14 @@ export function OverviewTab({ model }: { model: AdminModel }) {
               symbol="XLM"
               network={stellarVault?.network ? `Stellar ${stellarVault.network}` : 'Stellar testnet'}
               balance={stellarVaultLabel}
-              address={PLATFORM_STELLAR_VAULT}
+              address={stellarVaultAddress}
             />
             <VaultRow
               chain="XRPL"
               symbol="XRP"
               network={xrplVault?.network ? `XRPL ${xrplVault.network}` : 'XRPL testnet'}
               balance={xrplVaultLabel}
-              address={PLATFORM_XRPL_VAULT}
+              address={xrplVaultAddress}
             />
           </div>
           <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.05] px-3.5 py-2.5">

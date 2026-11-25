@@ -518,17 +518,20 @@ export async function authenticateWalletWithChallenge(params: {
 // Multi-Rail Trustline Operations for $NXL Dual-Rail Architecture (XRPL & Stellar)
 // ============================================================================
 
-import { TESTNET_CONFIG } from '../utils/constants';
-
+// Asset issuers come from build-time env. Runtime screens prefer the public
+// platform config endpoint. No literal issuer fallback: trustline actions fail
+// closed when the issuer is not configured.
 export const XRPL_NR_ISSUER_ADDRESS =
-  process.env.NEXT_PUBLIC_XRPL_NR_ISSUER_ADDRESS || TESTNET_CONFIG.xrpl.nxlIssuerAddress;
+  process.env.NEXT_PUBLIC_XRPL_NR_ISSUER_ADDRESS || '';
+
 export const XRPL_NR_CURRENCY =
-  process.env.NEXT_PUBLIC_XRPL_NR_CURRENCY_CODE || TESTNET_CONFIG.xrpl.nxlCurrencyCode;
+  process.env.NEXT_PUBLIC_XRPL_NR_CURRENCY_CODE || 'NXL';
 
 export const STELLAR_NR_ISSUER_PUBLIC =
-  process.env.NEXT_PUBLIC_STELLAR_NR_ISSUER_PUBLIC || TESTNET_CONFIG.stellar.nxlIssuerPublic;
+  process.env.NEXT_PUBLIC_STELLAR_NR_ISSUER_PUBLIC || '';
+
 export const STELLAR_NR_ASSET_CODE =
-  process.env.NEXT_PUBLIC_STELLAR_NR_ASSET_CODE || TESTNET_CONFIG.stellar.nxlAssetCode;
+  process.env.NEXT_PUBLIC_STELLAR_NR_ASSET_CODE || 'NXL';
 
 export interface XrplTrustlineStatus {
   hasTrustline: boolean;

@@ -25,7 +25,7 @@ import {
 } from '@/components/admin/AdminUI';
 import { CredentialsModal, type CredentialsData } from '@/components/admin/CredentialsModal';
 import { AdminBrandMark } from '@/components/admin/AdminBits';
-import { TESTNET_CONFIG } from '@/utils/constants';
+import { usePlatformConfig, explorerTxUrl } from '@/lib/platformConfig';
 import {
   ADMIN_TABS,
   formatDateTime,
@@ -145,20 +145,6 @@ function feedbackMessage(json: any, fallback: string) {
   return fallback;
 }
 
-function explorerUrlFor(rail: string | undefined, txHash: string | undefined) {
-  if (!txHash) return '';
-  const value = (rail || '').toUpperCase();
-  const xrplBase = process.env.NEXT_PUBLIC_XRPL_EXPLORER_URL || TESTNET_CONFIG.xrpl.explorerTxBase;
-  const stellarBase = process.env.NEXT_PUBLIC_STELLAR_EXPLORER_URL || TESTNET_CONFIG.stellar.explorerTxBase;
-  if (value.includes('XRPL') || value.includes('XRP') || value.includes('RLUSD')) {
-    return `${xrplBase.replace(/\/$/, '')}/${txHash}`;
-  }
-  if (value.includes('STELLAR') || value.includes('XLM') || value.includes('USDC')) {
-    return `${stellarBase.replace(/\/$/, '')}/${txHash}`;
-  }
-  return '';
-}
-
 export default function AdminConsolePage() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -256,6 +242,7 @@ export default function AdminConsolePage() {
   const [credentialsError, setCredentialsError] = useState('');
 
   const { rates, loading: ratesLoading, refreshRates } = useLiveExchangeRates();
+  const { config: platformConfig } = usePlatformConfig();
 
   /* ------------------------------ Session ------------------------------- */
   useEffect(() => {
@@ -339,7 +326,7 @@ export default function AdminConsolePage() {
             totalCents,
             status: row.status || 'UNKNOWN',
             txHash,
-            explorerUrl: explorerUrlFor(rail, txHash),
+            explorerUrl: explorerTxUrl(platformConfig, rail, txHash),
             createdAt: formatDateTime(row.createdAt || row.created_at),
           } satisfies LiveOrder;
         })

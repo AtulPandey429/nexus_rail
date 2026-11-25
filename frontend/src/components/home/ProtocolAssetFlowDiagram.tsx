@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import { fetchLiveSorobanSwapPool } from '@/lib/soroban';
 import { usePlatformConfig } from '@/lib/platformConfig';
-import { TESTNET_CONFIG } from '@/utils/constants';
 
 type FlowMode = 'all' | 'checkout' | 'swap' | 'bridge' | 'supply';
 type NodeKey = 'wallet' | 'vault' | 'token' | 'swap' | 'treasury' | 'buyback' | 'burn' | 'xrpl';
@@ -188,7 +187,7 @@ const WIRES: WireDef[] = [
     dir: 'v',
     speed: 0.0058,
   },
-  // 7. NexusVault -> Treasury (99% Principal + 0.5% Owner Fee)
+  // 7. NexusVault -> Treasury (order settlement split)
   {
     id: 'w-995',
     from: 'p-vault-rt',
@@ -197,7 +196,7 @@ const WIRES: WireDef[] = [
     flows: ['all', 'checkout'],
     color: '#fbbf24',
     markerKey: 'amber',
-    pill: '99.5%',
+    pill: 'Settlement',
     pillBg: '#221807',
     pillBorder: 'rgba(251,191,36,0.55)',
     pillText: '#fde68a',
@@ -206,7 +205,7 @@ const WIRES: WireDef[] = [
     dir: 'h',
     speed: 0.005,
   },
-  // 8. NexusVault -> Buyback Pool (0.5% Checkout Fee)
+  // 8. NexusVault -> Buyback Pool (protocol fee share)
   {
     id: 'w-05',
     from: 'p-vault-rb',
@@ -215,7 +214,7 @@ const WIRES: WireDef[] = [
     flows: ['all', 'checkout'],
     color: '#38bdf8',
     markerKey: 'sky',
-    pill: '0.5% Fee',
+    pill: 'Fee share',
     pillBg: '#081829',
     pillBorder: 'rgba(56,189,248,0.55)',
     pillText: '#7dd3fc',
@@ -225,7 +224,7 @@ const WIRES: WireDef[] = [
     dir: 'h',
     speed: 0.0049,
   },
-  // 9. NexusSwap -> Treasury (0.25% AMM Owner Fee)
+  // 9. NexusSwap -> Treasury (AMM owner fee)
   {
     id: 'w-025',
     from: 'p-swap-rt',
@@ -234,7 +233,7 @@ const WIRES: WireDef[] = [
     flows: ['all', 'swap'],
     color: '#fbbf24',
     markerKey: 'amber',
-    pill: '0.25% Fee',
+    pill: 'AMM fee',
     pillBg: '#221807',
     pillBorder: 'rgba(245,158,11,0.55)',
     pillText: '#fcd34d',
@@ -282,21 +281,6 @@ const WIRES: WireDef[] = [
   },
 ];
 
-const DEFAULT_CONTRACTS = {
-  vault: {
-    short: 'CBTDO…RJVB',
-    url: 'https://stellar.expert/explorer/testnet/contract/CBTDO4EKCQNUZRYSNK6LXB7AOQUNCY7FOV6AYDICSAH7CY6N57CQRJVB',
-  },
-  swap: {
-    short: 'CCJBR…QYAM',
-    url: 'https://stellar.expert/explorer/testnet/contract/CCJBRAJ5JUQPMIMGHDZKGRNXRZVJU5KBU7PMNJK235ORSXUSSHCPQYAM',
-  },
-  nxlSac: {
-    short: 'CDGPJ…7LPC',
-    url: 'https://stellar.expert/explorer/testnet/contract/CDGPJNW7T53P3L5X7LLVMIAPMVIYT7GNC3EVV3ZOGFVCMWQSW2HF7LPC',
-  },
-};
-
 const FLOW_FILTERS: Array<{ id: FlowMode; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'checkout', label: 'Checkout' },
@@ -306,38 +290,38 @@ const FLOW_FILTERS: Array<{ id: FlowMode; label: string }> = [
 ];
 
 const FLOW_CAPTIONS: Record<FlowMode, string> = {
-  all: 'Every transaction moves through audited Stellar Soroban contracts: NexusVault (50/50 split + mint/burn), $NXL SAC (2M cap ledger), and NexusSwap (AMM + 15m bridge escrow).',
-  checkout: 'User signs 1 Freighter XDR → NexusVault::settle_order splits 99.5% to Treasury + 0.5% to Buyback Pool and mints +2% $NXL cashback.',
-  swap: 'User swaps XLM ↔ $NXL directly on NexusSwap (x·y=k) with slippage guard — 0.25% goes to Treasury, 0.25% compounds in pool, output returns directly to User.',
-  bridge: 'XLM locks in NexusSwap Escrow (15m self-refund safe) or $NXL burns permanently via NexusVault::burn_for_bridge before XRPL settles XRP.',
-  supply: 'NexusVault is the on-chain Admin of $NXL SAC — enforcing the 2,000,000 $NXL hard cap on mints and permanently burning supply on buyback-and-burn.',
+  all: 'Every transaction moves through audited Stellar Soroban contracts: NexusVault (fee split + mint/burn), $NXL SAC (capped supply ledger), and NexusSwap (AMM + timed bridge escrow).',
+  checkout: 'User signs 1 Freighter XDR → NexusVault::settle_order splits the order fee between Treasury and the Buyback Pool, then mints $NXL cashback.',
+  swap: 'User swaps XLM ↔ $NXL directly on NexusSwap (x·y=k) with a slippage guard. The AMM fee is split between Treasury and the pool, and output returns directly to User.',
+  bridge: 'XLM locks in NexusSwap Escrow (self-refund if it expires) or $NXL burns permanently via NexusVault::burn_for_bridge before XRPL settles XRP.',
+  supply: 'NexusVault is the on-chain Admin of $NXL SAC, enforcing the hard supply cap on mints and permanently burning supply on buyback-and-burn.',
 };
 
 const MOBILE_STEPS: Record<FlowMode, Array<{ from: string; badge: string; badgeColor: string; to: string; note: string }>> = {
   all: [
-    { from: 'Freighter / Gem Wallet', badge: 'XLM / NXL', badgeColor: 'text-sky-300 border-sky-500/40 bg-sky-500/10', to: 'NexusVault v2.0', note: '99.5% Treasury · 0.5% Buyback · +2% $NXL' },
-    { from: 'NexusVault v2.0', badge: 'Mint / Burn', badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10', to: '$NXL SAC Ledger', note: 'SEP-41 Token · 2M Cap · Permanent Burn' },
-    { from: 'Freighter / Gem Wallet', badge: 'Swap / Escrow', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'NexusSwap v2.0', note: 'x·y=k (2K:2K Pool) · 0.25% Treasury Fee' },
-    { from: 'NexusSwap v2.0', badge: 'XRP Payout', badgeColor: 'text-indigo-300 border-indigo-500/40 bg-indigo-500/10', to: 'XRPL Wallet', note: 'Atomic XRPL payout · 15m self-refund lock' },
+    { from: 'Freighter / Gem Wallet', badge: 'XLM / NXL', badgeColor: 'text-sky-300 border-sky-500/40 bg-sky-500/10', to: 'NexusVault v2.0', note: 'Fee split to Treasury + Buyback · $NXL cashback' },
+    { from: 'NexusVault v2.0', badge: 'Mint / Burn', badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10', to: '$NXL SAC Ledger', note: 'SEP-41 token · capped supply · permanent burn' },
+    { from: 'Freighter / Gem Wallet', badge: 'Swap / Escrow', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'NexusSwap v2.0', note: 'x·y=k live pool · AMM fee to Treasury' },
+    { from: 'NexusSwap v2.0', badge: 'XRP Payout', badgeColor: 'text-indigo-300 border-indigo-500/40 bg-indigo-500/10', to: 'XRPL Wallet', note: 'Atomic XRPL payout · timed self-refund lock' },
   ],
   checkout: [
     { from: 'User Wallet (Freighter)', badge: 'XLM Pay', badgeColor: 'text-sky-300 border-sky-500/40 bg-sky-500/10', to: 'NexusVault::settle_order', note: 'Replay-locked order_ref + checked math' },
-    { from: 'NexusVault v2.0', badge: '99.5%', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'Owner Treasury', note: '99% Principal + 50% protocol fee' },
-    { from: 'NexusVault v2.0', badge: '0.5% Fee', badgeColor: 'text-sky-300 border-sky-500/40 bg-sky-500/10', to: 'Buyback Reserve Pool', note: '50% protocol fee deepens $NXL backing' },
-    { from: '$NXL SAC Ledger', badge: '+2% $NXL', badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10', to: 'User Wallet', note: 'Idempotent 2% loyalty cashback minted' },
+    { from: 'NexusVault v2.0', badge: 'Principal', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'Owner Treasury', note: 'Order principal plus treasury fee share' },
+    { from: 'NexusVault v2.0', badge: 'Fee share', badgeColor: 'text-sky-300 border-sky-500/40 bg-sky-500/10', to: 'Buyback Reserve Pool', note: 'Buyback share deepens $NXL backing' },
+    { from: '$NXL SAC Ledger', badge: 'Cashback', badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10', to: 'User Wallet', note: 'Idempotent loyalty cashback minted' },
   ],
   swap: [
     { from: 'User Wallet (Freighter)', badge: 'XLM / NXL', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'NexusSwap::swap_exact_in', note: 'Enforces min_amount_out & deadline' },
-    { from: 'NexusSwap AMM Pool', badge: '0.25% Fee', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'Owner Treasury', note: 'Other 0.25% stays in pool (grows k)' },
+    { from: 'NexusSwap AMM Pool', badge: 'AMM fee', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'Owner Treasury', note: 'Configured share routes to treasury' },
     { from: 'NexusSwap AMM Pool', badge: 'Swapped Out', badgeColor: 'text-cyan-300 border-cyan-500/40 bg-cyan-500/10', to: 'User Wallet', note: 'Instant on-chain delivery to Freighter' },
   ],
   bridge: [
-    { from: 'User Wallet (XLM)', badge: 'XLM Lock', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'NexusSwap Escrow', note: 'Locked 15m — user can self-refund if expired' },
+    { from: 'User Wallet (XLM)', badge: 'XLM Lock', badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10', to: 'NexusSwap Escrow', note: 'Timed lock · user can self-refund if expired' },
     { from: 'User Wallet ($NXL)', badge: '$NXL Burn', badgeColor: 'text-rose-300 border-rose-500/40 bg-rose-500/10', to: 'NexusVault → Burned', note: 'SEP-41 burn keeps dual-rail supply 1:1' },
     { from: 'Dual-Rail Relayer', badge: 'XRP Payout', badgeColor: 'text-indigo-300 border-indigo-500/40 bg-indigo-500/10', to: 'XRPL Wallet (r...)', note: 'XRPL tx hash releases Stellar escrow proof' },
   ],
   supply: [
-    { from: 'Admin / Relayer', badge: 'Mint ≤ 2M', badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10', to: 'NexusVault → $NXL SAC', note: 'Hard cap 2,000,000 $NXL enforced on-chain' },
+    { from: 'Admin / Relayer', badge: 'Mint ≤ cap', badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10', to: 'NexusVault → $NXL SAC', note: 'Hard supply cap enforced on-chain' },
     { from: 'Treasury / Holder', badge: 'BURN', badgeColor: 'text-rose-300 border-rose-500/40 bg-rose-500/10', to: '$NXL SAC → Burned', note: 'Permanently subtracted from circulating supply' },
   ],
 };
@@ -383,32 +367,25 @@ export function ProtocolAssetFlowDiagram() {
   const pulsesGroupRef = useRef<SVGGElement | null>(null);
 
   const { config } = usePlatformConfig();
-  const contractBase = config?.explorers?.stellarContract || 'https://stellar.expert/explorer/testnet/contract/';
-  const vaultId = config?.contracts?.nexusVault || TESTNET_CONFIG.stellar.nexusVaultContractId;
-  const swapId = config?.contracts?.nexusSwap || TESTNET_CONFIG.stellar.nexusSwapContractId;
-  const nxlSacId = config?.assets?.nxl?.stellarContractId || TESTNET_CONFIG.stellar.nxlContractId;
+  const contractBase = config?.explorers?.stellarContract || '';
+  const vaultId = config?.contracts?.nexusVault || '';
+  const swapId = config?.contracts?.nexusSwap || '';
+  const nxlSacId = config?.assets?.nxl?.stellarContractId || '';
 
-  const CONTRACTS = React.useMemo(() => ({
-    vault: {
-      short: vaultId ? `${vaultId.slice(0, 5)}…${vaultId.slice(-4)}` : DEFAULT_CONTRACTS.vault.short,
-      url: vaultId ? `${contractBase}${vaultId}` : DEFAULT_CONTRACTS.vault.url,
-    },
-    swap: {
-      short: swapId ? `${swapId.slice(0, 5)}…${swapId.slice(-4)}` : DEFAULT_CONTRACTS.swap.short,
-      url: swapId ? `${contractBase}${swapId}` : DEFAULT_CONTRACTS.swap.url,
-    },
-    nxlSac: {
-      short: nxlSacId ? `${nxlSacId.slice(0, 5)}…${nxlSacId.slice(-4)}` : DEFAULT_CONTRACTS.nxlSac.short,
-      url: nxlSacId ? `${contractBase}${nxlSacId}` : DEFAULT_CONTRACTS.nxlSac.url,
-    },
-  }), [contractBase, vaultId, swapId, nxlSacId]);
+  const CONTRACTS = React.useMemo(() => {
+    const build = (id: string) => ({
+      short: id ? `${id.slice(0, 5)}…${id.slice(-4)}` : 'Not configured',
+      url: id && contractBase ? `${contractBase.replace(/\/$/, '')}/${id}` : '',
+    });
+    return { vault: build(vaultId), swap: build(swapId), nxlSac: build(nxlSacId) };
+  }, [contractBase, vaultId, swapId, nxlSacId]);
 
   const [activeFlow, setActiveFlow] = useState<FlowMode>('all');
   const [hoveredNode, setHoveredNode] = useState<NodeKey | null>(null);
   const [playing, setPlaying] = useState(true);
   const [simulating, setSimulating] = useState(false);
   const [geometries, setGeometries] = useState<WireGeometry[]>([]);
-  const [poolStats, setPoolStats] = useState({ reserveXlm: 2000, reserveNxl: 2000, totalSwaps: 0 });
+  const [poolStats, setPoolStats] = useState({ reserveXlm: 0, reserveNxl: 0, totalSwaps: 0 });
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     x: number;
@@ -636,7 +613,9 @@ export function ProtocolAssetFlowDiagram() {
     setTooltip((prev) => ({ ...prev, visible: false }));
   };
 
-  const poolDisplay = `${Math.round(poolStats.reserveXlm).toLocaleString()} XLM / ${Math.round(poolStats.reserveNxl).toLocaleString()} $NXL`;
+  const poolDisplay = poolStats.reserveXlm > 0 || poolStats.reserveNxl > 0
+    ? `${Math.round(poolStats.reserveXlm).toLocaleString()} XLM / ${Math.round(poolStats.reserveNxl).toLocaleString()} $NXL`
+    : 'pool reserve unavailable';
 
   return (
     <div className="w-full rounded-2xl border border-slate-800/90 bg-[#090D18]/90 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.65)] overflow-hidden">
@@ -881,11 +860,11 @@ export function ProtocolAssetFlowDiagram() {
           <div className="flex flex-col justify-between h-full py-1">
             {/* Top: NexusVault v2.0 */}
             <a
-              href={CONTRACTS.vault.url}
+              href={CONTRACTS.vault.url || undefined}
               target="_blank"
               rel="noopener noreferrer"
               onMouseEnter={(e) =>
-                handleNodeEnter('vault', `NEXUSVAULT · ${CONTRACTS.vault.short}`, '99.5% Treasury · 0.5% Pool · Mint/Burn Cap', e)
+                handleNodeEnter('vault', `NEXUSVAULT · ${CONTRACTS.vault.short}`, 'Order fee split · Mint/Burn Cap', e)
               }
               onMouseMove={handleNodeMove}
               onMouseLeave={handleNodeLeave}
@@ -923,11 +902,11 @@ export function ProtocolAssetFlowDiagram() {
 
             {/* Middle: $NXL Ledger (Built-in SAC) */}
             <a
-              href={CONTRACTS.nxlSac.url}
+              href={CONTRACTS.nxlSac.url || undefined}
               target="_blank"
               rel="noopener noreferrer"
               onMouseEnter={(e) =>
-                handleNodeEnter('token', `$NXL SAC · ${CONTRACTS.nxlSac.short}`, 'SEP-41 Token Ledger · Hard Cap 2,000,000 $NXL', e)
+                handleNodeEnter('token', `$NXL SAC · ${CONTRACTS.nxlSac.short}`, 'SEP-41 Token Ledger · Hard Supply Cap', e)
               }
               onMouseMove={handleNodeMove}
               onMouseLeave={handleNodeLeave}
@@ -950,7 +929,7 @@ export function ProtocolAssetFlowDiagram() {
                     </div>
                     <div className="mt-1">
                       <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                        SAC · 2M CAP
+                        SAC · CAPPED SUPPLY
                       </span>
                     </div>
                   </div>
@@ -961,11 +940,11 @@ export function ProtocolAssetFlowDiagram() {
 
             {/* Bottom: NexusSwap v2.0 */}
             <a
-              href={CONTRACTS.swap.url}
+              href={CONTRACTS.swap.url || undefined}
               target="_blank"
               rel="noopener noreferrer"
               onMouseEnter={(e) =>
-                handleNodeEnter('swap', `NEXUSSWAP · ${CONTRACTS.swap.short}`, `x·y=k (${poolDisplay}) + 15m Escrow`, e)
+                handleNodeEnter('swap', `NEXUSSWAP · ${CONTRACTS.swap.short}`, `x·y=k (${poolDisplay}) + timed escrow`, e)
               }
               onMouseMove={handleNodeMove}
               onMouseLeave={handleNodeLeave}
@@ -989,7 +968,9 @@ export function ProtocolAssetFlowDiagram() {
                     </div>
                     <div className="mt-1">
                       <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                        AMM · {Math.round(poolStats.reserveXlm / 1000)}K:{Math.round(poolStats.reserveNxl / 1000)}K
+                        AMM · {poolStats.reserveXlm > 0 || poolStats.reserveNxl > 0
+                          ? `${Math.round(poolStats.reserveXlm / 1000)}K:${Math.round(poolStats.reserveNxl / 1000)}K`
+                          : 'LIVE POOL'}
                       </span>
                     </div>
                   </div>
@@ -1007,7 +988,7 @@ export function ProtocolAssetFlowDiagram() {
             {/* Dest 1: Treasury */}
             <div
               onMouseEnter={(e) =>
-                handleNodeEnter('treasury', 'OWNER TREASURY', '99.5% Order Split + 0.25% AMM Swap Fee', e)
+                handleNodeEnter('treasury', 'OWNER TREASURY', 'Order settlement split + AMM swap fee', e)
               }
               onMouseMove={handleNodeMove}
               onMouseLeave={handleNodeLeave}
@@ -1023,7 +1004,7 @@ export function ProtocolAssetFlowDiagram() {
                 <span className="text-xs font-bold text-white">Treasury</span>
               </div>
               <span className="text-[11px] font-mono font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
-                99.5% + 0.25%
+                SETTLEMENT + AMM
               </span>
             </div>
 
@@ -1074,7 +1055,7 @@ export function ProtocolAssetFlowDiagram() {
             {/* Dest 4: XRPL Wallet */}
             <div
               onMouseEnter={(e) =>
-                handleNodeEnter('xrpl', 'XRPL TESTNET LEDGER', 'Atomic XRP Settlement · 15m Self-Refund Escrow', e)
+                handleNodeEnter('xrpl', 'XRPL TESTNET LEDGER', 'Atomic XRP settlement · self-refund escrow', e)
               }
               onMouseMove={handleNodeMove}
               onMouseLeave={handleNodeLeave}
@@ -1089,7 +1070,7 @@ export function ProtocolAssetFlowDiagram() {
                 <span className="text-xs font-bold text-white">XRPL Wallet</span>
               </div>
               <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/25">
-                XRP · 15m Lock
+                XRP · TIMED LOCK
               </span>
             </div>
           </div>

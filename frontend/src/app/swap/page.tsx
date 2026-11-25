@@ -87,6 +87,7 @@ interface AmmQuoteOverlay {
 }
 
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
+import { usePlatformConfig } from '@/lib/platformConfig';
 import { executeSorobanSwapOrBridge, fetchLiveSorobanSwapPool } from '@/lib/soroban';
 
 export default function SwapPage() {
@@ -107,6 +108,13 @@ export default function SwapPage() {
 
   // Live Exchange Rates Hook with 30-minute caching
   const { xlmUsd, xrpUsd, refreshRates, fromCache, ttlMinutes, loading: ratesLoading } = useLiveExchangeRates();
+
+  // Public platform config is the source of truth for issuers, codes and vaults.
+  const { config: platformConfig } = usePlatformConfig();
+  const xrplNxlIssuer = platformConfig?.assets?.nxl?.xrplIssuer || XRPL_NR_ISSUER_ADDRESS;
+  const stellarNxlIssuer = platformConfig?.assets?.nxl?.stellarIssuer || STELLAR_NR_ISSUER_PUBLIC;
+  const stellarNxlCode = platformConfig?.assets?.nxl?.stellarCode || 'NXL';
+  const xrplNxlCurrency = platformConfig?.assets?.nxl?.xrplCurrency || 'NXL';
 
   // Quote Expiry Timer (countdown)
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(0);
@@ -464,15 +472,15 @@ export default function SwapPage() {
       let txHash = '';
       if (hasGem) {
         const res = await setGemWalletTrustline({
-          issuer: XRPL_NR_ISSUER_ADDRESS,
-          currency: 'NXL',
+          issuer: xrplNxlIssuer,
+          currency: xrplNxlCurrency,
           value: '1000000',
         });
         txHash = res.txHash;
       } else if (hasCrossmark) {
         const res = await setCrossmarkTrustline({
-          issuer: XRPL_NR_ISSUER_ADDRESS,
-          currency: 'NXL',
+          issuer: xrplNxlIssuer,
+          currency: xrplNxlCurrency,
           value: '1000000',
         });
         txHash = res.txHash;
@@ -590,7 +598,7 @@ export default function SwapPage() {
   };
 
   const handleOpenAlbedo = () => {
-    openAlbedoTrustline({ assetCode: 'NXL', issuer: STELLAR_NR_ISSUER_PUBLIC });
+    openAlbedoTrustline({ assetCode: stellarNxlCode, issuer: stellarNxlIssuer });
     setStellarActionMsg({
       type: 'success',
       text: 'Opened Albedo trustline window. Once confirmed in Albedo, click "Re-check Status" below.',
@@ -1631,7 +1639,7 @@ export default function SwapPage() {
                             <span className="text-[11px] text-[var(--muted)]">Account: {destinationAddress.slice(0, 6)}...{destinationAddress.slice(-4)}</span>
                           </div>
                           <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-                            XRPL consensus protocol strictly requires account <strong className="text-[var(--gold)]">{destinationAddress}</strong> to create a trustline to issuer <strong className="text-[var(--foreground)]">{XRPL_NR_ISSUER_ADDRESS.slice(0, 8)}...</strong> before receiving $NXL tokens.
+                            XRPL consensus protocol strictly requires account <strong className="text-[var(--gold)]">{destinationAddress}</strong> to create a trustline to issuer <strong className="text-[var(--foreground)]">{xrplNxlIssuer ? `${xrplNxlIssuer.slice(0, 8)}...` : 'the configured issuer'}</strong> before receiving $NXL tokens.
                           </p>
                           <div className="flex items-center gap-2 pt-0.5">
                             <button
@@ -1695,10 +1703,10 @@ export default function SwapPage() {
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                               <span>Stellar Trustline Required</span>
                             </span>
-                            <span className="text-[11px] text-[var(--muted)]">Issuer: {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}...</span>
+                            <span className="text-[11px] text-[var(--muted)]">Issuer: {stellarNxlIssuer ? `${stellarNxlIssuer.slice(0, 8)}...` : '—'}</span>
                           </div>
                           <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-                            Stellar protocol requires account ({destinationAddress.slice(0, 8)}...{destinationAddress.slice(-4)}) to add a Trustline to Issuer {STELLAR_NR_ISSUER_PUBLIC.slice(0, 8)}... for asset &quot;NXL&quot; before receiving tokens.
+                            Stellar protocol requires account ({destinationAddress.slice(0, 8)}...{destinationAddress.slice(-4)}) to add a Trustline to Issuer {stellarNxlIssuer ? `${stellarNxlIssuer.slice(0, 8)}...` : 'the configured issuer'} for asset &quot;{stellarNxlCode}&quot; before receiving tokens.
                           </p>
 
                           <div className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -1811,7 +1819,7 @@ export default function SwapPage() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>AMM Fee ({nrPool ? `${nrPool.swapFeePercent}%` : 'Pool fee'} · 50% to Pool Reserve)</span>
+                      <span>AMM Fee ({nrPool ? `${nrPool.swapFeePercent}%` : 'Pool fee'}{platformConfig ? ` · ${platformConfig.fees.nrBuybackSharePct}% to Pool Reserve` : ''})</span>
                       <span className="text-[var(--foreground)] font-medium">${ammQuote.feeUsd.toFixed(2)}</span>
                     </div>
                   </>
@@ -2056,7 +2064,7 @@ export default function SwapPage() {
                   <span className="text-[var(--muted)]">Estimated fee</span>
                   <span className="text-[var(--foreground)] font-medium">
                     {involvesNrOrUsd && ammQuote
-                      ? `$${ammQuote.feeUsd.toFixed(2)} (${nrPool?.swapFeePercent ?? 0.5}% pool fee)`
+                      ? `$${ammQuote.feeUsd.toFixed(2)} (${nrPool?.swapFeePercent ?? '—'}% pool fee)`
                       : fromToken === 'XLM' || fromToken === 'XRP'
                       ? 'Network fee (paid by your wallet)'
                       : 'No network fee'}
@@ -2064,11 +2072,11 @@ export default function SwapPage() {
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-[var(--muted)]">Stellar vault</span>
-                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_STELLAR_VAULT || 'Not configured'}</span>
+                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{platformConfig?.vaults?.stellar || PLATFORM_STELLAR_VAULT || 'Not configured'}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-[var(--muted)]">XRPL vault</span>
-                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{PLATFORM_XRPL_VAULT || 'Not configured'}</span>
+                  <span className="text-[var(--foreground)]/80 font-mono text-[11px] truncate max-w-[200px]">{platformConfig?.vaults?.xrpl || PLATFORM_XRPL_VAULT || 'Not configured'}</span>
                 </div>
               </div>
 
@@ -2388,7 +2396,7 @@ export default function SwapPage() {
                       <span>XRPL Trustline Required Before Deposit</span>
                     </div>
                     <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-                      Account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> does not have an active Trustline to Issuer <strong className="text-[var(--gold)]">{XRPL_NR_ISSUER_ADDRESS}</strong>. Enable trustline first to ensure your $NXL tokens are safely delivered to your wallet.
+                      Account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> does not have an active Trustline to Issuer <strong className="text-[var(--gold)]">{xrplNxlIssuer || '—'}</strong>. Enable trustline first to ensure your $NXL tokens are safely delivered to your wallet.
                     </p>
                     <div className="flex items-center gap-2">
                       <button
@@ -2424,7 +2432,7 @@ export default function SwapPage() {
                       <span>Stellar Trustline Required Before Deposit</span>
                     </div>
                     <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-                      Stellar account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> has not established a Trustline to Issuer <strong className="text-[var(--gold)]">{STELLAR_NR_ISSUER_PUBLIC}</strong> for asset code &quot;NXL&quot;. Enable trustline via Freighter or Albedo below before depositing.
+                      Stellar account <strong className="text-[var(--foreground)]">{destinationAddress}</strong> has not established a Trustline to Issuer <strong className="text-[var(--gold)]">{stellarNxlIssuer || '—'}</strong> for asset code &quot;{stellarNxlCode}&quot;. Enable trustline via Freighter or Albedo below before depositing.
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <button

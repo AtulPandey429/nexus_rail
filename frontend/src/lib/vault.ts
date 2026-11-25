@@ -1,20 +1,20 @@
-import { TESTNET_CONFIG } from '../utils/constants';
-
 /**
- * Platform Escrow & Liquidity Bridge Vault Configuration
+ * Platform escrow & liquidity bridge vault addresses.
  *
- * Defaults to verified constants from `src/utils/constants.ts` (or networks.ts).
- * Dynamic components should prefer `usePlatformConfig()` from `src/lib/platformConfig.ts`
- * which sources live data directly from `GET /api/v1/platform/config`.
+ * These are build-time overrides only. Runtime UI should prefer
+ * `usePlatformConfig()` from `src/lib/platformConfig.ts`, which reads
+ * `GET /api/v1/platform/config`.
+ *
+ * There is no literal address fallback: when a vault is not configured the
+ * caller must render an "unavailable" state instead of inventing an address.
  */
 
 export const PLATFORM_STELLAR_VAULT: string =
   process.env.NEXT_PUBLIC_PLATFORM_STELLAR_VAULT ||
   process.env.NEXT_PUBLIC_STELLAR_NR_DISTRIBUTOR_VAULT ||
-  TESTNET_CONFIG.stellar.merchantVault;
+  '';
 
 export const PLATFORM_XRPL_VAULT: string =
   process.env.NEXT_PUBLIC_PLATFORM_XRPL_VAULT ||
   process.env.NEXT_PUBLIC_XRPL_NR_DISTRIBUTOR_VAULT ||
-  TESTNET_CONFIG.xrpl.merchantVault;
-
+  '';

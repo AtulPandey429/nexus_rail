@@ -14,7 +14,7 @@ import {
 import QRCode from 'qrcode';
 import { CartLine, readSession } from '@/lib/shop';
 import { PLATFORM_STELLAR_VAULT, PLATFORM_XRPL_VAULT } from '@/lib/vault';
-import { TESTNET_CONFIG } from '@/utils/constants';
+import { usePlatformConfig } from '@/lib/platformConfig';
 
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'RAIL-ONE': '/products/rail-one.png',
@@ -37,40 +37,13 @@ const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'NR-TOKEN': '/products/rail-cables.png',
 };
 
-const PRODUCT_CATALOG_PRICES: Record<string, number> = {
-  'RAIL-ONE': 12900,
-  'RELAY-MAT': 3900,
-  'NEXUS-TEE': 3200,
-  'NODE-STAND': 5800,
-  'SIGNAL-CAP': 2800,
-  'RAIL-CABLES': 1900,
-  'BASKET-AI-ALPHA': 10366,
-  'BASKET-INFLATION-SHIELD': 12227,
-  'BASKET-DUAL-RAIL': 4494,
-  'NGOLD-1G': 12366,
-  'NSILVER-10G': 1522,
-  'NR-PACK-50': 5000,
-};
-
-const PRODUCT_CATALOG_DESCRIPTIONS: Record<string, string> = {
-  'RAIL-ONE': 'Graphite · Dual-Rail Processor',
-  'RELAY-MAT': 'Charcoal · 80 × 40 cm',
-  'NEXUS-TEE': 'Washed Black · Size M',
-  'NODE-STAND': 'Solid Anodized Aluminum Mount',
-  'SIGNAL-CAP': 'Water-Repellent Technical Cap',
-  'RAIL-CABLES': 'Braided High-Current Cables',
-  'BASKET-AI-ALPHA': 'All-in-one diversified combo pairing 0.40g Gold, 25 $NR AMM Tokens, 15 XRP, and 100 XLM priced live every 60s.',
-  'BASKET-INFLATION-SHIELD': 'Cross-asset store-of-value combo: 0.50g 24K Gold, 30 USDC reserve, and 20g Silver.',
-  'BASKET-DUAL-RAIL': 'Simultaneous XRPL + Stellar liquidity combo: 25 XRP and 150 XLM.',
-};
-
 function getItemPriceCents(item: any): number {
   if (typeof item.priceCents === 'number' && item.priceCents > 0) return item.priceCents;
   if (typeof item.unit_price_cents === 'number' && item.unit_price_cents > 0) return item.unit_price_cents;
   if (typeof item.unitPriceCents === 'number' && item.unitPriceCents > 0) return item.unitPriceCents;
   if (typeof item.price_cents === 'number' && item.price_cents > 0) return item.price_cents;
   if (typeof item.price === 'number' && item.price > 0) return Math.round(item.price * 100);
-  if (item.sku && PRODUCT_CATALOG_PRICES[item.sku]) return PRODUCT_CATALOG_PRICES[item.sku];
+  // Never invent a price from a SKU: an unknown line renders as unavailable.
   return 0;
 }
 
@@ -78,10 +51,7 @@ function getItemDescription(item: any): string {
   if (item.description && typeof item.description === 'string' && item.description.trim()) {
     return item.description;
   }
-  if (item.sku && PRODUCT_CATALOG_DESCRIPTIONS[item.sku]) {
-    return PRODUCT_CATALOG_DESCRIPTIONS[item.sku];
-  }
-  return 'Enterprise Web3 Hardware & Gear';
+  return '—';
 }
 
 function PlatformSignature({ className = 'w-44 h-12' }: { className?: string }) {
@@ -186,6 +156,7 @@ function ReceiptContent() {
   const searchParams = useSearchParams();
   const paramOrderId = searchParams.get('orderId');
   const paramTxHash = searchParams.get('txHash');
+  const { config } = usePlatformConfig();
 
   const orderId = paramOrderId || '';
   const [copied, setCopied] = useState(false);
@@ -321,7 +292,8 @@ function ReceiptContent() {
     // 4. Live Horizon On-Chain Consensus Verification (100% Genuine Ledger Truth)
     async function verifyOnChainStellar(hash: string) {
       if (!hash || hash.length !== 64 || hash.startsWith('8fa2b7') || hash.startsWith('xrpl_')) return;
-      const horizonUrl = (process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL || TESTNET_CONFIG.stellar.horizonUrl).replace(/\/$/, '');
+      const horizonUrl = (config?.networks?.stellarHorizon || process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL || '').replace(/\/$/, '');
+      if (!horizonUrl) return;
       try {
         const txRes = await fetch(`${horizonUrl}/transactions/${hash}`);
         if (txRes.ok) {
@@ -407,14 +379,12 @@ function ReceiptContent() {
       ? receiptData.amountCrypto
       : '—';
 
-  const activeVault =
-    receiptData.vaultAddress ||
-    (receiptData.rail === 'STELLAR'
-      ? PLATFORM_STELLAR_VAULT
-      : receiptData.rail === 'XRPL'
-      ? PLATFORM_XRPL_VAULT
-      : '') ||
-    '—';
+        const receiptVault = receiptData.rail === 'STELLAR'
+          ? config?.vaults?.stellar || PLATFORM_STELLAR_VAULT
+          : receiptData.rail === 'XRPL'
+          ? config?.vaults?.xrpl || PLATFORM_XRPL_VAULT
+          : '';
+        const activeVault = receiptData.vaultAddress || receiptVault || '—';
 
   return (
     <div className="receipt-outer min-h-screen bg-transparent text-[#E0D8C3] font-sans antialiased selection:bg-[#D4AF37]/30 selection:text-[#F8F7F2] py-6 sm:py-10 px-3 sm:px-6 print:py-0 print:px-0 print:min-h-0 print:bg-transparent">

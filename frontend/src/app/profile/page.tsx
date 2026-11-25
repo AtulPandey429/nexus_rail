@@ -34,7 +34,6 @@ import {
 } from 'lucide-react';
 import { readSession, clearSession, notifySession, onSessionChange, SessionUser } from '@/lib/shop';
 import { usePlatformConfig } from '@/lib/platformConfig';
-import { TESTNET_CONFIG } from '@/utils/constants';
 import { WalletConnectModal, WalletConnectedAccount } from '@/components/wallet/WalletConnectModal';
 import type { UserPortfolioResponse, HydratedHolding } from '@/types';
 
@@ -875,8 +874,8 @@ export default function ProfilePage() {
                   />
                   <p className="text-[11px] text-[var(--muted)]">
                     {withdrawChain === 'stellar'
-                      ? `Protocol 22 Asset Contract: ${config?.assets?.nxl?.stellarContractId || TESTNET_CONFIG.stellar.nxlContractId}`
-                      : `XRPL Issued Currency: ${config?.assets?.nxl?.xrplCurrency || TESTNET_CONFIG.xrpl.nxlCurrencyCode}`}
+                      ? `Protocol 22 Asset Contract: ${config?.assets?.nxl?.stellarContractId || 'Unavailable'}`
+                      : `XRPL Issued Currency: ${config?.assets?.nxl?.xrplCurrency || 'Unavailable'}`}
                   </p>
                 </div>
 
@@ -1430,15 +1429,19 @@ export default function ProfilePage() {
                   </p>
                   <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
                     <span>Compatible with Soroban &amp; SEP-0007</span>
-                    <a
-                      href={config?.explorers.stellarAccount ? `${config.explorers.stellarAccount}${resolvedStellar}` : `https://stellar.expert/explorer/testnet/account/${resolvedStellar}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-cyan-400 hover:underline flex items-center gap-1"
-                    >
-                      <span>Stellar Expert</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                    {config?.explorers?.stellarAccount ? (
+                      <a
+                        href={`${config.explorers.stellarAccount}${resolvedStellar}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-cyan-400 hover:underline flex items-center gap-1"
+                      >
+                        <span>Stellar Expert</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span>Explorer unavailable</span>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1520,15 +1523,19 @@ export default function ProfilePage() {
                   </p>
                   <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--muted)] font-mono border-t border-[var(--border)]/50">
                     <span>Compatible with XLS-30d AMM &amp; Escrow</span>
-                    <a
-                      href={config?.explorers.xrplAccount ? `${config.explorers.xrplAccount}${resolvedXrpl}` : `https://testnet.xrpl.org/accounts/${resolvedXrpl}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:underline flex items-center gap-1"
-                    >
-                      <span>XRPL Explorer</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                    {config?.explorers?.xrplAccount ? (
+                      <a
+                        href={`${config.explorers.xrplAccount}${resolvedXrpl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:underline flex items-center gap-1"
+                      >
+                        <span>XRPL Explorer</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span>Explorer unavailable</span>
+                    )}
                   </div>
                 </div>
               ) : (

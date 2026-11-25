@@ -1,14 +1,23 @@
 'use client';
 
 import { connectFreighter, signFreighterTransaction } from '@/lib/wallets';
-import { TESTNET_CONFIG } from '@/utils/constants';
+import { fetchPlatformConfig } from '@/lib/platformConfig';
 
-const TESTNET_PASSPHRASE =
-  process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE || TESTNET_CONFIG.stellar.networkPassphrase;
+const ENV_PASSPHRASE = process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE || '';
+
+async function resolveNetworkPassphrase(): Promise<string> {
+  if (ENV_PASSPHRASE) return ENV_PASSPHRASE;
+  const config = await fetchPlatformConfig().catch(() => null);
+  return config?.networks?.stellarPassphrase || '';
+}
 
 async function signXdrWithFreighter(unsignedXdr: string, address: string): Promise<string> {
+  const passphrase = await resolveNetworkPassphrase();
+  if (!passphrase) {
+    throw new Error('Stellar network passphrase is not configured.');
+  }
   const signed = await signFreighterTransaction(unsignedXdr, {
-    networkPassphrase: TESTNET_PASSPHRASE,
+    networkPassphrase: passphrase,
     address,
   });
   if (typeof signed === 'string') return signed;

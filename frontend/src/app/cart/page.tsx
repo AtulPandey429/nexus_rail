@@ -126,8 +126,9 @@ export default function CartPage() {
   }, [appliedPromo, appliedDiscountPercent, appliedDiscountCents, subtotalCents]);
 
   const totalCents = Math.max(0, subtotalCents - discountCents);
-  const cashbackPct = config?.fees?.cashbackPct ?? 2;
-  const estimatedCashbackUsd = ((totalCents * (cashbackPct / 100)) / 100).toFixed(2);
+  const cashbackPct = config?.fees?.cashbackPct ?? null;
+  const estimatedCashbackUsd =
+    cashbackPct === null ? null : ((totalCents * (cashbackPct / 100)) / 100).toFixed(2);
   const totalItemCount = items.reduce((acc, i) => acc + i.qty, 0);
 
   // Server-authoritative promo validation
@@ -149,7 +150,7 @@ export default function CartPage() {
       setAppliedPromo(null);
       setAppliedDiscountPercent(0);
       setAppliedDiscountCents(0);
-      setPromoError(err instanceof Error ? err.message : 'Invalid promo code. Try NEXUS10.');
+      setPromoError(err instanceof Error ? err.message : 'Invalid promo code.');
     } finally {
       setApplyingPromo(false);
     }
@@ -410,8 +411,10 @@ export default function CartPage() {
 
                 {totalCents > 0 && (
                   <div className="mt-3 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between text-xs font-mono text-emerald-300">
-                    <span>2% $NXL Cashback Reward</span>
-                    <span className="font-bold">+${estimatedCashbackUsd} in $NXL</span>
+                    <span>{cashbackPct === null ? 'Cashback reward' : `${cashbackPct}% $NXL Cashback Reward`}</span>
+                    <span className="font-bold">
+                      {estimatedCashbackUsd === null ? 'Unavailable' : `+$${estimatedCashbackUsd} in $NXL`}
+                    </span>
                   </div>
                 )}
 
