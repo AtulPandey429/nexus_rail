@@ -10,6 +10,7 @@ import { WebhookDlqWorker } from './workers/webhookDlq.js';
 import { CashbackMintWorker } from './workers/cashbackMintWorker.js';
 import { BuybackWorker } from './workers/buybackWorker.js';
 import { BridgeRelayerWorker } from './workers/bridgeRelayerWorker.js';
+import { VaultEncryptionService } from './services/vaultEncryption.service.js';
 import type { HealthResponse } from './types/index.js';
 
 const app = express();
@@ -87,6 +88,10 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`NexusRail Server running on port ${env.PORT}`);
     console.log(`CORS authorized origins: ${env.CORS_ORIGIN || '*'}`);
     console.log(`API Platform Config: http://localhost:${env.PORT}/api/v1/platform/config`);
+
+    VaultEncryptionService.hydrateRuntimeEnvSecrets().catch((err: any) => {
+      console.warn('⚠️ [VaultEncryption] Startup hydration warning:', err?.message || err);
+    });
 
     try {
       SocketService.initializeSockets();

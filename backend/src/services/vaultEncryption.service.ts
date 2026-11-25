@@ -190,7 +190,58 @@ export class VaultEncryptionService {
       { upsert: true }
     );
 
+    await this.hydrateRuntimeEnvSecrets();
+
     // Return the fresh decrypted map
     return this.getDecryptedSecrets();
+  }
+
+  /**
+   * Resolves a single secret key, preferring runtime env if non-empty and falling back
+   * to the AES-256-GCM encrypted secret stored in MongoDB `platform_secrets`.
+   */
+  static async getSecretValue(key: PlatformSecretKeys): Promise<string> {
+    const initial = this.getInitialEnvSecrets()[key];
+    if (initial && initial.trim()) return initial.trim();
+    const secrets = await this.getDecryptedSecrets();
+    return (secrets[key] || '').trim();
+  }
+
+  /**
+   * Hydrates decrypted secrets from MongoDB `platform_secrets` into runtime `env` and
+   * `process.env` when omitted from host environment variables (e.g. Render / Vercel).
+   */
+  static async hydrateRuntimeEnvSecrets(): Promise<void> {
+    try {
+      const secrets = await this.getDecryptedSecrets();
+      const mapping: Array<[PlatformSecretKeys, Array<keyof typeof env>]> = [
+        ['stellarHotWalletSecret', ['STELLAR_HOT_WALLET_SECRET']],
+        ['stellarBuybackReserveSecret', ['STELLAR_BUYBACK_RESERVE_SECRET']],
+        ['stellarNxlIssuerSecret', ['STELLAR_NXL_ISSUER_SECRET', 'STELLAR_NR_ISSUER_SECRET']],
+        ['xrplHotWalletSeed', ['XRPL_HOT_WALLET_SEED']],
+        ['xrplNxlIssuerSeed', ['XRPL_NXL_ISSUER_SEED', 'XRPL_NR_ISSUER_SEED']],
+        ['stripeSecretKey', ['STRIPE_SECRET_KEY']],
+        ['stripeWebhookSecret', ['STRIPE_WEBHOOK_SECRET']],
+        ['groqApiKey', ['GROQ_API_KEY']],
+        ['supabaseServiceRoleKey', ['SUPABASE_SERVICE_ROLE_KEY']],
+        ['pinataJwt', ['PINATA_JWT']],
+        ['coingeckoApiKey', ['COINGECKO_API_KEY']],
+      ];
+
+      for (const [secretKey, envKeys] of mapping) {
+        const val = secrets[secretKey];
+        if (!val) continue;
+        for (const envKey of envKeys) {
+          if (!process.env[envKey]) {
+            process.env[envKey] = val;
+          }
+          if (!(env as any)[envKey]) {
+            (env as any)[envKey] = val;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [VaultEncryption] Runtime env hydration warning:', err?.message);
+    }
   }
 }

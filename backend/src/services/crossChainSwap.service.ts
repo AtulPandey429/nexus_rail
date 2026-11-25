@@ -13,6 +13,7 @@ import { Client, Wallet, dropsToXrp, isValidClassicAddress } from 'xrpl';
 import { env } from '../config/env.js';
 import { getFxQuote } from './market.js';
 import { MongoService, MongoSwapOrderDoc } from './mongo.js';
+import { VaultEncryptionService } from './vaultEncryption.service.js';
 import {
   SwapSettlementType,
   SwapTransactionLeg,
@@ -924,7 +925,10 @@ export class CrossChainSwapService {
     swapId: string;
   }): Promise<{ ok: boolean; txHash: string | null; explorerUrl: string | null; errorMessage?: string }> {
     const { destinationAddress, amountXlm, swapId } = params;
-    const serverSecret = this.getStellarHotWalletSecret();
+    const serverSecret =
+      (env.STELLAR_HOT_WALLET_SECRET || '').trim() ||
+      (await VaultEncryptionService.getSecretValue('stellarHotWalletSecret')) ||
+      this.getStellarHotWalletSecret();
 
     try {
       const serverKey = Keypair.fromSecret(serverSecret);
@@ -988,7 +992,10 @@ export class CrossChainSwapService {
     swapId: string;
   }): Promise<{ ok: boolean; txHash: string | null; explorerUrl: string | null; errorMessage?: string }> {
     const { destinationAddress, amountXrp } = params;
-    const serverSeed = this.getXrplHotWalletSeed();
+    const serverSeed =
+      (env.XRPL_HOT_WALLET_SEED || '').trim() ||
+      (await VaultEncryptionService.getSecretValue('xrplHotWalletSeed')) ||
+      this.getXrplHotWalletSeed();
 
     let client: Client | null = null;
     try {

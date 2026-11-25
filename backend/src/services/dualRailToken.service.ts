@@ -10,6 +10,7 @@ import {
   ChainActionType,
 } from './mongo.js';
 import { RedisCacheService } from './redis.js';
+import { VaultEncryptionService } from './vaultEncryption.service.js';
 import type { DualRailTokenSummaryDTO, ChainActionLogDTO } from '../types/index.js';
 
 export const STELLAR_NR_ASSET_CODE = env.STELLAR_NR_ASSET_CODE || 'NXL';
@@ -26,6 +27,30 @@ export class DualRailTokenService {
   private static getXrplClient(): Client {
     const wssUrl = env.XRPL_WSS || env.XRPL_TESTNET_WSS || 'wss://s.altnet.rippletest.net:51233';
     return new Client(wssUrl);
+  }
+
+  private static async resolveXrplHotWalletSeed(): Promise<string> {
+    const seed =
+      (env.XRPL_HOT_WALLET_SEED || '').trim() ||
+      (await VaultEncryptionService.getSecretValue('xrplHotWalletSeed'));
+    if (!seed) {
+      throw new Error(
+        'XRPL_HOT_WALLET_SEED is required (not found in environment or encrypted Admin Secrets Vault)'
+      );
+    }
+    return seed;
+  }
+
+  private static async resolveStellarHotWalletSecret(): Promise<string> {
+    const secret =
+      (env.STELLAR_HOT_WALLET_SECRET || '').trim() ||
+      (await VaultEncryptionService.getSecretValue('stellarHotWalletSecret'));
+    if (!secret) {
+      throw new Error(
+        'STELLAR_HOT_WALLET_SECRET is required (not found in environment or encrypted Admin Secrets Vault)'
+      );
+    }
+    return secret;
   }
 
   /**
@@ -80,7 +105,10 @@ export class DualRailTokenService {
     const tokensCol = await MongoService.getCollection<MongoPlatformTokenDoc>('platform_tokens');
     const existing = await tokensCol.findOne({ symbol: 'NXL', chain: 'XRPL' }) || await tokensCol.findOne({ symbol: 'NR' as any, chain: 'XRPL' });
 
-    const seed = env.XRPL_NR_ISSUER_SEED || existing?.issuer_secret;
+    const seed =
+      env.XRPL_NR_ISSUER_SEED ||
+      (await VaultEncryptionService.getSecretValue('xrplNxlIssuerSeed')) ||
+      existing?.issuer_secret;
     if (seed) {
       const issuerWallet = Wallet.fromSeed(seed);
       return { issuerWallet, isNew: false };
@@ -153,10 +181,7 @@ export class DualRailTokenService {
 
     try {
       const { issuerWallet } = await this.getOrCreateXrplIssuer(client);
-      const distributorSeed = env.XRPL_HOT_WALLET_SEED;
-      if (!distributorSeed) {
-        throw new Error('XRPL_HOT_WALLET_SEED is required in .env');
-      }
+      const distributorSeed = await this.resolveXrplHotWalletSeed();
       const distWallet = Wallet.fromSeed(distributorSeed);
 
       // Check if AMM already exists on XRPL Altnet
@@ -340,8 +365,7 @@ export class DualRailTokenService {
 
     try {
       const { issuerWallet } = await this.getOrCreateXrplIssuer(client);
-      const distributorSeed = env.XRPL_HOT_WALLET_SEED;
-      if (!distributorSeed) throw new Error('XRPL_HOT_WALLET_SEED is required');
+      const distributorSeed = await this.resolveXrplHotWalletSeed();
       const distWallet = Wallet.fromSeed(distributorSeed);
 
       console.log(`💧 Depositing ${xrpAmount} XRP and ${nrAmount} NXL into XRPL AMM...`);
@@ -485,8 +509,7 @@ export class DualRailTokenService {
 
     try {
       const { issuerWallet } = await this.getOrCreateXrplIssuer(client);
-      const distributorSeed = env.XRPL_HOT_WALLET_SEED;
-      if (!distributorSeed) throw new Error('XRPL_HOT_WALLET_SEED is required');
+      const distributorSeed = await this.resolveXrplHotWalletSeed();
       const distWallet = Wallet.fromSeed(distributorSeed);
 
       console.log(`🚀 Sending ${amountNr} $NXL on XRPL to ${destinationAddress} (Trustline Verified)...`);
@@ -911,7 +934,7 @@ export class DualRailTokenService {
     const server = new Horizon.Server(
       env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org'
     );
-    const distributorSecret = env.STELLAR_HOT_WALLET_SECRET || 'SDVE7PYD2TRLASLMZUNYXGPDEMNQUJ4KXGCSJTXRBRJOZ5K36P3DJWBP';
+    const distributorSecret = await this.resolveStellarHotWalletSecret();
     const distKey = Keypair.fromSecret(distributorSecret);
 
     let issuer = options?.verifiedIssuer;

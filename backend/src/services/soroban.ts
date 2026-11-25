@@ -21,6 +21,7 @@ import {
 } from './mongo.js';
 import { RedisCacheService } from './redis.js';
 import { DualRailTokenService } from './dualRailToken.service.js';
+import { VaultEncryptionService } from './vaultEncryption.service.js';
 
 export const STROOPS_SCALE = 10_000_000;
 
@@ -234,6 +235,18 @@ export class SorobanService {
     return Keypair.fromSecret(secret);
   }
 
+  private static async resolveAdminKeypair(): Promise<Keypair> {
+    const secret =
+      (env.STELLAR_HOT_WALLET_SECRET || '').trim() ||
+      (await VaultEncryptionService.getSecretValue('stellarHotWalletSecret'));
+    if (!secret) {
+      throw new Error(
+        'STELLAR_HOT_WALLET_SECRET is required for on-chain relayer/admin execution (missing in env and Admin Secrets Vault)'
+      );
+    }
+    return Keypair.fromSecret(secret);
+  }
+
   private static async simulateReadOnly(
     contractId: string,
     method: string,
@@ -355,7 +368,7 @@ export class SorobanService {
     method: string,
     args: xdr.ScVal[]
   ): Promise<SorobanTxSubmissionResult> {
-    const signer = this.getAdminKeypair();
+    const signer = await this.resolveAdminKeypair();
     return this.invokeWithKeypair(signer, contractId, method, args);
   }
 
@@ -648,7 +661,7 @@ export class SorobanService {
     refId: string;
     operatorId?: string;
   }): Promise<SorobanTxSubmissionResult> {
-    const callerPub = this.getAdminKeypair().publicKey();
+    const callerPub = (await this.resolveAdminKeypair()).publicKey();
     const res = await this.invokeWithServerKey(NEXUS_VAULT_CONTRACT_ID, 'mint_nxl', [
       new Address(callerPub).toScVal(),
       new Address(params.recipientAddress).toScVal(),
@@ -686,7 +699,7 @@ export class SorobanService {
   }): Promise<SorobanTxSubmissionResult> {
     const holderSigner = params.holderSecret
       ? Keypair.fromSecret(params.holderSecret)
-      : this.getAdminKeypair();
+      : await this.resolveAdminKeypair();
     const holderPub = holderSigner.publicKey();
     const res = await this.invokeWithKeypair(holderSigner, NEXUS_VAULT_CONTRACT_ID, 'burn_nxl', [
       new Address(holderPub).toScVal(),
@@ -779,7 +792,7 @@ export class SorobanService {
     refundAmount: number;
     operatorId?: string;
   }): Promise<SorobanTxSubmissionResult> {
-    const operatorPub = this.getAdminKeypair().publicKey();
+    const operatorPub = (await this.resolveAdminKeypair()).publicKey();
     const res = await this.invokeWithServerKey(NEXUS_VAULT_CONTRACT_ID, 'refund_order', [
       new Address(operatorPub).toScVal(),
       nativeToScVal(hashRef32(params.orderId), { type: 'bytes' }),
@@ -805,7 +818,7 @@ export class SorobanService {
     recipientAddress?: string;
     xrplTxHash: string;
   }): Promise<SorobanTxSubmissionResult> {
-    const relayerPub = this.getAdminKeypair().publicKey();
+    const relayerPub = (await this.resolveAdminKeypair()).publicKey();
     const recipient = params.recipientAddress || env.PLATFORM_STELLAR_VAULT;
     return this.invokeWithServerKey(NEXUS_SWAP_CONTRACT_ID, 'release_bridge_escrow', [
       new Address(relayerPub).toScVal(),
@@ -818,7 +831,7 @@ export class SorobanService {
   static async refundBridgeEscrowOnChain(params: {
     swapId: string;
   }): Promise<SorobanTxSubmissionResult> {
-    const relayerPub = this.getAdminKeypair().publicKey();
+    const relayerPub = (await this.resolveAdminKeypair()).publicKey();
     return this.invokeWithServerKey(NEXUS_SWAP_CONTRACT_ID, 'refund_expired_escrow', [
       new Address(relayerPub).toScVal(),
       nativeToScVal(hashRef32(params.swapId), { type: 'bytes' }),
@@ -847,7 +860,7 @@ export class SorobanService {
     }
 
     if (params.isPaused !== undefined) {
-      const callerPub = this.getAdminKeypair().publicKey();
+      const callerPub = (await this.resolveAdminKeypair()).publicKey();
       out.pauseTx = await this.invokeWithServerKey(NEXUS_VAULT_CONTRACT_ID, 'set_paused', [
         new Address(callerPub).toScVal(),
         nativeToScVal(params.isPaused, { type: 'bool' }),

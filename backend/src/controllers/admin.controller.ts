@@ -823,16 +823,20 @@ export class AdminController {
     const stellarDoc = await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NXL' }) || await tokensCol.findOne({ chain: 'STELLAR', symbol: 'NR' as any });
     const xrplDoc = await tokensCol.findOne({ chain: 'XRPL', symbol: 'NXL' }) || await tokensCol.findOne({ chain: 'XRPL', symbol: 'NR' as any });
 
+    const decryptedSecrets = await VaultEncryptionService.getDecryptedSecrets().catch(
+      () => ({} as Record<string, string>)
+    );
+
     res.json({
       success: true,
       data: {
         stellar: {
           assetCode: env.STELLAR_NR_ASSET_CODE || stellarDoc?.asset_code || 'NXL',
           issuerAddress: stellarDoc?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC,
-          issuerSecretKey: stellarDoc?.issuer_secret || env.STELLAR_NR_ISSUER_SECRET,
+          issuerSecretKey: stellarDoc?.issuer_secret || env.STELLAR_NR_ISSUER_SECRET || decryptedSecrets.stellarNxlIssuerSecret,
           contractId: stellarDoc?.contract_id || env.STELLAR_NR_CONTRACT_ID,
           distributorVault: stellarDoc?.distribution_address || env.STELLAR_NR_DISTRIBUTOR_VAULT,
-          distributorSecretKey: env.STELLAR_HOT_WALLET_SECRET,
+          distributorSecretKey: env.STELLAR_HOT_WALLET_SECRET || decryptedSecrets.stellarHotWalletSecret,
           totalSupplyCap: stellarDoc?.total_supply_cap || 2_000_000,
           mintTxHash: stellarDoc?.mint_tx_hash,
           explorerUrl: stellarDoc?.explorer_url || `https://stellar.expert/explorer/testnet/asset/NXL-${stellarDoc?.issuer_address || env.STELLAR_NR_ISSUER_PUBLIC}`,
@@ -841,10 +845,10 @@ export class AdminController {
           currencyCode: env.XRPL_NR_CURRENCY_CODE || xrplDoc?.asset_code || 'NXL',
           currencyHex: '',
           issuerAddress: xrplDoc?.issuer_address || env.XRPL_NR_ISSUER_ADDRESS,
-          issuerSecretSeed: xrplDoc?.issuer_secret || env.XRPL_NR_ISSUER_SEED,
+          issuerSecretSeed: xrplDoc?.issuer_secret || env.XRPL_NR_ISSUER_SEED || decryptedSecrets.xrplNxlIssuerSeed,
           ammAccount: xrplDoc?.amm_account || env.XRPL_NR_AMM_ACCOUNT,
           distributorVault: xrplDoc?.distribution_address || env.PLATFORM_XRPL_VAULT,
-          distributorSecretSeed: env.XRPL_HOT_WALLET_SEED,
+          distributorSecretSeed: env.XRPL_HOT_WALLET_SEED || decryptedSecrets.xrplHotWalletSeed,
           totalSupplyCap: xrplDoc?.total_supply_cap || 2_000_000,
           ammTxHash: xrplDoc?.amm_tx_hash,
           mintTxHash: xrplDoc?.mint_tx_hash,

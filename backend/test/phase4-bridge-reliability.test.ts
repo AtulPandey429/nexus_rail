@@ -429,4 +429,37 @@ describe('Suite: Phase 4 — Cross-Chain Bridge Reliability (Escrow-First, 1:1 P
     const copied = await swapsCol.findOne({ swapId: legacyId });
     assert.equal(copied?.status, 'AWAITING_TRUSTLINE');
   });
+
+  it('P4.5: Hot wallet & Soroban secrets resolve seamlessly from encrypted MongoDB Vault even when env vars are unset', async () => {
+    const { env } = await import('../src/config/env.js');
+    const { VaultEncryptionService } = await import('../src/services/vaultEncryption.service.js');
+
+    const prevXrplSeed = env.XRPL_HOT_WALLET_SEED;
+    const prevStellarSec = env.STELLAR_HOT_WALLET_SECRET;
+    const prevProcXrpl = process.env.XRPL_HOT_WALLET_SEED;
+    const prevProcStellar = process.env.STELLAR_HOT_WALLET_SECRET;
+
+    // Clear runtime env vars to simulate hosted environment relying on encrypted MongoDB vault
+    env.XRPL_HOT_WALLET_SEED = undefined;
+    env.STELLAR_HOT_WALLET_SECRET = undefined;
+    delete process.env.XRPL_HOT_WALLET_SEED;
+    delete process.env.STELLAR_HOT_WALLET_SECRET;
+
+    try {
+      const resolvedXrpl = await (DualRailTokenService as any).resolveXrplHotWalletSeed();
+      assert.ok(resolvedXrpl && resolvedXrpl.startsWith('s'), 'XRPL hot wallet seed must resolve from DB vault');
+
+      const resolvedStellarKp = await (SorobanService as any).resolveAdminKeypair();
+      assert.ok(resolvedStellarKp.publicKey().startsWith('G'), 'Stellar hot wallet keypair must resolve from DB vault');
+
+      await VaultEncryptionService.hydrateRuntimeEnvSecrets();
+      assert.equal(env.XRPL_HOT_WALLET_SEED, resolvedXrpl, 'hydrateRuntimeEnvSecrets must populate env.XRPL_HOT_WALLET_SEED');
+      assert.ok(env.STELLAR_HOT_WALLET_SECRET?.startsWith('S'), 'hydrateRuntimeEnvSecrets must populate env.STELLAR_HOT_WALLET_SECRET');
+    } finally {
+      env.XRPL_HOT_WALLET_SEED = prevXrplSeed;
+      env.STELLAR_HOT_WALLET_SECRET = prevStellarSec;
+      if (prevProcXrpl !== undefined) process.env.XRPL_HOT_WALLET_SEED = prevProcXrpl;
+      if (prevProcStellar !== undefined) process.env.STELLAR_HOT_WALLET_SECRET = prevProcStellar;
+    }
+  });
 });
