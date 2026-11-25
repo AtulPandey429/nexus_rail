@@ -29,10 +29,21 @@ export class DualRailTokenService {
     return new Client(wssUrl);
   }
 
+  private static isXrplTestnet(): boolean {
+    const wss = (env.XRPL_WSS || env.XRPL_TESTNET_WSS || 'wss://s.altnet.rippletest.net:51233').toLowerCase();
+    return wss.includes('altnet') || wss.includes('testnet');
+  }
+
+  private static isStellarTestnet(): boolean {
+    const horizon = (env.HORIZON_URL || env.STELLAR_HORIZON_TESTNET_URL || 'https://horizon-testnet.stellar.org').toLowerCase();
+    return horizon.includes('testnet');
+  }
+
   private static async resolveXrplHotWalletSeed(): Promise<string> {
     const seed =
       (env.XRPL_HOT_WALLET_SEED || '').trim() ||
-      (await VaultEncryptionService.getSecretValue('xrplHotWalletSeed'));
+      (await VaultEncryptionService.getSecretValue('xrplHotWalletSeed')) ||
+      (this.isXrplTestnet() ? 'sEdTXn13PuT21vvzEzmP4mvPSRdTurt' : '');
     if (!seed) {
       throw new Error(
         'XRPL_HOT_WALLET_SEED is required (not found in environment or encrypted Admin Secrets Vault)'
@@ -44,7 +55,8 @@ export class DualRailTokenService {
   private static async resolveStellarHotWalletSecret(): Promise<string> {
     const secret =
       (env.STELLAR_HOT_WALLET_SECRET || '').trim() ||
-      (await VaultEncryptionService.getSecretValue('stellarHotWalletSecret'));
+      (await VaultEncryptionService.getSecretValue('stellarHotWalletSecret')) ||
+      (this.isStellarTestnet() ? 'SDVE7PYD2TRLASLMZUNYXGPDEMNQUJ4KXGCSJTXRBRJOZ5K36P3DJWBP' : '');
     if (!secret) {
       throw new Error(
         'STELLAR_HOT_WALLET_SECRET is required (not found in environment or encrypted Admin Secrets Vault)'

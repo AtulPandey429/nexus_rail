@@ -65,7 +65,10 @@ export class VaultEncryptionService {
   /**
    * Decrypts an encrypted field with tag verification.
    */
-  static decrypt(field: EncryptedSecretField): string {
+  static decrypt(
+    field: EncryptedSecretField,
+    options?: { suppressWarn?: boolean }
+  ): string {
     if (!field || !field.ciphertext || !field.iv || !field.tag) {
       return '';
     }
@@ -82,7 +85,9 @@ export class VaultEncryptionService {
       decrypted += decipher.final('utf8');
       return decrypted;
     } catch (err: any) {
-      console.warn('⚠️ [VaultEncryption] Decryption tag mismatch or corrupt secret:', err.message);
+      if (!options?.suppressWarn) {
+        console.warn('⚠️ [VaultEncryption] Decryption tag mismatch or corrupt secret:', err.message);
+      }
       return '';
     }
   }
@@ -143,14 +148,24 @@ export class VaultEncryptionService {
 
       const result: Record<string, string> = {};
       const fallback = this.getInitialEnvSecrets();
+      let mismatchCount = 0;
 
       for (const key of Object.keys(fallback)) {
         if (doc?.secrets?.[key]) {
-          const dec = this.decrypt(doc.secrets[key]);
+          const dec = this.decrypt(doc.secrets[key], { suppressWarn: true });
+          if (!dec) {
+            mismatchCount++;
+          }
           result[key] = dec || fallback[key] || '';
         } else {
           result[key] = fallback[key] || '';
         }
+      }
+
+      if (mismatchCount > 0) {
+        console.warn(
+          `⚠️ [VaultEncryption] ${mismatchCount} encrypted secret(s) in MongoDB could not be decrypted with current ENCRYPTION_MASTER_KEY/JWT_SECRET — falling back to runtime env/Testnet defaults.`
+        );
       }
 
       return result;

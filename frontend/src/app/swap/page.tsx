@@ -551,17 +551,18 @@ export default function SwapPage() {
     try {
       const hasGem = typeof window !== 'undefined' && ((window as any).gemWallet || await checkGemWalletInstalled());
       const hasCrossmark = typeof window !== 'undefined' && Boolean((window as any).crossmark || (window as any).Crossmark);
+      const preferCrossmark = (user?.lastConnectedWallet?.network === 'xrpl' ? user?.lastConnectedWallet?.provider : user?.wallets?.find((w) => w.network === 'xrpl')?.provider)?.toLowerCase() === 'crossmark';
 
       let txHash = '';
-      if (hasGem) {
-        const res = await setGemWalletTrustline({
+      if ((preferCrossmark && hasCrossmark) || (!hasGem && hasCrossmark)) {
+        const res = await setCrossmarkTrustline({
           issuer: xrplNxlIssuer,
           currency: xrplNxlCurrency,
           value: '1000000',
         });
         txHash = res.txHash;
-      } else if (hasCrossmark) {
-        const res = await setCrossmarkTrustline({
+      } else if (hasGem) {
+        const res = await setGemWalletTrustline({
           issuer: xrplNxlIssuer,
           currency: xrplNxlCurrency,
           value: '1000000',
@@ -1081,16 +1082,17 @@ export default function SwapPage() {
         } else if (fromToken === 'XRP') {
           const hasGem = typeof window !== 'undefined' && ((window as any).gemWallet || await checkGemWalletInstalled());
           const hasCrossmark = typeof window !== 'undefined' && Boolean((window as any).crossmark || (window as any).Crossmark);
+          const preferCrossmark = (user?.lastConnectedWallet?.network === 'xrpl' ? user?.lastConnectedWallet?.provider : user?.wallets?.find((w) => w.network === 'xrpl')?.provider)?.toLowerCase() === 'crossmark';
 
-          if (hasGem) {
-            const res = await payWithGemWallet({
+          if ((preferCrossmark && hasCrossmark) || (!hasGem && hasCrossmark)) {
+            const res = await payWithCrossmark({
               destination: activeSwapOrder.depositAddress,
               amountXrp: payAmount,
               destinationTag: Number(activeSwapOrder.identifier),
             });
             resolvedDepositHash = res.txHash;
-          } else if (hasCrossmark) {
-            const res = await payWithCrossmark({
+          } else if (hasGem) {
+            const res = await payWithGemWallet({
               destination: activeSwapOrder.depositAddress,
               amountXrp: payAmount,
               destinationTag: Number(activeSwapOrder.identifier),
@@ -2379,37 +2381,39 @@ export default function SwapPage() {
 
       {/* Confirmation Review & Multi-Step Escrow Modal */}
       {showReviewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
-          <div className="w-full max-w-xl rounded-2xl bg-[var(--surface-solid)] border border-[var(--border)] p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
+          <div className="my-auto w-full max-w-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden rounded-2xl bg-[var(--surface-solid)] border border-[var(--border)] shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
-              <div className="flex items-center gap-2">
-                <Server className="w-5 h-5 text-[var(--gold)]" />
-                <h3 className="text-lg font-bold text-[var(--foreground)]">
+            <div className="shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 sm:px-6 pt-4 sm:pt-5 pb-3.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <Server className="w-5 h-5 text-[var(--gold)] shrink-0" />
+                <h3 className="text-base sm:text-lg font-bold text-[var(--foreground)] truncate">
                   {swapMode === 'same_chain' ? 'Same-Chain Escrow Swap' : 'Cross-Chain Liquidity Bridge'}
                 </h3>
               </div>
               <button
                 type="button"
+                aria-label="Close modal"
                 onClick={() => {
                   setShowReviewModal(false);
                   setSwapState('idle');
                 }}
-                className="text-[var(--muted)] hover:text-[var(--foreground)] text-lg font-mono cursor-pointer"
+                className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--gold)] text-sm font-mono transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5">
             {swapError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-mono flex items-start gap-2.5">
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-mono flex items-start gap-2.5 break-words">
                 <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <span className="flex-1">{swapError}</span>
+                <span className="flex-1 min-w-0">{swapError}</span>
               </div>
             )}
 
             {swapState === 'preparing' && (
-              <div className="py-8 text-center space-y-4">
+              <div className="py-6 sm:py-8 text-center space-y-4">
                 <div className="w-10 h-10 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin mx-auto" />
                 <p className="text-sm font-mono text-[var(--foreground)]">Preparing Cross-Chain Escrow Order...</p>
                 <p className="text-xs text-[var(--muted)] font-mono">Preparing your deposit address and reference…</p>
@@ -2420,31 +2424,31 @@ export default function SwapPage() {
               <div className="space-y-4 text-xs font-mono">
                 
                 {/* Deposit Ingress Section */}
-                <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-3">
-                  <div className="flex items-center justify-between text-[var(--gold)] font-bold pb-2 border-b border-[var(--border)]">
+                <div className="p-3.5 sm:p-4 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[var(--gold)] font-bold pb-2 border-b border-[var(--border)]">
                     <span className="flex items-center gap-1.5">
-                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[11px]">1</span>
+                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[11px] shrink-0">1</span>
                       <span>INGRESS: DEPOSIT TO SERVER VAULT</span>
                     </span>
-                    <span>{payAmount} {fromToken}</span>
+                    <span className="shrink-0">{payAmount} {fromToken}</span>
                   </div>
 
                   <div className="space-y-2 text-[11px]">
-                    <div className="flex justify-between items-center nexus-glass-card p-2 rounded-lg">
+                    <div className="flex flex-wrap justify-between items-center gap-2 nexus-glass-card p-2 rounded-lg">
                       <span className="text-[var(--muted)]">Vault Address:</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[var(--foreground)] font-mono truncate max-w-[220px]">{activeSwapOrder.depositAddress}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[var(--foreground)] font-mono truncate max-w-[160px] sm:max-w-[220px]">{activeSwapOrder.depositAddress}</span>
                         <button
                           type="button"
                           onClick={() => handleCopy(activeSwapOrder.depositAddress, 'addr')}
-                          className="text-[var(--gold)] hover:text-[var(--gold-bright)] cursor-pointer"
+                          className="text-[var(--gold)] hover:text-[var(--gold-bright)] cursor-pointer shrink-0"
                         >
                           {copiedKey === 'addr' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center nexus-glass-card p-2 rounded-lg">
+                    <div className="flex flex-wrap justify-between items-center gap-2 nexus-glass-card p-2 rounded-lg">
                       <span className="text-[var(--muted)]">
                         {activeSwapOrder.identifierType === 'destination_tag' ? 'Destination Tag (Required):' : 'Memo Text (Required):'}
                       </span>
@@ -2453,7 +2457,7 @@ export default function SwapPage() {
                         <button
                           type="button"
                           onClick={() => handleCopy(String(activeSwapOrder.identifier), 'tag')}
-                          className="text-[var(--gold)] hover:text-[var(--gold-bright)] cursor-pointer"
+                          className="text-[var(--gold)] hover:text-[var(--gold-bright)] cursor-pointer shrink-0"
                         >
                           {copiedKey === 'tag' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
@@ -2463,17 +2467,17 @@ export default function SwapPage() {
                 </div>
 
                 {/* Payout Egress Section */}
-                <div className="p-4 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-2">
-                  <div className="flex items-center justify-between text-[var(--gold)] font-bold pb-1 border-b border-[var(--border)]">
+                <div className="p-3.5 sm:p-4 rounded-xl nexus-glass-surface border border-[var(--border)] space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[var(--gold)] font-bold pb-1 border-b border-[var(--border)]">
                     <span className="flex items-center gap-1.5">
-                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[11px]">2</span>
+                      <span className="w-4 h-4 rounded-full bg-[var(--gold)]/20 border border-[var(--gold)]/50 flex items-center justify-center text-[11px] shrink-0">2</span>
                       <span>{toToken === 'USD' ? 'EGRESS: CREDITED TO NEXUSRAIL WALLET' : 'EGRESS: SERVER DISBURSES TO YOU'}</span>
                     </span>
-                    <span>{receiveAmount} {toToken}</span>
+                    <span className="shrink-0">{receiveAmount} {toToken}</span>
                   </div>
-                  <div className="flex justify-between items-center text-[11px]">
+                  <div className="flex flex-wrap justify-between items-center gap-2 text-[11px]">
                     <span className="text-[var(--muted)]">Recipient Address:</span>
-                    <span className="text-[var(--foreground)] font-mono truncate max-w-[240px]">{effectiveDestination}</span>
+                    <span className="text-[var(--foreground)] font-mono truncate max-w-[180px] sm:max-w-[240px]">{effectiveDestination}</span>
                   </div>
                   {toToken === 'USD' && (
                     <p className="text-[11px] text-emerald-300/90 leading-relaxed">
@@ -2496,7 +2500,7 @@ export default function SwapPage() {
                   <>
                     <div className="space-y-2">
                       <p className="text-[var(--muted)] font-semibold text-[11px]">Choose How You Deposit Funds to Server Vault:</p>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() => setDepositMethod('extension')}
@@ -2508,7 +2512,13 @@ export default function SwapPage() {
                         >
                           <Wallet className="w-4 h-4 mx-auto mb-1 text-[var(--gold)]" />
                           <span className="block text-[11px]">Browser Wallet</span>
-                          <span className="text-[11px] text-[var(--muted)]">{fromToken === 'XLM' ? 'Freighter' : 'GemWallet'}</span>
+                          <span className="text-[11px] text-[var(--muted)]">
+                            {fromToken === 'XLM'
+                              ? 'Freighter'
+                              : (user?.lastConnectedWallet?.network === 'xrpl' ? user?.lastConnectedWallet?.provider : user?.wallets?.find((w) => w.network === 'xrpl')?.provider)?.toLowerCase() === 'crossmark'
+                              ? 'Crossmark'
+                              : 'GemWallet / Crossmark'}
+                          </span>
                         </button>
 
                         <button
@@ -2689,11 +2699,11 @@ export default function SwapPage() {
             )}
 
             {swapState === 'signing_wallet' && (
-              <div className="py-8 text-center space-y-4">
+              <div className="py-6 sm:py-8 text-center space-y-4">
                 <div className="w-12 h-12 border-3 border-[var(--gold)] border-t-transparent rounded-full animate-spin mx-auto" />
                 <h4 className="text-base font-bold text-[var(--foreground)]">Approve in Your Wallet Extension</h4>
                 <p className="text-xs text-[var(--muted)] font-mono max-w-sm mx-auto">
-                  Please check your browser extension popup ({fromToken === 'XLM' ? 'Freighter' : 'GemWallet'}) to confirm sending {payAmount} {fromToken} to the NexusRail Vault.
+                  Please check your browser extension popup ({fromToken === 'XLM' ? 'Freighter' : (user?.lastConnectedWallet?.network === 'xrpl' ? user?.lastConnectedWallet?.provider : user?.wallets?.find((w) => w.network === 'xrpl')?.provider)?.toLowerCase() === 'crossmark' ? 'Crossmark' : 'GemWallet / Crossmark'}) to confirm sending {payAmount} {fromToken} to the NexusRail Vault.
                 </p>
               </div>
             )}
@@ -2789,7 +2799,7 @@ export default function SwapPage() {
                   : fallbackLegs;
 
               return (
-                <div className="py-4 space-y-5 max-h-[80vh] overflow-y-auto pr-1">
+                <div className="space-y-4 sm:space-y-5">
                   <div
                     className={`w-12 h-12 rounded-full border flex items-center justify-center mx-auto ${
                       isFailed
@@ -2866,13 +2876,13 @@ export default function SwapPage() {
                   )}
 
                   {isFailed && (activeSwapOrder.errorMessage || swapError) && (
-                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
+                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono break-words">
                       {activeSwapOrder.errorMessage || swapError}
                     </div>
                   )}
 
                   {isAwaitingTrustline && activeSwapOrder.trustlineMessage && (
-                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-mono">
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-mono break-words">
                       {activeSwapOrder.trustlineMessage}
                     </div>
                   )}
@@ -2887,9 +2897,9 @@ export default function SwapPage() {
 
                   {/* Accounting Journal Entry */}
                   {activeSwapOrder.journalEntry && (
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex justify-between items-center text-xs font-mono">
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-wrap justify-between items-center gap-2 text-xs font-mono">
                       <span className="text-emerald-400 font-bold">Ledger Journal Ref:</span>
-                      <span className="text-[var(--foreground)]">{activeSwapOrder.journalEntry} (Balanced)</span>
+                      <span className="text-[var(--foreground)] break-all">{activeSwapOrder.journalEntry} (Balanced)</span>
                     </div>
                   )}
 
@@ -2906,6 +2916,7 @@ export default function SwapPage() {
                 </div>
               );
             })()}
+            </div>
 
           </div>
         </div>

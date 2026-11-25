@@ -131,32 +131,32 @@ export function SiteHeader() {
   const hasConnectedWallet = Boolean(connectedAddress);
 
   return (
-    <header className="w-full border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl transition-all duration-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+    <header className="w-full overflow-x-clip border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl transition-all duration-200 shadow-sm">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4 min-w-0">
         {/* Left: Brand Logo & Status */}
-        <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+          <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
             <NexusLogo size={30} glow priority className="group-hover:scale-105 transition-transform shadow-md" />
             <span className="text-base font-bold text-[var(--foreground)] tracking-tight font-mono">
               nexusrail
             </span>
           </Link>
 
-          <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[11px] font-mono text-[var(--muted)]">
+          <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[11px] font-mono text-[var(--muted)] shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span>Dual-Rail Testnet</span>
           </span>
         </div>
 
         {/* Center: Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1.5 font-mono text-xs">
+        <nav className="hidden md:flex items-center gap-1 lg:gap-1.5 font-mono text-xs shrink-0">
           {filteredNavLinks.map((link) => {
             const active = isLinkActive(link.href);
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3.5 py-1.5 rounded-xl transition-all ${
+                className={`px-2.5 lg:px-3.5 py-1.5 rounded-xl whitespace-nowrap transition-all ${
                   active
                     ? 'text-[var(--foreground)] bg-[var(--card-hover)] border border-[var(--border-highlight)] font-bold shadow-sm shadow-[var(--gold)]/10'
                     : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card)]'
@@ -169,14 +169,14 @@ export function SiteHeader() {
         </nav>
 
         {/* Right Section: Theme Dropdown, Cart, User Pill, Wallet */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 min-w-0">
           {/* Single Unified Theme & Effects Dropdown (Hover & Click) */}
           <UnifiedThemeDropdown />
 
           {/* Cart Icon (Bold & Prominent) */}
           <Link
             href="/cart"
-            className="p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border-highlight)] flex items-center gap-1.5 text-xs text-[var(--foreground)] transition-all relative shadow-sm cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border-highlight)] flex items-center gap-1.5 text-xs text-[var(--foreground)] transition-all relative shadow-sm cursor-pointer shrink-0"
             aria-label="View shopping cart"
           >
             <ShoppingBag className="w-5 h-5 text-[var(--muted)] hover:text-[var(--foreground)]" strokeWidth={2.4} />
@@ -189,24 +189,24 @@ export function SiteHeader() {
 
           {/* Authenticated User Pill vs Unauthenticated Unified Sign In / Connect */}
           {user ? (
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 min-w-0">
               {hasConnectedWallet ? (
                 /* 1. Wallet is Connected: Show Address + Sub-label with Wallet Provider Badge */
                 <button
                   type="button"
                   onClick={() => setIsWalletModalOpen(true)}
                   title="Click to switch or manage Web3 wallets"
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--gold)] transition-all cursor-pointer group shadow-sm text-left"
+                  className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--gold)] transition-all cursor-pointer group shadow-sm text-left min-w-0 max-w-[132px] lg:max-w-[185px]"
                 >
                   <span className={`w-2 h-2 rounded-full ${walletNetwork === 'stellar' ? 'bg-[#00E5FF]' : 'bg-[#0081F2]'} shrink-0`} />
-                  <div className="flex flex-col leading-tight">
-                    <span className="font-mono text-xs font-bold text-[var(--foreground)] group-hover:text-[var(--gold)] transition-colors">
+                  <div className="flex flex-col leading-tight min-w-0">
+                    <span className="font-mono text-xs font-bold text-[var(--foreground)] group-hover:text-[var(--gold)] transition-colors truncate">
                       {formattedWalletAddress}
                     </span>
-                    <span className="text-[11px] font-mono text-[var(--muted)] flex items-center gap-1">
-                      <span>{walletProvider}</span>
-                      <span className="opacity-40">·</span>
-                      <span className="uppercase text-[11px] opacity-70">{walletNetwork === 'stellar' ? 'Stellar' : 'XRPL'}</span>
+                    <span className="text-[11px] font-mono text-[var(--muted)] flex items-center gap-1 min-w-0">
+                      <span className="truncate">{walletProvider}</span>
+                      <span className="opacity-40 shrink-0">·</span>
+                      <span className="uppercase text-[11px] opacity-70 shrink-0">{walletNetwork === 'stellar' ? 'Stellar' : 'XRPL'}</span>
                     </span>
                   </div>
                 </button>
@@ -244,7 +244,7 @@ export function SiteHeader() {
                 <Link
                   href="/profile"
                   title="View Account & Portfolio"
-                  className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                  className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer shrink-0 ${
                     pathname === '/profile'
                       ? 'bg-[var(--card-hover)] border-[var(--border-highlight)] text-[var(--foreground)]'
                       : 'bg-[var(--card)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--gold)]'
@@ -258,7 +258,7 @@ export function SiteHeader() {
               <button
                 type="button"
                 onClick={signOut}
-                className="text-[11px] font-mono text-[var(--muted)] hover:text-rose-400 transition-colors px-1 cursor-pointer"
+                className="text-[11px] font-mono text-[var(--muted)] hover:text-rose-400 transition-colors px-1 cursor-pointer whitespace-nowrap shrink-0"
               >
                 Sign out
               </button>

@@ -355,15 +355,21 @@ export async function payWithCrossmark(params: {
     throw new Error('Crossmark wallet extension is not installed.');
   }
 
-  const tx = {
+  const tx: Record<string, any> = {
     TransactionType: 'Payment',
     Destination: params.destination,
     Amount: String(Math.floor(Number(params.amountXrp) * 1_000_000)), // drops
-    DestinationTag: params.destinationTag,
   };
+  if (typeof params.destinationTag === 'number' && !Number.isNaN(params.destinationTag)) {
+    tx.DestinationTag = params.destinationTag;
+  }
 
   const res = await cm.signAndSubmitAndWait(tx);
-  const hash = res?.response?.data?.resp?.result?.hash;
+  const hash =
+    res?.response?.data?.resp?.result?.hash ||
+    res?.response?.data?.resp?.result?.tx_json?.hash ||
+    res?.response?.data?.hash ||
+    res?.result?.hash;
   if (hash) {
     return { txHash: hash };
   }
@@ -833,7 +839,11 @@ export async function setCrossmarkTrustline(params?: {
   };
 
   const res = await cm.signAndSubmitAndWait(tx);
-  const hash = res?.response?.data?.resp?.result?.hash;
+  const hash =
+    res?.response?.data?.resp?.result?.hash ||
+    res?.response?.data?.resp?.result?.tx_json?.hash ||
+    res?.response?.data?.hash ||
+    res?.result?.hash;
   if (hash) {
     return { txHash: hash };
   }
